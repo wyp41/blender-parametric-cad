@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ...features.extrude import ExtrudeFeature
+from ...features.revolve import RevolveFeature
 from ...sketch.sketch import SketchFeature
 
 
@@ -24,6 +25,8 @@ def draw_feature_tree(layout, part, active_feature_id: str) -> None:
             and feature.operation in {"CUT", "REMOVE"}
             else "MOD_SOLIDIFY"
         )
+        if isinstance(feature, RevolveFeature):
+            icon = "MOD_SCREW"
         operator = row.operator(
             "parametric_cad.select_feature",
             text=feature.name,
@@ -45,6 +48,10 @@ def draw_selected_feature(layout, feature, ui, part) -> None:
         reference = feature.plane_reference
         if reference.reference_type == "DATUM":
             plane_label = f"{reference.datum_plane} Plane"
+        elif reference.reference_type == "FACE":
+            source = part.get_feature(reference.feature_id)
+            source_name = source.name if source else "Missing Feature"
+            plane_label = f"{source_name} {reference.role.replace('_', ' ').title()}"
         else:
             source = part.get_feature(reference.feature_id)
             source_name = source.name if source else "Missing Feature"
@@ -58,6 +65,7 @@ def draw_selected_feature(layout, feature, ui, part) -> None:
         if ui.extrude_depth_mode == "BLIND":
             box.prop(ui, "extrude_distance_mm", text="Distance (mm)")
         box.operator("parametric_cad.extrude", icon="MOD_SOLIDIFY")
+        _draw_revolve_controls(box, ui, "Create Revolve")
     elif isinstance(feature, ExtrudeFeature):
         box = layout.box()
         icon = (
@@ -71,6 +79,14 @@ def draw_selected_feature(layout, feature, ui, part) -> None:
         if ui.extrude_depth_mode == "BLIND":
             box.prop(ui, "extrude_distance_mm", text="Distance (mm)")
         box.operator("parametric_cad.apply_extrude", icon="FILE_REFRESH")
+        if feature.status == "ERROR" and feature.error_message:
+            error = box.box()
+            error.alert = True
+            error.label(text=feature.error_message, icon="ERROR")
+    elif isinstance(feature, RevolveFeature):
+        box = layout.box()
+        box.label(text=feature.name, icon="MOD_SCREW")
+        _draw_revolve_controls(box, ui, "Apply Revolve")
         if feature.status == "ERROR" and feature.error_message:
             error = box.box()
             error.alert = True
@@ -89,3 +105,21 @@ def draw_selected_feature(layout, feature, ui, part) -> None:
         text="Unsuppress Feature" if feature.suppressed else "Suppress Feature",
         icon="HIDE_OFF" if feature.suppressed else "HIDE_ON",
     )
+
+
+def _draw_revolve_controls(box, ui, action_label: str) -> None:
+    revolve = box.box()
+    revolve.label(text="Revolve")
+    revolve.prop(ui, "revolve_operation")
+    revolve.prop(ui, "revolve_axis_type")
+    if ui.revolve_axis_type == "DATUM_AXIS":
+        revolve.prop(ui, "revolve_axis")
+    else:
+        revolve.prop(ui, "revolve_axis_line_id")
+    revolve.prop(ui, "revolve_angle_deg")
+    operator_id = (
+        "parametric_cad.apply_revolve"
+        if action_label == "Apply Revolve"
+        else "parametric_cad.revolve"
+    )
+    revolve.operator(operator_id, text=action_label, icon="MOD_SCREW")

@@ -7,6 +7,7 @@ import json
 import bpy
 
 from ...core.serialization import feature_from_dict, feature_to_dict
+from ...core.references import TopoReference
 from ...sketch.numeric import (
     circle_parameters,
     rectangle_parameters,
@@ -21,7 +22,7 @@ from ...sketch.plane import (
 from ...sketch.sketch import SketchFeature
 from ..adapter import load_document_from_scene, rebuild_part, save_document_to_scene
 from ..viewport.projection import screen_to_sketch
-from ..viewport.sketch_overlay import clear_preview, tag_redraw
+from ..viewport.sketch_overlay import clear_face_selection, clear_preview, tag_redraw
 
 
 def _orient_to_plane(context, plane: ResolvedPlane) -> None:
@@ -29,8 +30,11 @@ def _orient_to_plane(context, plane: ResolvedPlane) -> None:
         normal = tuple(round(value) for value in plane.normal)
         view_type = {
             (0, 0, 1): "TOP",
+            (0, 0, -1): "BOTTOM",
             (0, -1, 0): "FRONT",
+            (0, 1, 0): "BACK",
             (1, 0, 0): "RIGHT",
+            (-1, 0, 0): "LEFT",
         }.get(normal, "TOP")
         window_region = next(
             (region for region in context.area.regions if region.type == "WINDOW"), None
@@ -105,7 +109,7 @@ class PARAMETRIC_CAD_OT_track_sketch_cursor(bpy.types.Operator):
 class PARAMETRIC_CAD_OT_new_sketch(bpy.types.Operator):
     bl_idname = "parametric_cad.new_sketch"
     bl_label = "New Sketch"
-    bl_description = "Create a sketch on the selected datum plane"
+    bl_description = "Create a sketch on the selected datum plane or face"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -114,15 +118,26 @@ class PARAMETRIC_CAD_OT_new_sketch(bpy.types.Operator):
         if part is None:
             self.report({"ERROR"}, "Create a Part first")
             return {"CANCELLED"}
-        reference = context.scene.parametric_cad_ui.new_sketch_reference
-        tokens = reference.split("|")
-        if tokens[0] == "FEATURE" and len(tokens) == 3:
-            sketch = SketchFeature.on_feature_plane(
-                part.next_feature_name("Sketch"), tokens[1], tokens[2]
-            )
+        ui = context.scene.parametric_cad_ui
+        if ui.selected_face_reference:
+            try:
+                face = TopoReference.from_dict(json.loads(ui.selected_face_reference))
+                sketch = SketchFeature.on_face(part.next_feature_name("Sketch"), face)
+            except (TypeError, ValueError, KeyError) as exc:
+                self.report({"ERROR"}, f"Invalid selected face: {exc}")
+                return {"CANCELLED"}
         else:
-            plane_type = tokens[1] if len(tokens) == 2 else "XY"
-            sketch = SketchFeature.on_plane(part.next_feature_name("Sketch"), plane_type)
+            reference = ui.new_sketch_reference
+            tokens = reference.split("|")
+            if tokens[0] == "FEATURE" and len(tokens) == 3:
+                sketch = SketchFeature.on_feature_plane(
+                    part.next_feature_name("Sketch"), tokens[1], tokens[2]
+                )
+            else:
+                plane_type = tokens[1] if len(tokens) == 2 else "XY"
+                sketch = SketchFeature.on_plane(
+                    part.next_feature_name("Sketch"), plane_type
+                )
         part.add_feature(sketch)
         try:
             _begin_edit(context, part, sketch, True)
@@ -130,6 +145,8 @@ class PARAMETRIC_CAD_OT_new_sketch(bpy.types.Operator):
             part.remove_feature(sketch.id)
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
+        ui.selected_face_reference = ""
+        clear_face_selection()
         save_document_to_scene(context.scene, document)
         return {"FINISHED"}
 

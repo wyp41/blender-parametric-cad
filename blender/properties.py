@@ -44,6 +44,7 @@ def _active_part_changed(self, context):
     self.active_feature_id = ""
     self.active_sketch_id = ""
     self.active_sketch_entity_id = ""
+    self.selected_face_reference = ""
 
 
 def _sketch_plane_items(_self, context):
@@ -76,6 +77,36 @@ def _sketch_plane_items(_self, context):
     return items
 
 
+def _revolve_axis_line_items(_self, context):
+    if context is not None:
+        try:
+            from ..sketch.entities import SketchLine
+            from ..sketch.sketch import SketchFeature
+            from ..features.revolve import RevolveFeature
+            from .adapter import load_document_from_scene
+
+            ui = context.scene.parametric_cad_ui
+            part = load_document_from_scene(context.scene).active_part
+            feature = part.get_feature(ui.active_feature_id) if part else None
+            if isinstance(feature, RevolveFeature):
+                feature = part.get_feature(feature.sketch_id)
+            if isinstance(feature, SketchFeature):
+                items = [
+                    (
+                        entity.id,
+                        f"Line {index + 1}",
+                        "Use this SketchLine as the Revolve axis",
+                    )
+                    for index, entity in enumerate(feature.entities)
+                    if isinstance(entity, SketchLine)
+                ]
+                if items:
+                    return items
+        except (AttributeError, TypeError, ValueError):
+            pass
+    return [("NONE", "No SketchLines", "Create a SketchLine axis first")]
+
+
 class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
     active_part_id: EnumProperty(
         name="Active Part Studio",
@@ -94,6 +125,7 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
     active_feature_id: StringProperty(default="")
     active_sketch_id: StringProperty(default="")
     active_sketch_entity_id: StringProperty(default="")
+    selected_face_reference: StringProperty(default="")
     show_sketches: BoolProperty(
         name="Show Sketches",
         description="Show resolved Sketch geometry outside Sketch Edit",
@@ -135,6 +167,44 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
             ("THROUGH_ALL", "Through All", "Span the current body bounds"),
         ],
         default="BLIND",
+    )
+    revolve_operation: EnumProperty(
+        name="Operation",
+        items=[
+            ("NEW", "New", "Create the revolved Part Studio body"),
+            ("ADD", "Add", "Union the revolve with the current body"),
+            ("REMOVE", "Remove", "Subtract the revolve from the current body"),
+        ],
+        default="NEW",
+    )
+    revolve_axis_type: EnumProperty(
+        name="Axis Type",
+        items=[
+            ("DATUM_AXIS", "Datum Axis", "Use the global X, Y, or Z axis"),
+            ("SKETCH_LINE", "Sketch Line", "Use a persistent SketchLine axis"),
+        ],
+        default="DATUM_AXIS",
+    )
+    revolve_axis: EnumProperty(
+        name="Axis",
+        items=[
+            ("X", "X Axis", "Global X axis"),
+            ("Y", "Y Axis", "Global Y axis"),
+            ("Z", "Z Axis", "Global Z axis"),
+        ],
+        default="Z",
+    )
+    revolve_axis_line_id: EnumProperty(
+        name="Sketch Line",
+        items=_revolve_axis_line_items,
+    )
+    revolve_angle_deg: FloatProperty(
+        name="Angle",
+        description="Revolve angle in degrees",
+        default=360.0,
+        min=0.001,
+        max=360.0,
+        soft_max=360.0,
     )
     rectangle_x_mm: FloatProperty(name="X", default=-40.0)
     rectangle_y_mm: FloatProperty(name="Y", default=-25.0)

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+
 import bpy
 
+from ...core.references import TopoReference
 from ...sketch.sketch import SketchFeature
 from ...sketch.numeric import circle_parameters, rectangle_parameters
 from ..adapter import load_document_from_scene
@@ -45,8 +48,23 @@ class PARAMETRIC_CAD_PT_main(bpy.types.Panel):
         delete.part_id = part.id
         studio.prop(ui, "show_sketches")
 
+        support = layout.box()
+        support.label(text="Viewport Selection", icon="RESTRICT_SELECT_OFF")
+        support.operator("parametric_cad.select_face", icon="FACESEL")
+        if ui.selected_face_reference:
+            try:
+                face = TopoReference.from_dict(json.loads(ui.selected_face_reference))
+                source = part.get_feature(face.feature_id)
+                source_name = source.name if source is not None else face.feature_id[:8]
+                label = f"{source_name} {face.role.replace('_', ' ').title()}"
+                support.label(text=label, icon="CHECKMARK")
+            except (TypeError, ValueError, KeyError):
+                support.label(text="Invalid face selection", icon="ERROR")
+
         create = layout.box()
         create.label(text="Create")
+        if ui.selected_face_reference:
+            create.label(text="New Sketch will use the selected face.", icon="MESH_PLANE")
         create.prop(ui, "new_sketch_reference", text="")
         create.operator("parametric_cad.new_sketch", icon="OUTLINER_OB_CURVE")
 

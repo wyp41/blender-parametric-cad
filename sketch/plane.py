@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import sqrt
 from typing import Any
 
 Vector3 = tuple[float, float, float]
@@ -22,6 +23,7 @@ class SketchPlaneReference:
     datum_plane: str | None = "XY"
     feature_id: str | None = None
     role: str | None = None
+    source_entity_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -46,6 +48,8 @@ class PlaneResolver:
             x_axis, y_axis = PLANE_AXES[reference.datum_plane]
             return ResolvedPlane((0.0, 0.0, 0.0), x_axis, y_axis, _cross(x_axis, y_axis))
 
+        if reference.reference_type == "FACE":
+            return self._resolve_face(reference, context)
         if reference.reference_type != "FEATURE_PLANE":
             raise PlaneResolutionError(
                 f"Unsupported plane reference type: {reference.reference_type}"
@@ -71,6 +75,62 @@ class PlaneResolver:
         return ResolvedPlane(
             origin, source_plane.x_axis, source_plane.y_axis, source_plane.normal
         )
+
+    def _resolve_face(
+        self, reference: SketchPlaneReference, context: Any
+    ) -> ResolvedPlane:
+        from ..features.extrude import ExtrudeFeature
+        from ..sketch.entities import SketchLine
+        from ..sketch.sketch import sketch_to_world
+
+        if reference.role not in {"START_FACE", "END_FACE", "SIDE_FACE"}:
+            raise PlaneResolutionError("Unsupported Extrude face role.")
+        if not reference.feature_id:
+            raise PlaneResolutionError("Face reference has no source Extrude feature.")
+        feature = context.evaluated_features.get(reference.feature_id)
+        if not isinstance(feature, ExtrudeFeature):
+            raise PlaneResolutionError("Referenced Extrude feature is not evaluated.")
+        if feature.operation != "NEW":
+            raise PlaneResolutionError(
+                "Only faces from simple NEW Extrude features are supported."
+            )
+        source = context.evaluated_features.get(feature.sketch_id)
+        source_plane = context.resolved_planes.get(feature.sketch_id)
+        if source is None or source_plane is None:
+            raise PlaneResolutionError("Source sketch plane is not resolved.")
+
+        if reference.role == "START_FACE":
+            return source_plane
+        if reference.role == "END_FACE":
+            offset = feature.distance * feature.direction
+            origin = tuple(
+                source_plane.origin[index] + source_plane.normal[index] * offset
+                for index in range(3)
+            )
+            return ResolvedPlane(
+                origin, source_plane.x_axis, source_plane.y_axis, source_plane.normal
+            )
+
+        if reference.source_entity_id is None:
+            raise PlaneResolutionError("SIDE_FACE requires a source SketchLine.")
+        line = next(
+            (
+                entity
+                for entity in source.entities
+                if isinstance(entity, SketchLine)
+                and entity.id == reference.source_entity_id
+            ),
+            None,
+        )
+        if line is None:
+            raise PlaneResolutionError("Referenced side-face SketchLine is unavailable.")
+        start = sketch_to_world(source, line.x1, line.y1)
+        end = sketch_to_world(source, line.x2, line.y2)
+        x_axis = _normalize(tuple(end[index] - start[index] for index in range(3)))
+        y_axis = tuple(
+            source_plane.normal[index] * feature.direction for index in range(3)
+        )
+        return ResolvedPlane(start, x_axis, y_axis, _cross(x_axis, y_axis))
 
 
 def resolve_sketch_plane_from_history(part: Any, sketch_id: str) -> ResolvedPlane:
@@ -109,3 +169,10 @@ def _cross(x_axis: Vector3, y_axis: Vector3) -> Vector3:
         x_axis[2] * y_axis[0] - x_axis[0] * y_axis[2],
         x_axis[0] * y_axis[1] - x_axis[1] * y_axis[0],
     )
+
+
+def _normalize(vector: Vector3) -> Vector3:
+    length = sqrt(sum(value * value for value in vector))
+    if length <= 1e-12:
+        raise PlaneResolutionError("Referenced SketchLine has zero length.")
+    return tuple(value / length for value in vector)  # type: ignore[return-value]

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from math import cos, pi, sin
+from math import ceil, cos, pi, sin, sqrt, tau
 
 import bpy
 
 from ..sketch.profile import SketchProfile
 from ..sketch.sketch import SketchFeature, sketch_normal, sketch_to_world
+from ..core.references import TopoReference
 from .backend import GeometryBackend
 
 
@@ -15,6 +16,9 @@ class BlenderMeshBackend(GeometryBackend):
     """Build a new disposable Blender Mesh for each history evaluation."""
 
     circle_segments = 64
+
+    def __init__(self) -> None:
+        self._face_provenance: dict[int, dict[int, TopoReference]] = {}
 
     def create_extrusion(
         self,
@@ -74,6 +78,95 @@ class BlenderMeshBackend(GeometryBackend):
             distance * direction,
             "CAD_Blind_Remove_Tool",
         )
+
+    def revolve_profile(
+        self,
+        sketch: SketchFeature,
+        profile: SketchProfile,
+        axis_origin: tuple[float, float, float],
+        axis_direction: tuple[float, float, float],
+        angle: float,
+    ) -> bpy.types.Mesh:
+        points = self._profile_points(profile)
+        normal_length = sqrt(sum(value * value for value in axis_direction))
+        if normal_length <= 1e-12:
+            raise ValueError("Revolve axis has zero length.")
+        direction = tuple(value / normal_length for value in axis_direction)
+        base = [sketch_to_world(sketch, u, v) for u, v in points]
+        segments = max(8, int(ceil(64.0 * abs(angle) / tau)))
+        vertices: list[tuple[float, float, float]] = []
+        for ring in range(segments + 1):
+            ring_angle = angle * ring / segments
+            vertices.extend(
+                self._rotate_about_axis(point, axis_origin, direction, ring_angle)
+                for point in base
+            )
+
+        count = len(base)
+        faces = []
+        for ring in range(segments):
+            next_ring = ring + 1
+            for index in range(count):
+                next_index = (index + 1) % count
+                faces.append(
+                    (
+                        ring * count + index,
+                        ring * count + next_index,
+                        next_ring * count + next_index,
+                        next_ring * count + index,
+                    )
+                )
+        if abs(angle) < tau - 1e-9:
+            faces.append(tuple(reversed(range(count))))
+            end = segments * count
+            faces.append(tuple(end + index for index in range(count)))
+
+        mesh = bpy.data.meshes.new("CAD_Revolve_Result")
+        mesh.from_pydata(vertices, [], faces)
+        mesh.validate()
+        mesh.update()
+        return mesh
+
+    @staticmethod
+    def _rotate_about_axis(
+        point: tuple[float, float, float],
+        origin: tuple[float, float, float],
+        direction: tuple[float, float, float],
+        angle: float,
+    ) -> tuple[float, float, float]:
+        vector = tuple(point[index] - origin[index] for index in range(3))
+        cosine, sine = cos(angle), sin(angle)
+        parallel = sum(vector[index] * direction[index] for index in range(3))
+        cross = (
+            direction[1] * vector[2] - direction[2] * vector[1],
+            direction[2] * vector[0] - direction[0] * vector[2],
+            direction[0] * vector[1] - direction[1] * vector[0],
+        )
+        rotated = tuple(
+            vector[index] * cosine
+            + cross[index] * sine
+            + direction[index] * parallel * (1.0 - cosine)
+            for index in range(3)
+        )
+        return tuple(origin[index] + rotated[index] for index in range(3))
+
+    def register_extrude_provenance(
+        self, body: bpy.types.Mesh, feature_id: str, profile: SketchProfile
+    ) -> None:
+        references = {
+            0: TopoReference(feature_id, "START_FACE"),
+            1: TopoReference(feature_id, "END_FACE"),
+        }
+        _points, entity_ids = self._profile_points_and_ids(profile)
+        for index, entity_id in enumerate(entity_ids):
+            if entity_id is not None:
+                references[index + 2] = TopoReference(
+                    feature_id, "SIDE_FACE", source_entity_id=entity_id
+                )
+        self._face_provenance[id(body)] = references
+
+    def face_provenance(self, body: bpy.types.Mesh) -> dict[int, TopoReference]:
+        return dict(self._face_provenance.get(id(body), {}))
 
     def boolean_difference(
         self, body: bpy.types.Mesh, tool: bpy.types.Mesh
@@ -176,8 +269,15 @@ class BlenderMeshBackend(GeometryBackend):
         return internal
 
     def _profile_points(self, profile: SketchProfile) -> list[tuple[float, float]]:
+        points, _entity_ids = self._profile_points_and_ids(profile)
+        return points
+
+    def _profile_points_and_ids(
+        self, profile: SketchProfile
+    ) -> tuple[list[tuple[float, float]], list[str | None]]:
         if profile.points:
             points = list(profile.points)
+            entity_ids: list[str | None] = list(profile.entity_ids)
         elif profile.kind == "CIRCLE" and profile.circle is not None:
             cx, cy, radius = profile.circle
             points = [
@@ -187,11 +287,16 @@ class BlenderMeshBackend(GeometryBackend):
                 )
                 for index in range(self.circle_segments)
             ]
+            entity_ids = [None] * len(points)
         else:
             raise ValueError(f"Unsupported profile kind: {profile.kind}")
+        if len(entity_ids) != len(points):
+            entity_ids = [None] * len(points)
         signed_area = sum(
             points[index][0] * points[(index + 1) % len(points)][1]
             - points[(index + 1) % len(points)][0] * points[index][1]
             for index in range(len(points))
         )
-        return list(reversed(points)) if signed_area < 0.0 else points
+        if signed_area < 0.0:
+            return list(reversed(points)), list(reversed(entity_ids))
+        return points, entity_ids

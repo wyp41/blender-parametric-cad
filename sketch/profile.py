@@ -16,6 +16,7 @@ class SketchProfile:
     kind: str
     points: tuple[Point2D, ...] = ()
     circle: tuple[float, float, float] | None = None
+    entity_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -44,10 +45,18 @@ class ProfileDetector:
                 )
 
         if len(entities) >= 3 and all(isinstance(item, SketchLine) for item in entities):
-            points = self._ordered_loop(entities)  # type: ignore[arg-type]
-            if points is not None:
+            ordered = self._ordered_loop_lines(entities)  # type: ignore[arg-type]
+            if ordered is not None:
+                points = tuple(item[1] for item in ordered)
                 kind = "RECTANGLE" if len(points) == 4 and self._is_rectangle(list(points)) else "POLYGON"
-                return ProfileResult(True, SketchProfile(kind, points=points))
+                return ProfileResult(
+                    True,
+                    SketchProfile(
+                        kind,
+                        points=points,
+                        entity_ids=tuple(item[0].id for item in ordered),
+                    ),
+                )
 
         return ProfileResult(
             False,
@@ -58,6 +67,12 @@ class ProfileDetector:
         )
 
     def _ordered_loop(self, lines: list[SketchLine]) -> tuple[Point2D, ...] | None:
+        ordered = self._ordered_loop_lines(lines)
+        return tuple(item[1] for item in ordered) if ordered is not None else None
+
+    def _ordered_loop_lines(
+        self, lines: list[SketchLine]
+    ) -> list[tuple[SketchLine, Point2D, Point2D]] | None:
         endpoint_counts: dict[tuple[int, int], int] = {}
         for line in lines:
             for point in ((line.x1, line.y1), (line.x2, line.y2)):
@@ -68,33 +83,35 @@ class ProfileDetector:
 
         unused = list(lines)
         first = unused.pop(0)
-        ordered = [(first.x1, first.y1), (first.x2, first.y2)]
+        ordered = [
+            (first, (first.x1, first.y1), (first.x2, first.y2))
+        ]
 
         while unused:
-            current = ordered[-1]
+            current = ordered[-1][2]
             match_index = None
-            next_point = None
+            next_entry = None
             for index, line in enumerate(unused):
                 start, end = (line.x1, line.y1), (line.x2, line.y2)
                 if self._same_point(current, start):
-                    match_index, next_point = index, end
+                    match_index, next_entry = index, (line, start, end)
                     break
                 if self._same_point(current, end):
-                    match_index, next_point = index, start
+                    match_index, next_entry = index, (line, end, start)
                     break
-            if match_index is None or next_point is None:
+            if match_index is None or next_entry is None:
                 return None
             unused.pop(match_index)
-            ordered.append(next_point)
+            ordered.append(next_entry)
 
-        if not self._same_point(ordered[-1], ordered[0]):
+        if not self._same_point(ordered[-1][2], ordered[0][1]):
             return None
-        vertices = ordered[:-1]
+        vertices = [item[1] for item in ordered]
         if len({self._point_key(point) for point in vertices}) != len(lines):
             return None
         if self._self_intersects(vertices):
             return None
-        return tuple(vertices)
+        return ordered
 
     def _same_point(self, left: Point2D, right: Point2D) -> bool:
         return isclose(left[0], right[0], abs_tol=self.tolerance) and isclose(

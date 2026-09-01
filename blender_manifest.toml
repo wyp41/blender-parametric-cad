@@ -1,9 +1,9 @@
 schema_version = "1.0.0"
 
 id = "blender_parametric_cad"
-version = "0.3.1"
+version = "0.4.0"
 name = "Blender Parametric CAD"
-tagline = "Part Studios, precise sketches, and unified parametric extrusions"
+tagline = "Part Studios, semantic face sketches, extrusions, and Revolve"
 maintainer = "Blender Parametric CAD contributors"
 type = "add-on"
 

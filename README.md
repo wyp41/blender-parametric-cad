@@ -1,8 +1,8 @@
 # Blender Parametric CAD
 
-History-based parametric modeling extension for Blender 5.1.2. Version 0.3.1
-implements the M3.5–M3.6 Part Studio, Feature management, precise Sketch, and
-unified Extrude workflows.
+History-based parametric modeling extension for Blender 5.1.2. Version 0.4.0
+implements the M3.5–M3.6 Part Studio, precise Sketch and unified Extrude
+workflows, plus the M4 semantic face-selection and Revolve milestone.
 
 The persistent JSON CAD history is authoritative. Blender result meshes,
 Boolean tools, and sketch overlays are disposable outputs resolved from stable
@@ -11,7 +11,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.3.1.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.4.0.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## Part Studio workflow
@@ -29,6 +29,15 @@ In a 3D View, press `N` and open the **CAD** tab:
 7. Select Features to edit, rename, delete with dependency confirmation,
    suppress/unsuppress, or set the rollback point.
 
+To attach a Sketch to generated geometry, press **Select Face**, click a
+supported planar face of a simple New Extrude, then press **New Sketch**. The
+support is stored as `START_FACE`, `END_FACE`, or `SIDE_FACE(source line UUID)`;
+the temporary Blender polygon hit is never part of the CAD history.
+
+To create a Revolve, select a Sketch and use its **Revolve** section. Choose a
+datum X/Y/Z axis or a visible SketchLine, set **New**, **Add**, or **Remove**,
+and enter an angle in degrees (360° by default).
+
 The Part Studio selector switches between independent single-body histories.
 Part Studios can be renamed or deleted without relying on Blender object names.
 
@@ -39,6 +48,9 @@ Part Studios can be renamed or deleted without relying on Blender object names.
 - `New + Blind`, `Add + Blind`, `Remove + Blind`, and
   `Remove + Through All`.
 - Existing saved `CUT` features remain compatible and evaluate as Remove.
+- Simple Extrude start/end faces and line-based side faces can be selected as
+  semantic Sketch supports.
+- Revolve supports New, Add, and Remove with datum axes or SketchLine axes.
 
 Numeric edits update the existing Sketch entities and preserve entity UUIDs.
 Closed line-loop winding is normalized before mesh generation so clockwise and
@@ -68,9 +80,13 @@ python3 -m unittest discover -s blender_parametric_cad/tests -t . -v
 /Applications/Blender.app/Contents/MacOS/Blender --background \
   --factory-startup \
   --python blender_parametric_cad/tests/blender_headless_m36_validation.py
+/Applications/Blender.app/Contents/MacOS/Blender --background \
+  --factory-startup \
+  --python blender_parametric_cad/tests/blender_headless_m4_validation.py
 ```
 
 The Blender validations cover the legacy M3 model, independent Part Studios,
 Feature lifecycle controls, numeric Sketch editing, persistent semantic overlays,
-generic Remove profiles, Add, blind pocket depth, repeated deletion, and
-save/reopen editing.
+generic Remove profiles, Add, blind pocket depth, semantic END/SIDE face
+supports, datum and SketchLine Revolve axes, Revolve Add/Remove, and save/reopen
+editing.

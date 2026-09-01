@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from ..core.feature import Feature
 from .entities import SketchEntity
 from .plane import PLANE_AXES, ResolvedPlane, SketchPlaneReference
+from ..core.references import TopoReference
 
 Vector3 = tuple[float, float, float]
 
@@ -57,6 +58,22 @@ class SketchFeature(Feature):
                 "FEATURE_PLANE", datum_plane=None, feature_id=feature_id, role=role
             ),
             dependencies=[feature_id],
+        )
+
+    @classmethod
+    def on_face(cls, name: str, face: TopoReference) -> "SketchFeature":
+        if face.reference_type != "FACE":
+            raise ValueError("Sketch support must be a face reference.")
+        return cls(
+            name=name,
+            plane_reference=SketchPlaneReference(
+                reference_type="FACE",
+                datum_plane=None,
+                feature_id=face.feature_id,
+                role=face.role,
+                source_entity_id=face.source_entity_id,
+            ),
+            dependencies=[face.feature_id],
         )
 
     def apply_resolved_plane(self, plane: ResolvedPlane) -> None:

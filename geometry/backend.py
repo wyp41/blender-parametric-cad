@@ -7,6 +7,7 @@ from typing import Any
 
 from ..sketch.profile import SketchProfile
 from ..sketch.sketch import SketchFeature
+from ..core.references import TopoReference
 
 
 class GeometryBackend(ABC):
@@ -43,6 +44,31 @@ class GeometryBackend(ABC):
         """Create a finite removal tool with the requested pocket depth."""
 
         return self.create_extrusion(sketch, profile, distance, direction)
+
+    def revolve_profile(
+        self,
+        sketch: SketchFeature,
+        profile: SketchProfile,
+        axis_origin: tuple[float, float, float],
+        axis_direction: tuple[float, float, float],
+        angle: float,
+    ) -> Any:
+        """Create a solid by sweeping a closed profile around an axis."""
+
+        raise NotImplementedError
+
+    def register_extrude_provenance(
+        self,
+        body: Any,
+        feature_id: str,
+        profile: SketchProfile,
+    ) -> None:
+        """Record transient polygon-to-semantic-face provenance for a body."""
+
+    def face_provenance(self, body: Any) -> dict[int, TopoReference]:
+        """Return transient provenance for the current generated mesh."""
+
+        return {}
 
     def boolean_difference(self, body: Any, tool: Any) -> Any:
         """Return a new body equal to body minus tool."""

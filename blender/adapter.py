@@ -8,6 +8,7 @@ from ..core.document import CadDocument
 from ..core.evaluator import EvaluationResult, PartEvaluator
 from ..core.serialization import dumps, loads
 from ..geometry.blender_mesh_backend import BlenderMeshBackend
+from .viewport.provenance import clear_face_provenance, set_face_provenance
 
 
 def load_document_from_scene(scene: bpy.types.Scene) -> CadDocument:
@@ -66,6 +67,8 @@ def rebuild_part(scene: bpy.types.Scene, part_id: str | None = None) -> Evaluati
 
     result_object["cad_part_id"] = part.id
     result_object["cad_generated"] = True
+    provenance = result.context.face_provenance if result.context else {}
+    set_face_provenance(result_object, provenance)
     result_object.update_tag()
     bpy.context.view_layer.update()
     return result
@@ -112,6 +115,7 @@ def _find_result_object(part_id: str) -> bpy.types.Object | None:
 
 def _remove_result_object(result_object: bpy.types.Object) -> None:
     mesh = result_object.data
+    clear_face_provenance(result_object)
     bpy.data.objects.remove(result_object, do_unlink=True)
     if mesh and mesh.users == 0:
         bpy.data.meshes.remove(mesh)

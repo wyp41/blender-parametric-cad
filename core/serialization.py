@@ -7,11 +7,13 @@ from copy import deepcopy
 from typing import Any
 
 from ..features.extrude import ExtrudeFeature
+from ..features.revolve import RevolveFeature
 from ..sketch.entities import SketchCircle, SketchEntity, SketchLine
 from ..sketch.plane import SketchPlaneReference
 from ..sketch.sketch import SketchFeature
 from .feature import Feature
 from .part import Part
+from .references import AxisReference
 
 
 def entity_to_dict(entity: SketchEntity) -> dict[str, Any]:
@@ -69,6 +71,7 @@ def feature_to_dict(feature: Feature) -> dict[str, Any]:
                 "datum_plane": feature.plane_reference.datum_plane,
                 "feature_id": feature.plane_reference.feature_id,
                 "role": feature.plane_reference.role,
+                "source_entity_id": feature.plane_reference.source_entity_id,
             },
             entities=[entity_to_dict(item) for item in feature.entities],
         )
@@ -79,6 +82,13 @@ def feature_to_dict(feature: Feature) -> dict[str, Any]:
             direction=feature.direction,
             operation=feature.operation,
             depth_mode=feature.depth_mode,
+        )
+    elif isinstance(feature, RevolveFeature):
+        data.update(
+            sketch_id=feature.sketch_id,
+            axis_reference=feature.axis_reference.to_dict(),
+            angle=feature.angle,
+            operation=feature.operation,
         )
     else:
         raise ValueError(f"Unsupported CAD feature: {feature.feature_type}")
@@ -103,6 +113,7 @@ def feature_from_dict(data: dict[str, Any]) -> Feature:
                 datum_plane=reference.get("datum_plane"),
                 feature_id=reference.get("feature_id"),
                 role=reference.get("role"),
+                source_entity_id=reference.get("source_entity_id"),
             ),
             entities=[entity_from_dict(item) for item in data.get("entities", [])],
         )
@@ -114,6 +125,14 @@ def feature_from_dict(data: dict[str, Any]) -> Feature:
             direction=int(data.get("direction", 1)),
             operation=data.get("operation", "NEW"),
             depth_mode=data.get("depth_mode", "BLIND"),
+        )
+    if data["feature_type"] == "REVOLVE":
+        return RevolveFeature(
+            **common,
+            sketch_id=data["sketch_id"],
+            axis_reference=AxisReference.from_dict(data.get("axis_reference", {})),
+            angle=float(data.get("angle", 6.283185307179586)),
+            operation=data.get("operation", "NEW"),
         )
     raise ValueError(f"Unsupported CAD feature type: {data['feature_type']}")
 

@@ -7,16 +7,20 @@ from math import cos, pi, sin
 import bpy
 import gpu
 from gpu_extras.batch import batch_for_shader
+from mathutils import Vector
 
 from ...sketch.entities import SketchCircle, SketchLine
 from ...sketch.numeric import rectangle_entity_ids
 from ...sketch.plane import PlaneResolutionError, resolve_sketch_plane_from_history
 from ...sketch.sketch import SketchFeature, sketch_to_world
 from ..adapter import load_document_from_scene
+from .provenance import get_face_provenance
 
 _draw_handle = None
 _preview_points: list[tuple[float, float, float]] = []
 _preview_closed = False
+_hover_face = None
+_selected_face = None
 
 
 def set_preview(points: list[tuple[float, float, float]], closed: bool = False) -> None:
@@ -28,6 +32,25 @@ def set_preview(points: list[tuple[float, float, float]], closed: bool = False) 
 
 def clear_preview() -> None:
     set_preview([])
+
+
+def set_face_hover(hit) -> None:
+    global _hover_face
+    _hover_face = hit
+    tag_redraw()
+
+
+def set_face_selection(hit) -> None:
+    global _selected_face
+    _selected_face = hit
+    tag_redraw()
+
+
+def clear_face_selection() -> None:
+    global _hover_face, _selected_face
+    _hover_face = None
+    _selected_face = None
+    tag_redraw()
 
 
 def tag_redraw() -> None:
@@ -58,6 +81,8 @@ def _draw_callback() -> None:
     if not hasattr(scene, "parametric_cad_ui"):
         return
     ui = scene.parametric_cad_ui
+    _draw_face_highlight(_hover_face, (0.15, 0.55, 1.0, 0.22))
+    _draw_face_highlight(_selected_face, (1.0, 0.65, 0.1, 0.30))
     try:
         document = load_document_from_scene(scene)
     except (ValueError, TypeError):
@@ -123,6 +148,51 @@ def _draw_callback() -> None:
         if _preview_closed:
             preview_segments.extend([_preview_points[-1], _preview_points[0]])
     _draw_segments(preview_segments, (1.0, 0.65, 0.1, 1.0))
+
+
+def _draw_face_highlight(hit, color) -> None:
+    if hit is None:
+        return
+    obj, polygon_index, reference = hit
+    try:
+        mesh = getattr(obj, "data", None)
+        if reference is not None:
+            polygon_index = _current_polygon_index(obj, polygon_index, reference)
+            if polygon_index is None:
+                return
+        if mesh is None or polygon_index < 0 or polygon_index >= len(mesh.polygons):
+            return
+        polygon = mesh.polygons[polygon_index]
+        if len(polygon.vertices) < 3:
+            return
+        points = [
+            tuple(obj.matrix_world @ Vector(mesh.vertices[index].co))
+            for index in polygon.vertices
+        ]
+    except ReferenceError:
+        return
+    triangles = []
+    for index in range(1, len(points) - 1):
+        triangles.extend((points[0], points[index], points[index + 1]))
+    shader = gpu.shader.from_builtin("UNIFORM_COLOR")
+    batch = batch_for_shader(shader, "TRIS", {"pos": triangles})
+    gpu.state.depth_test_set("LESS_EQUAL")
+    gpu.state.blend_set("ALPHA")
+    shader.bind()
+    shader.uniform_float("color", color)
+    batch.draw(shader)
+    gpu.state.blend_set("NONE")
+    gpu.state.depth_test_set("LESS_EQUAL")
+
+
+def _current_polygon_index(obj, fallback: int, reference) -> int | None:
+    data = get_face_provenance(obj)
+    if fallback in data and data[fallback] == reference:
+        return fallback
+    for index, candidate in data.items():
+        if candidate == reference:
+            return index
+    return None
 
 
 def _entity_segments(

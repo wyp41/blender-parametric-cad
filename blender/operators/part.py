@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from math import degrees
+
 import bpy
 
 from ...core.document import CadDocument
 from ...core.part import Part
 from ...core.part import delete_feature, get_recursive_dependents
 from ...features.extrude import ExtrudeFeature
+from ...features.revolve import RevolveFeature
 from ...sketch.sketch import SketchFeature
 from ..adapter import (
     load_document_from_scene,
@@ -29,6 +32,7 @@ def _next_part_studio_name(document: CadDocument) -> str:
 def _set_active_feature(ui, feature) -> None:
     ui.active_feature_id = feature.id if feature else ""
     ui.active_sketch_id = feature.id if isinstance(feature, SketchFeature) else ""
+    ui.active_sketch_entity_id = ""
     ui.mode = "FEATURE_EDIT" if feature else "IDLE"
     if isinstance(feature, ExtrudeFeature):
         ui.extrude_distance_mm = feature.distance * 1000.0
@@ -36,6 +40,14 @@ def _set_active_feature(ui, feature) -> None:
         ui.extrude_depth_mode = feature.depth_mode
         if feature.operation == "NEW" and feature.status == "OK":
             ui.new_sketch_reference = f"FEATURE|{feature.id}|END_PLANE"
+    elif isinstance(feature, RevolveFeature):
+        ui.revolve_operation = feature.operation
+        ui.revolve_angle_deg = degrees(feature.angle)
+        ui.revolve_axis_type = feature.axis_reference.reference_type
+        if feature.axis_reference.reference_type == "DATUM_AXIS":
+            ui.revolve_axis = feature.axis_reference.axis or "Z"
+        elif feature.axis_reference.entity_id:
+            ui.revolve_axis_line_id = feature.axis_reference.entity_id
 
 
 class PARAMETRIC_CAD_OT_new_part(bpy.types.Operator):
@@ -54,6 +66,8 @@ class PARAMETRIC_CAD_OT_new_part(bpy.types.Operator):
         ui.active_part_id = part.id
         ui.active_feature_id = ""
         ui.active_sketch_id = ""
+        ui.active_sketch_entity_id = ""
+        ui.selected_face_reference = ""
         self.report({"INFO"}, f"Created {part.name}")
         return {"FINISHED"}
 
@@ -120,6 +134,8 @@ class PARAMETRIC_CAD_OT_delete_part(bpy.types.Operator):
         ui.mode = "IDLE"
         ui.active_feature_id = ""
         ui.active_sketch_id = ""
+        ui.active_sketch_entity_id = ""
+        ui.selected_face_reference = ""
         ui.active_part_id = document.active_part_id or "NONE"
         self.report({"INFO"}, f"Deleted {removed.name}")
         return {"FINISHED"}

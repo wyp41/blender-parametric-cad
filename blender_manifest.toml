@@ -1,0 +1,11 @@
+schema_version = "1.0.0"
+
+id = "blender_parametric_cad"
+version = "0.3.0"
+name = "Blender Parametric CAD"
+tagline = "Part Studios, precise sketches, and unified parametric extrusions"
+maintainer = "Blender Parametric CAD contributors"
+type = "add-on"
+
+blender_version_min = "5.1.0"
+license = ["SPDX:GPL-3.0-or-later"]

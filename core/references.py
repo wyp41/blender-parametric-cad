@@ -43,6 +43,7 @@ class AxisReference:
     axis: str | None = "Z"
     sketch_id: str | None = None
     entity_id: str | None = None
+    direction: int = 1
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -50,6 +51,7 @@ class AxisReference:
             "axis": self.axis,
             "sketch_id": self.sketch_id,
             "entity_id": self.entity_id,
+            "direction": -1 if self.direction < 0 else 1,
         }
 
     @classmethod
@@ -59,6 +61,7 @@ class AxisReference:
             axis=data.get("axis"),
             sketch_id=data.get("sketch_id"),
             entity_id=data.get("entity_id"),
+            direction=-1 if int(data.get("direction", 1) or 1) < 0 else 1,
         )
 
 

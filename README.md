@@ -1,9 +1,9 @@
 # Blender Parametric CAD
 
-History-based parametric modeling extension for Blender 5.1.2. Version 0.5.0
+History-based parametric modeling extension for Blender 5.1.2. Version 0.6.0
 implements the M3.5–M3.6 Part Studio, precise Sketch and unified Extrude
-workflows, the M4 semantic face-selection/Revolve milestone, and arc-based
-composite sketch regions.
+workflows, the M4 semantic face-selection/Revolve milestone, arc-based
+composite sketch regions, and interactive sketch cleanup/snapping.
 
 The persistent JSON CAD history is authoritative. Blender result meshes,
 Boolean tools, and sketch overlays are disposable outputs resolved from stable
@@ -12,7 +12,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.5.0.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.6.0.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## Part Studio workflow
@@ -24,11 +24,13 @@ In a 3D View, press `N` and open the **CAD** tab:
 3. Draw a Rectangle, Circle, Arc, or connected line/arc loop with the mouse.
    Arc uses three clicks: center, start, and end.
 4. To edit exact dimensions, use **Select**, click a Rectangle, Circle, or Arc,
-   then update its millimeter fields. The selected shape is highlighted.
+   then update its millimeter fields. Individual lines can also be selected and
+   highlighted; use **Delete Geometry** to remove one entity.
 5. To split a closed boundary, choose **Line** and click two points on its
-   boundary. Endpoints snap to nearby vertices/edges and the boundary is split
-   into bounded regions. Choose **Delete Region**, then click a region to omit
-   it from subsequent Extrude/Revolve profiles.
+   boundary. Endpoints snap to nearby vertices/edges/intersections and the
+   boundary is split into bounded regions. Choose **Delete Region**, then click
+   a region to omit it from subsequent Extrude/Revolve profiles; its unique
+   outer contour is hidden in the sketch overlay.
 6. Finish the Sketch. **Show Sketches** keeps resolved Sketch references visible.
 7. Select the Sketch and use one **Extrude** command with **New**, **Add**, or
    **Remove**, plus **Blind** or **Through All** where supported.
@@ -42,6 +44,7 @@ the temporary Blender polygon hit is never part of the CAD history.
 
 To create a Revolve, select a Sketch and use its **Revolve** section. Choose a
 datum X/Y/Z axis or a visible SketchLine, set **New**, **Add**, or **Remove**,
+toggle **Reverse Axis** when the sweep should run in the opposite direction,
 and enter an angle in degrees (360° by default).
 
 The Part Studio selector switches between independent single-body histories.
@@ -55,6 +58,8 @@ Part Studios can be renamed or deleted without relying on Blender object names.
   generic profile path.
 - A regular Line can split a closed boundary into bounded regions. Deleted
   region IDs are persisted in the Sketch and excluded from feature profiles.
+- Sketch intersection markers are highlighted in the active edit view, and
+  drawing tools snap to nearby intersections, vertices, and curve interiors.
 - `New + Blind`, `Add + Blind`, `Remove + Blind`, and
   `Remove + Through All`.
 - Existing saved `CUT` features remain compatible and evaluate as Remove.
@@ -64,7 +69,8 @@ Part Studios can be renamed or deleted without relying on Blender object names.
   **New Extrude**: START_FACE, END_FACE, and SIDE_FACE(source SketchLine UUID).
   Boolean and Revolve result faces, plus arc-based side faces, remain visible
   but report that they cannot yet be persistent CAD references.
-- Revolve supports New, Add, and Remove with datum axes or SketchLine axes.
+- Revolve supports New, Add, and Remove with datum axes or SketchLine axes,
+  including persistent positive/negative axis direction.
 
 Numeric edits update the existing Sketch entities and preserve entity UUIDs.
 Closed loop winding is normalized before mesh generation so clockwise and

@@ -118,6 +118,7 @@ def _draw_revolve_controls(box, ui, action_label: str) -> None:
         revolve.prop(ui, "revolve_axis")
     else:
         revolve.prop(ui, "revolve_axis_line_id")
+    revolve.prop(ui, "revolve_axis_reverse", text="Reverse Axis")
     revolve.prop(ui, "revolve_angle_deg")
     operator_id = (
         "parametric_cad.apply_revolve"

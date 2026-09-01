@@ -124,6 +124,7 @@ class PARAMETRIC_CAD_PT_sketch_tools(bpy.types.Panel):
             else "Feature End Plane"
         )
         layout.label(text=f"Editing {sketch.name} ({plane_label})")
+        layout.label(text="Orange crosses mark intersections; drawing snaps to them.", icon="SNAP_ON")
         row = layout.row(align=True)
         row.operator("parametric_cad.select_tool", text="Select", icon="RESTRICT_SELECT_OFF")
         row.operator("parametric_cad.draw_line", text="Line", icon="IPO_LINEAR")
@@ -132,10 +133,16 @@ class PARAMETRIC_CAD_PT_sketch_tools(bpy.types.Panel):
         row.operator("parametric_cad.draw_circle", text="Circle", icon="MESH_CIRCLE")
         row = layout.row(align=True)
         row.operator("parametric_cad.draw_arc", text="Arc", icon="CURVE_BEZCURVE")
+        row = layout.row(align=True)
         row.operator(
             "parametric_cad.delete_region",
             text="Delete Region",
             icon="X",
+        )
+        row.operator(
+            "parametric_cad.delete_geometry",
+            text="Delete Geometry",
+            icon="TRASH",
         )
         coordinates = layout.box()
         coordinates.label(text="Local Sketch Coordinates")
@@ -167,7 +174,7 @@ class PARAMETRIC_CAD_PT_sketch_tools(bpy.types.Panel):
         else:
             dimensions.label(text="Dimensions")
             dimensions.label(
-                text="Use Select, then click a Rectangle, Circle, or Arc.",
+                text="Selected geometry has no numeric dimensions.",
                 icon="INFO",
             )
         if sketch.deleted_regions:

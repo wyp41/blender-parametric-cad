@@ -15,6 +15,7 @@ from blender_parametric_cad.sketch.numeric import (
     set_rectangle,
 )
 from blender_parametric_cad.sketch.profile import ProfileDetector
+from blender_parametric_cad.sketch.snapping import intersection_points, snap_point
 from blender_parametric_cad.sketch.sketch import SketchFeature
 
 from .helpers import rectangle_sketch
@@ -140,6 +141,24 @@ class ProfileDetectionTests(unittest.TestCase):
         result = ProfileDetector().detect(sketch)
         self.assertTrue(result.success)
         self.assertEqual(len(result.profile.loops), 2)
+
+    def test_intersections_are_reported_and_prioritized_by_snapping(self) -> None:
+        entities = [
+            SketchLine(x1=0.0, y1=0.0, x2=0.08, y2=0.08),
+            SketchLine(x1=0.0, y1=0.08, x2=0.08, y2=0.0),
+        ]
+        points = intersection_points(entities)
+        self.assertEqual(len(points), 1)
+        self.assertAlmostEqual(points[0][0], 0.04)
+        self.assertAlmostEqual(points[0][1], 0.04)
+        self.assertEqual(snap_point(entities, (0.0405, 0.0395), 0.002), points[0])
+
+    def test_arc_intersection_is_snap_target(self) -> None:
+        arc = SketchArc(cx=0.04, cy=0.04, radius=0.02, start_angle=0.0, end_angle=pi)
+        line = SketchLine(x1=0.0, y1=0.04, x2=0.08, y2=0.04)
+        points = intersection_points([arc, line])
+        self.assertEqual(len(points), 2)
+        self.assertEqual(snap_point([arc, line], (0.0605, 0.0402), 0.002), (0.06, 0.04))
 
     def test_branching_and_self_intersecting_lines_are_invalid(self) -> None:
         branching = rectangle_sketch()

@@ -327,7 +327,10 @@ class PartEvaluator:
                     feature, f"Unsupported datum axis: {reference.axis}", errors
                 )
                 return None
-            return (0.0, 0.0, 0.0), datum_axes[reference.axis]
+            direction = -1.0 if reference.direction < 0 else 1.0
+            return (0.0, 0.0, 0.0), tuple(
+                direction * value for value in datum_axes[reference.axis]
+            )
         if reference.reference_type != "SKETCH_LINE":
             PartEvaluator._record_error(feature, "Axis is not resolved.", errors)
             return None
@@ -359,7 +362,8 @@ class PartEvaluator:
                 feature, "Referenced SketchLine axis has zero length.", errors
             )
             return None
-        return start, tuple(value / length for value in vector)
+        direction = -1.0 if reference.direction < 0 else 1.0
+        return start, tuple(direction * value / length for value in vector)
 
     @staticmethod
     def _supported_face_provenance(provenance, sketch: SketchFeature):

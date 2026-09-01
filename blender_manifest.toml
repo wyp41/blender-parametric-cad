@@ -1,9 +1,9 @@
 schema_version = "1.0.0"
 
 id = "blender_parametric_cad"
-version = "0.5.0"
+version = "0.6.0"
 name = "Blender Parametric CAD"
-tagline = "Part Studios, arcs, split sketch regions, face sketches, and Revolve"
+tagline = "Part Studios, interactive sketch editing, split regions, and Revolve"
 maintainer = "Blender Parametric CAD contributors"
 type = "add-on"
 

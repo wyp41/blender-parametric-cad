@@ -44,6 +44,7 @@ def _set_active_feature(ui, feature) -> None:
         ui.revolve_operation = feature.operation
         ui.revolve_angle_deg = degrees(feature.angle)
         ui.revolve_axis_type = feature.axis_reference.reference_type
+        ui.revolve_axis_reverse = feature.axis_reference.direction < 0
         if feature.axis_reference.reference_type == "DATUM_AXIS":
             ui.revolve_axis = feature.axis_reference.axis or "Z"
         elif feature.axis_reference.entity_id:

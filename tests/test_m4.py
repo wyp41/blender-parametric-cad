@@ -120,6 +120,20 @@ class M4RevolveEvaluationTests(unittest.TestCase):
         self.assertEqual(backend.calls[-1][0], "revolve")
         self.assertEqual(backend.calls[-1][1]["axis_direction"], (0.0, 0.0, 1.0))
 
+    def test_revolve_axis_direction_can_be_reversed(self) -> None:
+        sketch, _axis = self._profile()
+        revolve = RevolveFeature(
+            sketch_id=sketch.id,
+            axis_reference=AxisReference(axis="Z", direction=-1),
+            angle=tau / 2.0,
+        )
+        backend = RecordingM4Backend()
+        result = PartEvaluator(backend).evaluate(Part(features=[sketch, revolve]))
+        self.assertTrue(result.success)
+        self.assertEqual(backend.calls[-1][1]["axis_direction"], (0.0, 0.0, -1.0))
+        restored = AxisReference.from_dict(revolve.axis_reference.to_dict())
+        self.assertEqual(restored.direction, -1)
+
     def test_sketch_line_axis_rebuild_uses_same_uuid(self) -> None:
         sketch, axis = self._profile()
         revolve = RevolveFeature(
@@ -137,6 +151,23 @@ class M4RevolveEvaluationTests(unittest.TestCase):
         self.assertTrue(second.success)
         self.assertEqual(second.body["axis_origin"][0], 0.003)
         self.assertEqual(revolve.axis_reference.entity_id, axis.id)
+
+    def test_sketch_line_axis_direction_can_be_reversed(self) -> None:
+        sketch, axis = self._profile()
+        revolve = RevolveFeature(
+            sketch_id=sketch.id,
+            axis_reference=AxisReference(
+                reference_type="SKETCH_LINE",
+                sketch_id=sketch.id,
+                entity_id=axis.id,
+                direction=-1,
+            ),
+            angle=tau / 2.0,
+        )
+        backend = RecordingM4Backend()
+        result = PartEvaluator(backend).evaluate(Part(features=[sketch, revolve]))
+        self.assertTrue(result.success)
+        self.assertEqual(backend.calls[-1][1]["axis_direction"], (0.0, 0.0, -1.0))
 
     def test_revolve_add_and_remove_require_and_use_existing_body(self) -> None:
         base = rectangle_sketch()

@@ -10,6 +10,7 @@ from ...sketch.entities import SketchArc, SketchCircle, SketchLine
 from ...sketch.numeric import arc_parameters, circle_parameters, rectangle_parameters
 from ...sketch.plane import PlaneResolutionError, resolve_sketch_plane_from_history
 from ...sketch.profile import ProfileDetector
+from ...sketch.snapping import snap_point
 from ...sketch.sketch import SketchFeature, sketch_to_world
 from ..adapter import load_document_from_scene, save_document_to_scene
 from ..viewport.projection import screen_to_sketch
@@ -18,6 +19,7 @@ from ..viewport.sketch_overlay import clear_preview, set_preview, tag_redraw
 
 class _ModalSketchTool:
     first_point: tuple[float, float] | None = None
+    snap_points = False
 
     def invoke(self, context, _event):
         ui = context.scene.parametric_cad_ui
@@ -76,7 +78,10 @@ class _ModalSketchTool:
             sketch.apply_resolved_plane(resolve_sketch_plane_from_history(part, sketch.id))
         except PlaneResolutionError:
             return None, None
-        return screen_to_sketch(context, event, sketch), sketch
+        point = screen_to_sketch(context, event, sketch)
+        if point is not None and self.snap_points:
+            point = _snap_point(sketch, point)
+        return point, sketch
 
     def _update_preview(self, sketch, first, second):
         raise NotImplementedError
@@ -95,12 +100,7 @@ class PARAMETRIC_CAD_OT_draw_line(_ModalSketchTool, bpy.types.Operator):
     bl_idname = "parametric_cad.draw_line"
     bl_label = "Line"
     bl_options = {"REGISTER", "UNDO", "BLOCKING"}
-
-    def _point_and_sketch(self, context, event):
-        point, sketch = super()._point_and_sketch(context, event)
-        if point is not None and sketch is not None:
-            point = _snap_point(sketch, point)
-        return point, sketch
+    snap_points = True
 
     def _update_preview(self, sketch, first, second):
         set_preview([sketch_to_world(sketch, *first), sketch_to_world(sketch, *second)])
@@ -118,6 +118,7 @@ class PARAMETRIC_CAD_OT_draw_rectangle(_ModalSketchTool, bpy.types.Operator):
     bl_idname = "parametric_cad.draw_rectangle"
     bl_label = "Rectangle"
     bl_options = {"REGISTER", "UNDO", "BLOCKING"}
+    snap_points = True
 
     @staticmethod
     def _corners(first, second):
@@ -144,6 +145,7 @@ class PARAMETRIC_CAD_OT_draw_circle(_ModalSketchTool, bpy.types.Operator):
     bl_idname = "parametric_cad.draw_circle"
     bl_label = "Circle"
     bl_options = {"REGISTER", "UNDO", "BLOCKING"}
+    snap_points = True
 
     def _update_preview(self, sketch, first, second):
         radius = hypot(second[0] - first[0], second[1] - first[1])
@@ -170,6 +172,7 @@ class PARAMETRIC_CAD_OT_draw_arc(_ModalSketchTool, bpy.types.Operator):
     bl_label = "Arc"
     bl_description = "Draw a circular arc with center, start, and end points"
     bl_options = {"REGISTER", "UNDO", "BLOCKING"}
+    snap_points = True
 
     center: tuple[float, float] | None = None
     start: tuple[float, float] | None = None
@@ -236,6 +239,8 @@ class PARAMETRIC_CAD_OT_draw_arc(_ModalSketchTool, bpy.types.Operator):
     def _commit(self, sketch, center, start, end):
         start_angle, sweep = _arc_angles(center, start, end)
         if abs(sweep) > ProfileDetector.tolerance:
+            _split_line_at_point(sketch, start)
+            _split_line_at_point(sketch, end)
             sketch.entities.append(
                 SketchArc(
                     cx=center[0],
@@ -250,7 +255,7 @@ class PARAMETRIC_CAD_OT_draw_arc(_ModalSketchTool, bpy.types.Operator):
 class PARAMETRIC_CAD_OT_select_tool(bpy.types.Operator):
     bl_idname = "parametric_cad.select_tool"
     bl_label = "Select"
-    bl_description = "Select a rectangle, circle, or arc to edit its dimensions"
+    bl_description = "Select a rectangle, circle, arc, or individual geometry"
     bl_options = {"BLOCKING"}
 
     def invoke(self, context, _event):
@@ -297,8 +302,11 @@ class PARAMETRIC_CAD_OT_select_tool(bpy.types.Operator):
         elif isinstance(entity, SketchLine):
             parameters = rectangle_parameters(sketch, entity.id)
             if parameters is None:
-                self.report({"INFO"}, "This Line is not a complete Rectangle.")
-                return {"RUNNING_MODAL"}
+                ui.active_sketch_entity_id = entity.id
+                self.report({"INFO"}, "Selected individual SketchLine geometry.")
+                context.area.header_text_set(None)
+                tag_redraw()
+                return {"FINISHED"}
             ui.active_sketch_entity_id = entity.id
             (
                 ui.rectangle_x_mm,
@@ -332,28 +340,7 @@ class PARAMETRIC_CAD_OT_select_tool(bpy.types.Operator):
 
     @staticmethod
     def _distance(entity, point):
-        if isinstance(entity, SketchCircle):
-            return abs(hypot(point[0] - entity.cx, point[1] - entity.cy) - entity.radius)
-        if isinstance(entity, SketchLine):
-            dx, dy = entity.x2 - entity.x1, entity.y2 - entity.y1
-            length_squared = dx * dx + dy * dy
-            if length_squared == 0.0:
-                return hypot(point[0] - entity.x1, point[1] - entity.y1)
-            position = max(
-                0.0,
-                min(
-                    1.0,
-                    ((point[0] - entity.x1) * dx + (point[1] - entity.y1) * dy)
-                    / length_squared,
-                ),
-            )
-            return hypot(
-                point[0] - (entity.x1 + position * dx),
-                point[1] - (entity.y1 + position * dy),
-            )
-        if isinstance(entity, SketchArc):
-            return _arc_distance(entity, point)
-        return float("inf")
+        return _entity_distance(entity, point)
 
 
 class PARAMETRIC_CAD_OT_delete_region(_ModalSketchTool, bpy.types.Operator):
@@ -405,6 +392,51 @@ class PARAMETRIC_CAD_OT_delete_region(_ModalSketchTool, bpy.types.Operator):
         return {"FINISHED"}
 
 
+class PARAMETRIC_CAD_OT_delete_geometry(_ModalSketchTool, bpy.types.Operator):
+    """Delete one selected sketch entity without removing its neighbors."""
+
+    bl_idname = "parametric_cad.delete_geometry"
+    bl_label = "Delete Geometry"
+    bl_description = "Delete the one line, circle, or arc under the cursor"
+    bl_options = {"REGISTER", "UNDO", "BLOCKING"}
+
+    def invoke(self, context, event):
+        result = super().invoke(context, event)
+        if result == {"RUNNING_MODAL"}:
+            context.area.header_text_set("CAD: click one geometry to delete; Esc cancels")
+        return result
+
+    def modal(self, context, event):
+        if event.type in {"ESC", "RIGHTMOUSE"}:
+            self._finish(context)
+            return {"CANCELLED"}
+        if event.type != "LEFTMOUSE" or event.value != "PRESS":
+            return {"RUNNING_MODAL"}
+        point, sketch = self._point_and_sketch(context, event)
+        if point is None or sketch is None:
+            return {"RUNNING_MODAL"}
+        entity = _nearest_entity(sketch, point)
+        if entity is None or _entity_distance(entity, point) > 0.002:
+            self.report({"INFO"}, "Click a line, circle, or arc to delete it.")
+            self._finish(context)
+            return {"FINISHED"}
+        document = load_document_from_scene(context.scene)
+        part = document.active_part
+        stored = part.get_feature(sketch.id) if part else None
+        if not isinstance(stored, SketchFeature):
+            self._finish(context)
+            return {"CANCELLED"}
+        stored.entities = [item for item in stored.entities if item.id != entity.id]
+        # Region IDs contain boundary UUIDs, so any geometry edit invalidates
+        # old exclusions. They must be reselected from the new profile graph.
+        stored.deleted_regions.clear()
+        context.scene.parametric_cad_ui.active_sketch_entity_id = ""
+        save_document_to_scene(context.scene, document)
+        self.report({"INFO"}, f"Deleted {entity.entity_type.title()} geometry.")
+        self._finish(context)
+        return {"FINISHED"}
+
+
 def _distance(first, second) -> float:
     return hypot(first[0] - second[0], first[1] - second[1])
 
@@ -445,54 +477,69 @@ def _arc_distance(arc: SketchArc, point) -> float:
     return min(_distance(point, arc.start_point), _distance(point, arc.end_point))
 
 
-def _snap_point(sketch: SketchFeature, point):
-    """Snap a line endpoint to nearby vertices or line interiors."""
+def _entity_distance(entity, point) -> float:
+    if isinstance(entity, SketchCircle):
+        return abs(hypot(point[0] - entity.cx, point[1] - entity.cy) - entity.radius)
+    if isinstance(entity, SketchLine):
+        dx, dy = entity.x2 - entity.x1, entity.y2 - entity.y1
+        length_squared = dx * dx + dy * dy
+        if length_squared == 0.0:
+            return _distance(point, (entity.x1, entity.y1))
+        position = max(
+            0.0,
+            min(
+                1.0,
+                ((point[0] - entity.x1) * dx + (point[1] - entity.y1) * dy)
+                / length_squared,
+            ),
+        )
+        return _distance(
+            point,
+            (entity.x1 + position * dx, entity.y1 + position * dy),
+        )
+    if isinstance(entity, SketchArc):
+        return _arc_distance(entity, point)
+    return float("inf")
 
-    best = point
-    best_distance = 0.0015
-    for entity in sketch.entities:
-        if entity.construction:
-            continue
-        candidates = []
-        if isinstance(entity, SketchLine):
-            candidates.extend(((entity.x1, entity.y1), (entity.x2, entity.y2)))
-            dx, dy = entity.x2 - entity.x1, entity.y2 - entity.y1
-            length_squared = dx * dx + dy * dy
-            if length_squared > 0.0:
-                position = max(
-                    0.0,
-                    min(
-                        1.0,
-                        ((point[0] - entity.x1) * dx + (point[1] - entity.y1) * dy)
-                        / length_squared,
-                    ),
-                )
-                candidates.append(
-                    (entity.x1 + position * dx, entity.y1 + position * dy)
-                )
-        elif isinstance(entity, SketchArc):
-            candidates.extend((entity.start_point, entity.end_point))
-        for candidate in candidates:
-            distance = _distance(point, candidate)
-            if distance < best_distance:
-                best, best_distance = candidate, distance
-    return best
+
+def _nearest_entity(sketch: SketchFeature, point):
+    return min(
+        (
+            entity
+            for entity in sketch.entities
+            if isinstance(entity, (SketchLine, SketchCircle, SketchArc))
+        ),
+        key=lambda entity: _entity_distance(entity, point),
+        default=None,
+    )
+
+
+def _snap_point(sketch: SketchFeature, point):
+    """Snap a sketch point to intersections, vertices, or curve interiors."""
+
+    return snap_point(sketch.entities, point)
 
 
 def _split_line_at_point(sketch: SketchFeature, point) -> None:
     tolerance = 1e-6
-    for index, entity in enumerate(list(sketch.entities)):
+    index = 0
+    while index < len(sketch.entities):
+        entity = sketch.entities[index]
         if entity.construction or not isinstance(entity, SketchLine):
+            index += 1
             continue
         dx, dy = entity.x2 - entity.x1, entity.y2 - entity.y1
         length_squared = dx * dx + dy * dy
         if length_squared <= tolerance * tolerance:
+            index += 1
             continue
         position = ((point[0] - entity.x1) * dx + (point[1] - entity.y1) * dy) / length_squared
         if position <= tolerance or position >= 1.0 - tolerance:
+            index += 1
             continue
         projected = (entity.x1 + position * dx, entity.y1 + position * dy)
         if _distance(projected, point) > tolerance:
+            index += 1
             continue
         old_end = (entity.x2, entity.y2)
         entity.x2, entity.y2 = point
@@ -500,7 +547,7 @@ def _split_line_at_point(sketch: SketchFeature, point) -> None:
             index + 1,
             SketchLine(x1=point[0], y1=point[1], x2=old_end[0], y2=old_end[1]),
         )
-        return
+        index += 2
 
 
 CLASSES = (
@@ -510,4 +557,5 @@ CLASSES = (
     PARAMETRIC_CAD_OT_draw_circle,
     PARAMETRIC_CAD_OT_draw_arc,
     PARAMETRIC_CAD_OT_delete_region,
+    PARAMETRIC_CAD_OT_delete_geometry,
 )

@@ -198,6 +198,11 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
         name="Sketch Line",
         items=_revolve_axis_line_items,
     )
+    revolve_axis_reverse: BoolProperty(
+        name="Reverse Axis Direction",
+        description="Reverse the positive direction used by a partial Revolve",
+        default=False,
+    )
     revolve_angle_deg: FloatProperty(
         name="Angle",
         description="Revolve angle in degrees",

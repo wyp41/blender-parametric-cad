@@ -26,12 +26,18 @@ def _previous_body_feature(part, before_index: int):
 
 
 def _axis_reference(ui, sketch: SketchFeature) -> AxisReference:
+    direction = -1 if ui.revolve_axis_reverse else 1
     if ui.revolve_axis_type == "DATUM_AXIS":
-        return AxisReference(reference_type="DATUM_AXIS", axis=ui.revolve_axis)
+        return AxisReference(
+            reference_type="DATUM_AXIS",
+            axis=ui.revolve_axis,
+            direction=direction,
+        )
     return AxisReference(
         reference_type="SKETCH_LINE",
         sketch_id=sketch.id,
         entity_id=ui.revolve_axis_line_id,
+        direction=direction,
     )
 
 

@@ -13,6 +13,7 @@ from ...sketch.entities import SketchArc, SketchCircle, SketchLine
 from ...sketch.numeric import rectangle_entity_ids
 from ...sketch.plane import PlaneResolutionError, resolve_sketch_plane_from_history
 from ...sketch.profile import ProfileDetector
+from ...sketch.snapping import intersection_points
 from ...sketch.sketch import SketchFeature, sketch_to_world
 from ..adapter import load_document_from_scene
 from .provenance import get_face_provenance
@@ -127,15 +128,20 @@ def _draw_callback() -> None:
                 rectangle_entity_ids(sketch, ui.active_sketch_entity_id)
                 or (ui.active_sketch_entity_id,)
             )
-        _draw_segments(_entity_segments(sketch, exclude=selected_ids), color, 3.5)
+        hidden_ids = _deleted_region_entity_ids(sketch)
+        _draw_segments(
+            _entity_segments(sketch, exclude=selected_ids | hidden_ids),
+            color,
+            4.5 if editing and sketch.id == ui.active_sketch_id else 3.5,
+        )
+        selected_ids -= hidden_ids
         _draw_segments(
             _entity_segments(sketch, include=selected_ids),
             (1.0, 0.65, 0.1, 1.0),
-            5.0,
+            6.0,
         )
-        if editing and sketch.id == ui.active_sketch_id and sketch.deleted_regions:
-            _draw_deleted_regions(sketch)
         if editing and sketch.id == ui.active_sketch_id:
+            _draw_intersection_markers(sketch, hidden_ids)
             origin = sketch.origin
             axis_length = 0.02
             x_end = tuple(
@@ -249,15 +255,60 @@ def _entity_segments(
     return segments
 
 
-def _draw_deleted_regions(sketch: SketchFeature) -> None:
-    for region in ProfileDetector().detect_regions(sketch):
-        if region.region_id not in sketch.deleted_regions or not region.points:
+def _deleted_region_entity_ids(sketch: SketchFeature) -> set[str]:
+    """Return boundary entities unique to deleted regions.
+
+    Shared edges remain visible when they still bound an active region; only
+    the deleted region's outer-only contour is hidden from the sketch overlay.
+    """
+
+    if not sketch.deleted_regions:
+        return set()
+    detector = ProfileDetector()
+    deleted: set[str] = set()
+    for region in detector.detect_regions(sketch):
+        if region.region_id not in sketch.deleted_regions:
             continue
-        points = [sketch_to_world(sketch, *point) for point in region.points]
-        segments: list[tuple[float, float, float]] = []
-        for index, point in enumerate(points):
-            segments.extend([point, points[(index + 1) % len(points)]])
-        _draw_segments(segments, (1.0, 0.18, 0.18, 1.0), 5.0)
+        deleted.update(_loop_entity_ids(region))
+    active_result = detector.detect(sketch)
+    active: set[str] = set()
+    if active_result.success and active_result.profile is not None:
+        for loop in active_result.profile.iter_loops():
+            active.update(_loop_entity_ids(loop))
+    return deleted - active
+
+
+def _loop_entity_ids(loop) -> set[str]:
+    ids = set(loop.entity_ids)
+    if not ids and loop.region_id.startswith("REGION:"):
+        ids.update(item for item in loop.region_id[7:].split(",") if item)
+    return ids
+
+
+def _draw_intersection_markers(sketch: SketchFeature, hidden_ids: set[str]) -> None:
+    entities = [
+        entity
+        for entity in sketch.entities
+        if not entity.construction and entity.id not in hidden_ids
+    ]
+    points = intersection_points(entities)
+    if not points:
+        return
+    segments: list[tuple[float, float, float]] = []
+    size = 0.0012
+    for u, v in points:
+        center = sketch_to_world(sketch, u, v)
+        x_axis = tuple(sketch.x_axis[index] * size for index in range(3))
+        y_axis = tuple(sketch.y_axis[index] * size for index in range(3))
+        segments.extend(
+            [
+                tuple(center[index] - x_axis[index] for index in range(3)),
+                tuple(center[index] + x_axis[index] for index in range(3)),
+                tuple(center[index] - y_axis[index] for index in range(3)),
+                tuple(center[index] + y_axis[index] for index in range(3)),
+            ]
+        )
+    _draw_segments(segments, (1.0, 0.85, 0.1, 1.0), 5.0)
 
 
 def _draw_segments(points, color, width: float = 3.5) -> None:

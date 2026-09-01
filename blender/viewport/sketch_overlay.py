@@ -13,7 +13,7 @@ from ...sketch.entities import SketchArc, SketchCircle, SketchLine
 from ...sketch.numeric import rectangle_entity_ids
 from ...sketch.plane import PlaneResolutionError, resolve_sketch_plane_from_history
 from ...sketch.profile import ProfileDetector
-from ...sketch.snapping import intersection_points
+from ...sketch.snapping import snap_targets
 from ...sketch.sketch import SketchFeature, sketch_to_world
 from ..adapter import load_document_from_scene
 from .provenance import get_face_provenance
@@ -325,7 +325,7 @@ def _draw_intersection_markers(sketch: SketchFeature, hidden_ids: set[str]) -> N
         for entity in sketch.entities
         if not entity.construction and entity.id not in hidden_ids
     ]
-    points = intersection_points(entities)
+    points = snap_targets(entities)
     if not points:
         return
     segments: list[tuple[float, float, float]] = []

@@ -1,6 +1,6 @@
 # Blender Parametric CAD
 
-History-based parametric modeling extension for Blender 5.1.2. Version 0.7.0
+History-based parametric modeling extension for Blender 5.1.2. Version 0.8.0
 implements the M3.5–M3.6 Part Studio, precise Sketch and unified Extrude
 workflows, the M4 semantic face-selection/Revolve milestone, arc-based
 composite sketch regions, interactive sketch cleanup/snapping, and robust
@@ -13,7 +13,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.7.0.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.8.0.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## Part Studio workflow
@@ -62,7 +62,9 @@ Part Studios can be renamed or deleted without relying on Blender object names.
 - A regular Line can split a closed boundary into bounded regions. Deleted
   region IDs are persisted in the Sketch and excluded from feature profiles.
 - Sketch intersection markers are highlighted in the active edit view, and
-  drawing tools snap to nearby intersections, vertices, and curve interiors.
+  every drawing tool snaps to nearby intersections, line vertices, circle/arc
+  centers and endpoints, and curve interiors. The green preview marker follows
+  the active snap target for Rectangle, Circle, Arc, and Line tools alike.
 - `New + Blind`, `Add + Blind`, `Remove + Blind`, and
   `Remove + Through All`.
 - Existing saved `CUT` features remain compatible and evaluate as Remove.
@@ -74,8 +76,9 @@ Part Studios can be renamed or deleted without relying on Blender object names.
   but report that they cannot yet be persistent CAD references.
 - Revolve supports New, Add, and Remove with datum axes or SketchLine axes,
   including persistent positive/negative axis direction.
-- Full-turn Revolve tools are topologically closed at the seam for reliable
-  Add/Remove Boolean operations.
+- Full-turn Revolve tools are topologically closed at the seam, and their face
+  winding is normalized for reliable Add/Remove Boolean operations even when
+  the axis direction is reversed.
 
 Numeric edits update the existing Sketch entities and preserve entity UUIDs.
 Closed loop winding is normalized before mesh generation so clockwise and

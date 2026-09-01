@@ -34,6 +34,34 @@ def intersection_points(
     return tuple(points)
 
 
+def reference_points(
+    entities: Iterable[SketchEntity], tolerance: float = 1e-7
+) -> tuple[Point2D, ...]:
+    """Return unique endpoints and centers available as general snap targets."""
+
+    points: list[Point2D] = []
+    for entity in entities:
+        if entity.construction or not isinstance(
+            entity, (SketchLine, SketchCircle, SketchArc)
+        ):
+            continue
+        for point in _endpoints(entity):
+            _append_unique(points, point, tolerance)
+    return tuple(points)
+
+
+def snap_targets(
+    entities: Iterable[SketchEntity], tolerance: float = 1e-7
+) -> tuple[Point2D, ...]:
+    """Return intersections plus endpoints/centers used by every draw tool."""
+
+    material = list(entities)
+    points = list(intersection_points(material, tolerance))
+    for point in reference_points(material, tolerance):
+        _append_unique(points, point, tolerance)
+    return tuple(points)
+
+
 def snap_point(
     entities: Iterable[SketchEntity],
     point: Point2D,
@@ -47,9 +75,7 @@ def snap_point(
         if not entity.construction
         and isinstance(entity, (SketchLine, SketchCircle, SketchArc))
     ]
-    discrete: list[Point2D] = list(intersection_points(material))
-    for entity in material:
-        discrete.extend(_endpoints(entity))
+    discrete = list(snap_targets(material))
     nearest_discrete = min(
         discrete,
         key=lambda candidate: hypot(point[0] - candidate[0], point[1] - candidate[1]),
@@ -204,8 +230,10 @@ def _circle_circle(
 def _endpoints(entity: SketchEntity) -> tuple[Point2D, ...]:
     if isinstance(entity, SketchLine):
         return ((entity.x1, entity.y1), (entity.x2, entity.y2))
+    if isinstance(entity, SketchCircle):
+        return ((entity.cx, entity.cy),)
     if isinstance(entity, SketchArc):
-        return (entity.start_point, entity.end_point)
+        return ((entity.cx, entity.cy), entity.start_point, entity.end_point)
     return ()
 
 

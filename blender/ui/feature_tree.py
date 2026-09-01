@@ -120,6 +120,8 @@ def _draw_revolve_controls(box, ui, action_label: str) -> None:
         revolve.prop(ui, "revolve_axis_line_id")
     revolve.prop(ui, "revolve_axis_reverse", text="Reverse Axis")
     revolve.prop(ui, "revolve_angle_deg")
+    if ui.revolve_angle_deg >= 359.999:
+        revolve.label(text="Reverse affects partial angles only", icon="INFO")
     operator_id = (
         "parametric_cad.apply_revolve"
         if action_label == "Apply Revolve"

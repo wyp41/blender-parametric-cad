@@ -130,7 +130,7 @@ class PARAMETRIC_CAD_PT_sketch_tools(bpy.types.Panel):
         layout.label(text=f"Editing {sketch.name} ({plane_label})")
         snap_help = layout.box()
         snap_help.label(text="Snap enabled", icon="SNAP_ON")
-        snap_help.label(text="Orange = intersection  •  Green = active target")
+        snap_help.label(text="Orange = snap point  •  Green = active target")
         row = layout.row(align=True)
         row.operator("parametric_cad.select_tool", text="Select", icon="RESTRICT_SELECT_OFF")
         row.operator("parametric_cad.draw_line", text="Line", icon="IPO_LINEAR")

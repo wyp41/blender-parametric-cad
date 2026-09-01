@@ -200,7 +200,7 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
     )
     revolve_axis_reverse: BoolProperty(
         name="Reverse Axis Direction",
-        description="Reverse the positive direction used by a partial Revolve",
+        description="Reverse the sweep direction; this is visible only for partial Revolves",
         default=False,
     )
     revolve_angle_deg: FloatProperty(

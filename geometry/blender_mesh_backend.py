@@ -124,11 +124,41 @@ class BlenderMeshBackend(GeometryBackend):
                 end = offset + segments * count
                 faces.append(tuple(end + index for index in range(count)))
 
+        # Reversing the axis changes the sweep direction and can invert the
+        # generated face winding.  Boolean tools must describe a consistently
+        # outward-facing solid, regardless of which axis direction was chosen.
+        if self._signed_volume(vertices, faces) < 0.0:
+            faces = [tuple(reversed(face)) for face in faces]
+
         mesh = bpy.data.meshes.new("CAD_Revolve_Result")
         mesh.from_pydata(vertices, [], faces)
         mesh.validate()
         mesh.update()
         return mesh
+
+    @staticmethod
+    def _signed_volume(
+        vertices: list[tuple[float, float, float]], faces: list[tuple[int, ...]]
+    ) -> float:
+        volume = 0.0
+        for face in faces:
+            if len(face) < 3:
+                continue
+            origin = vertices[face[0]]
+            for index in range(1, len(face) - 1):
+                first = vertices[face[index]]
+                second = vertices[face[index + 1]]
+                cross = (
+                    first[1] * second[2] - first[2] * second[1],
+                    first[2] * second[0] - first[0] * second[2],
+                    first[0] * second[1] - first[1] * second[0],
+                )
+                volume += (
+                    origin[0] * cross[0]
+                    + origin[1] * cross[1]
+                    + origin[2] * cross[2]
+                ) / 6.0
+        return volume
 
     @staticmethod
     def _rotate_about_axis(

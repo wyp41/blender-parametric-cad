@@ -83,9 +83,13 @@ class _ModalSketchTool:
         try:
             sketch.apply_resolved_plane(resolve_sketch_plane_from_history(part, sketch.id))
         except PlaneResolutionError:
+            clear_snap_preview()
             return None, None
         point = screen_to_sketch(context, event, sketch)
-        if point is not None and self.snap_points:
+        if point is None:
+            clear_snap_preview()
+            return None, sketch
+        if self.snap_points:
             raw_point = point
             point = _snap_point(sketch, point)
             set_snap_preview(
@@ -93,7 +97,7 @@ class _ModalSketchTool:
                 (sketch.x_axis, sketch.y_axis),
                 snapped=point != raw_point,
             )
-        elif point is not None:
+        else:
             clear_snap_preview()
         return point, sketch
 

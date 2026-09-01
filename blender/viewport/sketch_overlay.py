@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from math import cos, pi, sin
+from math import ceil, cos, pi, sin
 
 import bpy
 import gpu
 from gpu_extras.batch import batch_for_shader
 from mathutils import Vector
 
-from ...sketch.entities import SketchCircle, SketchLine
+from ...sketch.entities import SketchArc, SketchCircle, SketchLine
 from ...sketch.numeric import rectangle_entity_ids
 from ...sketch.plane import PlaneResolutionError, resolve_sketch_plane_from_history
+from ...sketch.profile import ProfileDetector
 from ...sketch.sketch import SketchFeature, sketch_to_world
 from ..adapter import load_document_from_scene
 from .provenance import get_face_provenance
@@ -81,7 +82,12 @@ def _draw_callback() -> None:
     if not hasattr(scene, "parametric_cad_ui"):
         return
     ui = scene.parametric_cad_ui
-    _draw_face_highlight(_hover_face, (0.15, 0.55, 1.0, 0.22))
+    hover_color = (
+        (0.15, 0.55, 1.0, 0.22)
+        if _hover_face is not None and _hover_face[2] is not None
+        else (0.45, 0.45, 0.45, 0.16)
+    )
+    _draw_face_highlight(_hover_face, hover_color)
     _draw_face_highlight(_selected_face, (1.0, 0.65, 0.1, 0.30))
     try:
         document = load_document_from_scene(scene)
@@ -127,6 +133,8 @@ def _draw_callback() -> None:
             (1.0, 0.65, 0.1, 1.0),
             5.0,
         )
+        if editing and sketch.id == ui.active_sketch_id and sketch.deleted_regions:
+            _draw_deleted_regions(sketch)
         if editing and sketch.id == ui.active_sketch_id:
             origin = sketch.origin
             axis_length = 0.02
@@ -224,7 +232,32 @@ def _entity_segments(
             ]
             for index in range(64):
                 segments.extend([points[index], points[index + 1]])
+        elif isinstance(entity, SketchArc):
+            sweep = entity.end_angle - entity.start_angle
+            if abs(sweep) <= 1e-7:
+                sweep = 2.0 * pi
+            count = max(8, int(ceil(abs(sweep) * 12.0 / pi)))
+            points = [
+                sketch_to_world(
+                    sketch,
+                    *entity.point(entity.start_angle + sweep * index / count),
+                )
+                for index in range(count + 1)
+            ]
+            for index in range(count):
+                segments.extend([points[index], points[index + 1]])
     return segments
+
+
+def _draw_deleted_regions(sketch: SketchFeature) -> None:
+    for region in ProfileDetector().detect_regions(sketch):
+        if region.region_id not in sketch.deleted_regions or not region.points:
+            continue
+        points = [sketch_to_world(sketch, *point) for point in region.points]
+        segments: list[tuple[float, float, float]] = []
+        for index, point in enumerate(points):
+            segments.extend([point, points[(index + 1) % len(points)]])
+        _draw_segments(segments, (1.0, 0.18, 0.18, 1.0), 5.0)
 
 
 def _draw_segments(points, color, width: float = 3.5) -> None:

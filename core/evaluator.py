@@ -166,8 +166,9 @@ class PartEvaluator:
                 self.geometry_backend.register_extrude_provenance(
                     context.current_body, feature.id, detected.profile
                 )
-                context.face_provenance = self.geometry_backend.face_provenance(
-                    context.current_body
+                context.face_provenance = self._supported_face_provenance(
+                    self.geometry_backend.face_provenance(context.current_body),
+                    source,
                 )
             except Exception as exc:
                 self._record_error(feature, str(exc), errors)
@@ -266,7 +267,9 @@ class PartEvaluator:
                 and entity.id == feature.axis_reference.entity_id
             )
         ]
-        detected = self.profile_detector.detect_entities(profile_entities)
+        detected = self.profile_detector.detect_entities(
+            profile_entities, source.deleted_regions
+        )
         if not detected.success or detected.profile is None:
             self._record_error(feature, detected.message, errors)
             return False
@@ -357,6 +360,26 @@ class PartEvaluator:
             )
             return None
         return start, tuple(value / length for value in vector)
+
+    @staticmethod
+    def _supported_face_provenance(provenance, sketch: SketchFeature):
+        """Expose only references whose plane resolver can currently follow.
+
+        Start/end faces remain selectable for every simple Extrude profile.
+        Side-face supports are intentionally limited to source SketchLines;
+        arc side planes are visible geometry but do not yet have a semantic
+        plane resolver.
+        """
+
+        line_ids = {
+            entity.id for entity in sketch.entities if isinstance(entity, SketchLine)
+        }
+        return {
+            polygon_index: reference
+            for polygon_index, reference in provenance.items()
+            if reference.role != "SIDE_FACE"
+            or reference.source_entity_id in line_ids
+        }
 
     @staticmethod
     def _mark_evaluated(feature: Feature, context: EvaluationContext) -> None:

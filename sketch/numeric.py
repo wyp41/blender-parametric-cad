@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .entities import SketchCircle, SketchLine
+from .entities import SketchArc, SketchCircle, SketchLine
 from .profile import ProfileDetector
 from .sketch import SketchFeature
 
@@ -133,3 +133,44 @@ def set_circle(
         circle = SketchCircle()
         sketch.entities.append(circle)
     circle.cx, circle.cy, circle.radius = x, y, diameter / 2.0
+
+
+def arc_parameters(
+    sketch: SketchFeature, entity_id: str | None = None
+) -> tuple[float, float, float, float, float] | None:
+    entities = [entity for entity in sketch.entities if not entity.construction]
+    if entity_id is not None:
+        entities = [entity for entity in entities if entity.id == entity_id]
+    if len(entities) != 1 or not isinstance(entities[0], SketchArc):
+        return None
+    arc = entities[0]
+    return arc.cx, arc.cy, arc.radius, arc.start_angle, arc.end_angle
+
+
+def set_arc(
+    sketch: SketchFeature,
+    x: float,
+    y: float,
+    radius: float,
+    start_angle: float,
+    end_angle: float,
+    entity_id: str | None = None,
+) -> None:
+    if radius <= 0.0:
+        raise ValueError("Arc Radius must be greater than zero.")
+    entities = [entity for entity in sketch.entities if not entity.construction]
+    if entity_id is not None:
+        arc = next((entity for entity in entities if entity.id == entity_id), None)
+        if not isinstance(arc, SketchArc):
+            raise ValueError("Select an existing Arc to edit its dimensions.")
+    elif entities:
+        if len(entities) != 1 or not isinstance(entities[0], SketchArc):
+            raise ValueError("Select an existing Arc to edit its dimensions.")
+        arc = entities[0]
+    else:
+        arc = SketchArc()
+        sketch.entities.append(arc)
+    if abs(end_angle - start_angle) <= ProfileDetector.tolerance:
+        raise ValueError("Arc start and end angles must be different.")
+    arc.cx, arc.cy, arc.radius = x, y, radius
+    arc.start_angle, arc.end_angle = start_angle, end_angle

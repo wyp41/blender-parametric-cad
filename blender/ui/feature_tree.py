@@ -58,6 +58,8 @@ def draw_selected_feature(layout, feature, ui, part) -> None:
             plane_label = f"{source_name} End Plane"
         box.label(text=f"{feature.name} — {plane_label}")
         box.label(text=f"Entities: {len(feature.entities)}")
+        if feature.deleted_regions:
+            box.label(text=f"Deleted regions: {len(feature.deleted_regions)}", icon="X")
         box.operator("parametric_cad.edit_sketch", icon="GREASEPENCIL")
         box.separator()
         box.prop(ui, "extrude_operation")

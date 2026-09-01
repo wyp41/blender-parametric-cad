@@ -87,39 +87,40 @@ class BlenderMeshBackend(GeometryBackend):
         axis_direction: tuple[float, float, float],
         angle: float,
     ) -> bpy.types.Mesh:
-        points = self._profile_points(profile)
         normal_length = sqrt(sum(value * value for value in axis_direction))
         if normal_length <= 1e-12:
             raise ValueError("Revolve axis has zero length.")
         direction = tuple(value / normal_length for value in axis_direction)
-        base = [sketch_to_world(sketch, u, v) for u, v in points]
         segments = max(8, int(ceil(64.0 * abs(angle) / tau)))
         vertices: list[tuple[float, float, float]] = []
-        for ring in range(segments + 1):
-            ring_angle = angle * ring / segments
-            vertices.extend(
-                self._rotate_about_axis(point, axis_origin, direction, ring_angle)
-                for point in base
-            )
-
-        count = len(base)
-        faces = []
-        for ring in range(segments):
-            next_ring = ring + 1
-            for index in range(count):
-                next_index = (index + 1) % count
-                faces.append(
-                    (
-                        ring * count + index,
-                        ring * count + next_index,
-                        next_ring * count + next_index,
-                        next_ring * count + index,
-                    )
+        faces: list[tuple[int, ...]] = []
+        for points, _entity_ids in self._profile_loops_and_ids(profile):
+            base = [sketch_to_world(sketch, u, v) for u, v in points]
+            offset = len(vertices)
+            for ring in range(segments + 1):
+                ring_angle = angle * ring / segments
+                vertices.extend(
+                    self._rotate_about_axis(point, axis_origin, direction, ring_angle)
+                    for point in base
                 )
-        if abs(angle) < tau - 1e-9:
-            faces.append(tuple(reversed(range(count))))
-            end = segments * count
-            faces.append(tuple(end + index for index in range(count)))
+
+            count = len(base)
+            for ring in range(segments):
+                next_ring = ring + 1
+                for index in range(count):
+                    next_index = (index + 1) % count
+                    faces.append(
+                        (
+                            offset + ring * count + index,
+                            offset + ring * count + next_index,
+                            offset + next_ring * count + next_index,
+                            offset + next_ring * count + index,
+                        )
+                    )
+            if abs(angle) < tau - 1e-9:
+                faces.append(tuple(offset + index for index in reversed(range(count))))
+                end = offset + segments * count
+                faces.append(tuple(end + index for index in range(count)))
 
         mesh = bpy.data.meshes.new("CAD_Revolve_Result")
         mesh.from_pydata(vertices, [], faces)
@@ -153,16 +154,17 @@ class BlenderMeshBackend(GeometryBackend):
     def register_extrude_provenance(
         self, body: bpy.types.Mesh, feature_id: str, profile: SketchProfile
     ) -> None:
-        references = {
-            0: TopoReference(feature_id, "START_FACE"),
-            1: TopoReference(feature_id, "END_FACE"),
-        }
-        _points, entity_ids = self._profile_points_and_ids(profile)
-        for index, entity_id in enumerate(entity_ids):
-            if entity_id is not None:
-                references[index + 2] = TopoReference(
-                    feature_id, "SIDE_FACE", source_entity_id=entity_id
-                )
+        references: dict[int, TopoReference] = {}
+        polygon_index = 0
+        for _points, entity_ids in self._profile_loops_and_ids(profile):
+            references[polygon_index] = TopoReference(feature_id, "START_FACE")
+            references[polygon_index + 1] = TopoReference(feature_id, "END_FACE")
+            for index, entity_id in enumerate(entity_ids):
+                if entity_id is not None:
+                    references[polygon_index + index + 2] = TopoReference(
+                        feature_id, "SIDE_FACE", source_entity_id=entity_id
+                    )
+            polygon_index += len(entity_ids) + 2
         self._face_provenance[id(body)] = references
 
     def face_provenance(self, body: bpy.types.Mesh) -> dict[int, TopoReference]:
@@ -221,29 +223,37 @@ class BlenderMeshBackend(GeometryBackend):
     ) -> bpy.types.Mesh:
         if start_offset > end_offset:
             start_offset, end_offset = end_offset, start_offset
-        points = self._profile_points(profile)
         normal = sketch_normal(sketch)
-        base = [sketch_to_world(sketch, u, v) for u, v in points]
-        bottom = [
-            tuple(point[index] + normal[index] * start_offset for index in range(3))
-            for point in base
-        ]
-        top = [
-            tuple(point[index] + normal[index] * end_offset for index in range(3))
-            for point in base
-        ]
-        count = len(points)
-        vertices = bottom + top
-        faces = [tuple(reversed(range(count))), tuple(range(count, count * 2))]
-        faces.extend(
-            (
-                index,
-                (index + 1) % count,
-                (index + 1) % count + count,
-                index + count,
+        vertices: list[tuple[float, float, float]] = []
+        faces: list[tuple[int, ...]] = []
+        for points, _entity_ids in self._profile_loops_and_ids(profile):
+            base = [sketch_to_world(sketch, u, v) for u, v in points]
+            bottom = [
+                tuple(point[index] + normal[index] * start_offset for index in range(3))
+                for point in base
+            ]
+            top = [
+                tuple(point[index] + normal[index] * end_offset for index in range(3))
+                for point in base
+            ]
+            offset = len(vertices)
+            count = len(points)
+            vertices.extend(bottom + top)
+            faces.extend(
+                [
+                    tuple(offset + index for index in reversed(range(count))),
+                    tuple(offset + count + index for index in range(count)),
+                ]
             )
-            for index in range(count)
-        )
+            faces.extend(
+                (
+                    offset + index,
+                    offset + (index + 1) % count,
+                    offset + (index + 1) % count + count,
+                    offset + index + count,
+                )
+                for index in range(count)
+            )
 
         mesh = bpy.data.meshes.new(name)
         mesh.from_pydata(vertices, [], faces)
@@ -275,28 +285,42 @@ class BlenderMeshBackend(GeometryBackend):
     def _profile_points_and_ids(
         self, profile: SketchProfile
     ) -> tuple[list[tuple[float, float]], list[str | None]]:
-        if profile.points:
-            points = list(profile.points)
-            entity_ids: list[str | None] = list(profile.entity_ids)
-        elif profile.kind == "CIRCLE" and profile.circle is not None:
-            cx, cy, radius = profile.circle
-            points = [
-                (
-                    cx + radius * cos(2.0 * pi * index / self.circle_segments),
-                    cy + radius * sin(2.0 * pi * index / self.circle_segments),
-                )
-                for index in range(self.circle_segments)
-            ]
-            entity_ids = [None] * len(points)
-        else:
+        loops = self._profile_loops_and_ids(profile)
+        if not loops:
             raise ValueError(f"Unsupported profile kind: {profile.kind}")
-        if len(entity_ids) != len(points):
-            entity_ids = [None] * len(points)
-        signed_area = sum(
-            points[index][0] * points[(index + 1) % len(points)][1]
-            - points[(index + 1) % len(points)][0] * points[index][1]
-            for index in range(len(points))
-        )
-        if signed_area < 0.0:
-            return list(reversed(points)), list(reversed(entity_ids))
-        return points, entity_ids
+        return loops[0]
+
+    def _profile_loops_and_ids(
+        self, profile: SketchProfile
+    ) -> list[tuple[list[tuple[float, float]], list[str | None]]]:
+        loops: list[tuple[list[tuple[float, float]], list[str | None]]] = []
+        for loop in profile.iter_loops():
+            if loop.points:
+                points = list(loop.points)
+                entity_ids: list[str | None] = list(loop.entity_ids)
+            elif loop.circle is not None:
+                cx, cy, radius = loop.circle
+                points = [
+                    (
+                        cx + radius * cos(2.0 * pi * index / self.circle_segments),
+                        cy + radius * sin(2.0 * pi * index / self.circle_segments),
+                    )
+                    for index in range(self.circle_segments)
+                ]
+                entity_ids = [None] * len(points)
+            else:
+                continue
+            if len(points) < 3:
+                raise ValueError("Closed profile requires at least three points.")
+            if len(entity_ids) != len(points):
+                entity_ids = [None] * len(points)
+            signed_area = sum(
+                points[index][0] * points[(index + 1) % len(points)][1]
+                - points[(index + 1) % len(points)][0] * points[index][1]
+                for index in range(len(points))
+            )
+            if signed_area < 0.0:
+                points = list(reversed(points))
+                entity_ids = list(reversed(entity_ids))
+            loops.append((points, entity_ids))
+        return loops

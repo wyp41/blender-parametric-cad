@@ -8,7 +8,7 @@ from typing import Any
 
 from ..features.extrude import ExtrudeFeature
 from ..features.revolve import RevolveFeature
-from ..sketch.entities import SketchCircle, SketchEntity, SketchLine
+from ..sketch.entities import SketchArc, SketchCircle, SketchEntity, SketchLine
 from ..sketch.plane import SketchPlaneReference
 from ..sketch.sketch import SketchFeature
 from .feature import Feature
@@ -26,6 +26,14 @@ def entity_to_dict(entity: SketchEntity) -> dict[str, Any]:
         data.update(x1=entity.x1, y1=entity.y1, x2=entity.x2, y2=entity.y2)
     elif isinstance(entity, SketchCircle):
         data.update(cx=entity.cx, cy=entity.cy, radius=entity.radius)
+    elif isinstance(entity, SketchArc):
+        data.update(
+            cx=entity.cx,
+            cy=entity.cy,
+            radius=entity.radius,
+            start_angle=entity.start_angle,
+            end_angle=entity.end_angle,
+        )
     else:
         raise ValueError(f"Unsupported sketch entity: {entity.entity_type}")
     return data
@@ -51,6 +59,15 @@ def entity_from_dict(data: dict[str, Any]) -> SketchEntity:
             cy=float(data["cy"]),
             radius=float(data["radius"]),
         )
+    if data["entity_type"] == "ARC":
+        return SketchArc(
+            **common,
+            cx=float(data["cx"]),
+            cy=float(data["cy"]),
+            radius=float(data["radius"]),
+            start_angle=float(data["start_angle"]),
+            end_angle=float(data["end_angle"]),
+        )
     raise ValueError(f"Unsupported sketch entity type: {data['entity_type']}")
 
 
@@ -74,6 +91,7 @@ def feature_to_dict(feature: Feature) -> dict[str, Any]:
                 "source_entity_id": feature.plane_reference.source_entity_id,
             },
             entities=[entity_to_dict(item) for item in feature.entities],
+            deleted_regions=list(feature.deleted_regions),
         )
     elif isinstance(feature, ExtrudeFeature):
         data.update(
@@ -116,6 +134,7 @@ def feature_from_dict(data: dict[str, Any]) -> Feature:
                 source_entity_id=reference.get("source_entity_id"),
             ),
             entities=[entity_from_dict(item) for item in data.get("entities", [])],
+            deleted_regions=list(data.get("deleted_regions", [])),
         )
     if data["feature_type"] == "EXTRUDE":
         return ExtrudeFeature(

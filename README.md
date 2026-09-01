@@ -1,8 +1,9 @@
 # Blender Parametric CAD
 
-History-based parametric modeling extension for Blender 5.1.2. Version 0.4.0
+History-based parametric modeling extension for Blender 5.1.2. Version 0.5.0
 implements the M3.5–M3.6 Part Studio, precise Sketch and unified Extrude
-workflows, plus the M4 semantic face-selection and Revolve milestone.
+workflows, the M4 semantic face-selection/Revolve milestone, and arc-based
+composite sketch regions.
 
 The persistent JSON CAD history is authoritative. Blender result meshes,
 Boolean tools, and sketch overlays are disposable outputs resolved from stable
@@ -11,7 +12,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.4.0.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.5.0.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## Part Studio workflow
@@ -20,13 +21,18 @@ In a 3D View, press `N` and open the **CAD** tab:
 
 1. Use **+** to create a Part Studio.
 2. Create a Sketch on XY, XZ, YZ, or a supported Extrude End Plane.
-3. Draw a Rectangle, Circle, or connected line loop with the mouse.
-4. To edit exact dimensions, use **Select**, click a Rectangle or Circle, then
-   update its millimeter fields. The selected shape is highlighted.
-5. Finish the Sketch. **Show Sketches** keeps resolved Sketch references visible.
-6. Select the Sketch and use one **Extrude** command with **New**, **Add**, or
+3. Draw a Rectangle, Circle, Arc, or connected line/arc loop with the mouse.
+   Arc uses three clicks: center, start, and end.
+4. To edit exact dimensions, use **Select**, click a Rectangle, Circle, or Arc,
+   then update its millimeter fields. The selected shape is highlighted.
+5. To split a closed boundary, choose **Line** and click two points on its
+   boundary. Endpoints snap to nearby vertices/edges and the boundary is split
+   into bounded regions. Choose **Delete Region**, then click a region to omit
+   it from subsequent Extrude/Revolve profiles.
+6. Finish the Sketch. **Show Sketches** keeps resolved Sketch references visible.
+7. Select the Sketch and use one **Extrude** command with **New**, **Add**, or
    **Remove**, plus **Blind** or **Through All** where supported.
-7. Select Features to edit, rename, delete with dependency confirmation,
+8. Select Features to edit, rename, delete with dependency confirmation,
    suppress/unsuppress, or set the rollback point.
 
 To attach a Sketch to generated geometry, press **Select Face**, click a
@@ -43,18 +49,27 @@ Part Studios can be renamed or deleted without relying on Blender object names.
 
 ## Supported profiles and operations
 
-- One Circle or one simple connected closed line loop.
-- Rectangles, triangles, and simple polygons use the same generic profile path.
+- One Circle, mixed line/arc loop, or multiple closed loops/regions (including
+  separate circles combined with line/arc loops).
+- Rectangles, triangles, rounded profiles, and simple polygons use the same
+  generic profile path.
+- A regular Line can split a closed boundary into bounded regions. Deleted
+  region IDs are persisted in the Sketch and excluded from feature profiles.
 - `New + Blind`, `Add + Blind`, `Remove + Blind`, and
   `Remove + Through All`.
 - Existing saved `CUT` features remain compatible and evaluate as Remove.
 - Simple Extrude start/end faces and line-based side faces can be selected as
   semantic Sketch supports.
+- Face selection is intentionally limited to the generated mesh of a simple
+  **New Extrude**: START_FACE, END_FACE, and SIDE_FACE(source SketchLine UUID).
+  Boolean and Revolve result faces, plus arc-based side faces, remain visible
+  but report that they cannot yet be persistent CAD references.
 - Revolve supports New, Add, and Remove with datum axes or SketchLine axes.
 
 Numeric edits update the existing Sketch entities and preserve entity UUIDs.
-Closed line-loop winding is normalized before mesh generation so clockwise and
-counter-clockwise Rectangles and simple polygons use the same Add/Remove path.
+Closed loop winding is normalized before mesh generation so clockwise and
+counter-clockwise Rectangles, arcs, and simple polygons use the same Add/Remove
+path. Multiple active loops are emitted as one composite tool.
 Feature-derived Sketch overlays are resolved from history, so they move with
 semantic `END_PLANE` references after rebuilds.
 

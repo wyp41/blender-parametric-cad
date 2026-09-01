@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import json
+from math import pi
 
 import bpy
 
 from ...core.serialization import feature_from_dict, feature_to_dict
 from ...core.references import TopoReference
 from ...sketch.numeric import (
+    arc_parameters,
     circle_parameters,
     rectangle_parameters,
+    set_arc,
     set_circle,
     set_rectangle,
 )
@@ -236,6 +239,7 @@ class PARAMETRIC_CAD_OT_clear_sketch(bpy.types.Operator):
         if not isinstance(sketch, SketchFeature):
             return {"CANCELLED"}
         sketch.entities.clear()
+        sketch.deleted_regions.clear()
         ui.active_sketch_entity_id = ""
         save_document_to_scene(context.scene, document)
         tag_redraw()
@@ -299,6 +303,39 @@ class PARAMETRIC_CAD_OT_numeric_circle(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class PARAMETRIC_CAD_OT_numeric_arc(bpy.types.Operator):
+    bl_idname = "parametric_cad.numeric_arc"
+    bl_label = "Update Arc"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        ui = context.scene.parametric_cad_ui
+        document = load_document_from_scene(context.scene)
+        part = document.active_part
+        sketch = part.get_feature(ui.active_sketch_id) if part else None
+        if not isinstance(sketch, SketchFeature):
+            return {"CANCELLED"}
+        if arc_parameters(sketch, ui.active_sketch_entity_id or None) is None:
+            self.report({"ERROR"}, "Select an existing Arc to edit its dimensions.")
+            return {"CANCELLED"}
+        try:
+            set_arc(
+                sketch,
+                ui.arc_x_mm / 1000.0,
+                ui.arc_y_mm / 1000.0,
+                ui.arc_radius_mm / 1000.0,
+                ui.arc_start_deg * pi / 180.0,
+                ui.arc_end_deg * pi / 180.0,
+                ui.active_sketch_entity_id or None,
+            )
+        except ValueError as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+        save_document_to_scene(context.scene, document)
+        tag_redraw()
+        return {"FINISHED"}
+
+
 CLASSES = (
     PARAMETRIC_CAD_OT_track_sketch_cursor,
     PARAMETRIC_CAD_OT_new_sketch,
@@ -308,4 +345,5 @@ CLASSES = (
     PARAMETRIC_CAD_OT_clear_sketch,
     PARAMETRIC_CAD_OT_numeric_rectangle,
     PARAMETRIC_CAD_OT_numeric_circle,
+    PARAMETRIC_CAD_OT_numeric_arc,
 )

@@ -8,7 +8,7 @@ import bpy
 
 from ...core.references import TopoReference
 from ...sketch.sketch import SketchFeature
-from ...sketch.numeric import circle_parameters, rectangle_parameters
+from ...sketch.numeric import arc_parameters, circle_parameters, rectangle_parameters
 from ..adapter import load_document_from_scene
 from .feature_tree import draw_feature_tree, draw_selected_feature
 
@@ -50,6 +50,10 @@ class PARAMETRIC_CAD_PT_main(bpy.types.Panel):
 
         support = layout.box()
         support.label(text="Viewport Selection", icon="RESTRICT_SELECT_OFF")
+        support.label(
+            text="Supported: New Extrude START/END faces and line-based SIDE faces",
+            icon="INFO",
+        )
         support.operator("parametric_cad.select_face", icon="FACESEL")
         if ui.selected_face_reference:
             try:
@@ -58,6 +62,11 @@ class PARAMETRIC_CAD_PT_main(bpy.types.Panel):
                 source_name = source.name if source is not None else face.feature_id[:8]
                 label = f"{source_name} {face.role.replace('_', ' ').title()}"
                 support.label(text=label, icon="CHECKMARK")
+                if face.role == "SIDE_FACE" and face.source_entity_id:
+                    support.label(
+                        text=f"Source SketchLine: {face.source_entity_id[:8]}",
+                        icon="IPO_LINEAR",
+                    )
             except (TypeError, ValueError, KeyError):
                 support.label(text="Invalid face selection", icon="ERROR")
 
@@ -110,6 +119,8 @@ class PARAMETRIC_CAD_PT_sketch_tools(bpy.types.Panel):
         plane_label = (
             f"{reference.datum_plane}"
             if reference.reference_type == "DATUM"
+            else f"Face {reference.role.replace('_', ' ').title()}"
+            if reference.reference_type == "FACE"
             else "Feature End Plane"
         )
         layout.label(text=f"Editing {sketch.name} ({plane_label})")
@@ -119,6 +130,13 @@ class PARAMETRIC_CAD_PT_sketch_tools(bpy.types.Panel):
         row = layout.row(align=True)
         row.operator("parametric_cad.draw_rectangle", text="Rectangle", icon="MESH_PLANE")
         row.operator("parametric_cad.draw_circle", text="Circle", icon="MESH_CIRCLE")
+        row = layout.row(align=True)
+        row.operator("parametric_cad.draw_arc", text="Arc", icon="CURVE_BEZCURVE")
+        row.operator(
+            "parametric_cad.delete_region",
+            text="Delete Region",
+            icon="X",
+        )
         coordinates = layout.box()
         coordinates.label(text="Local Sketch Coordinates")
         coordinates.label(text=f"X: {ui.mouse_x_mm:.2f} mm")
@@ -138,9 +156,25 @@ class PARAMETRIC_CAD_PT_sketch_tools(bpy.types.Panel):
             dimensions.prop(ui, "circle_y_mm")
             dimensions.prop(ui, "circle_diameter_mm")
             dimensions.operator("parametric_cad.numeric_circle", text="Update Circle")
+        elif arc_parameters(sketch, entity_id) is not None:
+            dimensions.label(text="Arc Dimensions")
+            dimensions.prop(ui, "arc_x_mm")
+            dimensions.prop(ui, "arc_y_mm")
+            dimensions.prop(ui, "arc_radius_mm")
+            dimensions.prop(ui, "arc_start_deg")
+            dimensions.prop(ui, "arc_end_deg")
+            dimensions.operator("parametric_cad.numeric_arc", text="Update Arc")
         else:
             dimensions.label(text="Dimensions")
-            dimensions.label(text="Use Select, then click a Rectangle or Circle.", icon="INFO")
+            dimensions.label(
+                text="Use Select, then click a Rectangle, Circle, or Arc.",
+                icon="INFO",
+            )
+        if sketch.deleted_regions:
+            dimensions.label(
+                text=f"Deleted regions: {len(sketch.deleted_regions)}",
+                icon="X",
+            )
         layout.operator("parametric_cad.clear_sketch", icon="TRASH")
         layout.separator()
         row = layout.row(align=True)

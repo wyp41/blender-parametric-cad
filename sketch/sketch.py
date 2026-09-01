@@ -21,6 +21,9 @@ class SketchFeature(Feature):
     x_axis: Vector3 = (1.0, 0.0, 0.0)
     y_axis: Vector3 = (0.0, 1.0, 0.0)
     entities: list[SketchEntity] = field(default_factory=list)
+    # Region IDs are derived from the boundary entity UUIDs.  They are
+    # persistent sketch edits, not Blender mesh/polygon indices.
+    deleted_regions: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.plane_reference.reference_type == "DATUM":

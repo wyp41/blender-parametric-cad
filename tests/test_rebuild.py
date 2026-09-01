@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import unittest
+from math import pi
 
 from blender_parametric_cad.core.evaluator import PartEvaluator
 from blender_parametric_cad.core.part import Part
 from blender_parametric_cad.features.extrude import ExtrudeFeature
 from blender_parametric_cad.geometry.backend import GeometryBackend
-from blender_parametric_cad.sketch.entities import SketchCircle, SketchLine
+from blender_parametric_cad.sketch.entities import SketchArc, SketchCircle, SketchLine
 from blender_parametric_cad.sketch.numeric import set_rectangle
 from blender_parametric_cad.sketch.sketch import SketchFeature
 
@@ -240,6 +241,27 @@ class RebuildTests(unittest.TestCase):
 
             self.assertTrue(result.success, operation)
             self.assertEqual(backend.sequence[-2:], ["create_extrusion", boolean_call])
+
+    def test_arc_and_split_region_profiles_reach_extrude_backend(self) -> None:
+        backend = RecordingBackend()
+        rounded = SketchFeature.on_plane("Rounded", "XY")
+        rounded.entities = [
+            SketchLine(x1=0.0, y1=0.0, x2=0.02, y2=0.0),
+            SketchArc(cx=0.01, cy=0.0, radius=0.01, start_angle=0.0, end_angle=pi),
+        ]
+        feature = ExtrudeFeature(sketch_id=rounded.id, distance=0.01)
+        rounded_result = PartEvaluator(backend).evaluate(
+            Part(features=[rounded, feature])
+        )
+        self.assertTrue(rounded_result.success)
+
+        split = rectangle_sketch()
+        split.entities.append(SketchLine(x1=0.04, y1=0.0, x2=0.04, y2=0.05))
+        split_feature = ExtrudeFeature(sketch_id=split.id, distance=0.01)
+        split_result = PartEvaluator(RecordingBackend()).evaluate(
+            Part(features=[split, split_feature])
+        )
+        self.assertTrue(split_result.success)
 
 
 if __name__ == "__main__":

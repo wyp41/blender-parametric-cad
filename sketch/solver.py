@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .entities import SketchCircle, SketchLine
+from .entities import SketchArc, SketchCircle, SketchLine
 from .sketch import SketchFeature
 
 
@@ -22,6 +22,7 @@ class SketchSolver:
             if isinstance(entity, SketchLine):
                 if (entity.x1, entity.y1) == (entity.x2, entity.y2):
                     return SolverResult(False, "Sketch contains a zero-length line.")
-            elif isinstance(entity, SketchCircle) and entity.radius <= 0.0:
-                return SolverResult(False, "Sketch contains a circle with invalid radius.")
+            elif isinstance(entity, (SketchCircle, SketchArc)) and entity.radius <= 0.0:
+                label = "arc" if isinstance(entity, SketchArc) else "circle"
+                return SolverResult(False, f"Sketch contains an {label} with invalid radius.")
         return SolverResult(True)

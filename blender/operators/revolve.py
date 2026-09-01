@@ -20,6 +20,7 @@ def _previous_body_feature(part, before_index: int):
             feature
             for feature in reversed(part.features[:before_index])
             if isinstance(feature, (ExtrudeFeature, RevolveFeature))
+            and not feature.suppressed
         ),
         None,
     )
@@ -54,6 +55,17 @@ def _dependencies(part, sketch: SketchFeature, operation: str, axis: AxisReferen
     return dependencies
 
 
+def _validate_operation(part, operation: str, before_index: int | None = None) -> str | None:
+    has_body = _previous_body_feature(
+        part, len(part.features) if before_index is None else before_index
+    ) is not None
+    if operation in {"ADD", "REMOVE"} and not has_body:
+        return f"Revolve {operation.title()} requires an earlier body feature."
+    if operation == "NEW" and has_body:
+        return "Revolve New cannot follow an existing body; use Add or Remove."
+    return None
+
+
 def _report_rebuild(operator, result) -> bool:
     if result.success:
         return True
@@ -70,6 +82,10 @@ def _create_revolve(operator, context):
     sketch = part.get_feature(ui.active_feature_id) if part else None
     if not isinstance(sketch, SketchFeature):
         operator.report({"ERROR"}, "Select a Sketch feature")
+        return {"CANCELLED"}
+    operation_error = _validate_operation(part, ui.revolve_operation)
+    if operation_error:
+        operator.report({"ERROR"}, operation_error)
         return {"CANCELLED"}
     axis = _axis_reference(ui, sketch)
     if axis.reference_type == "SKETCH_LINE":
@@ -124,6 +140,12 @@ class PARAMETRIC_CAD_OT_apply_revolve(bpy.types.Operator):
         sketch = part.get_feature(revolve.sketch_id)
         if not isinstance(sketch, SketchFeature):
             self.report({"ERROR"}, "Revolve source Sketch is unavailable")
+            return {"CANCELLED"}
+        operation_error = _validate_operation(
+            part, ui.revolve_operation, part.get_feature_index(revolve.id)
+        )
+        if operation_error:
+            self.report({"ERROR"}, operation_error)
             return {"CANCELLED"}
         axis = _axis_reference(ui, sketch)
         revolve.axis_reference = axis

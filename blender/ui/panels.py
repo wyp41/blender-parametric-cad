@@ -22,6 +22,8 @@ class PARAMETRIC_CAD_PT_main(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
         scene = context.scene
         ui = scene.parametric_cad_ui
         try:
@@ -107,6 +109,8 @@ class PARAMETRIC_CAD_PT_sketch_tools(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
         ui = context.scene.parametric_cad_ui
         document = load_document_from_scene(context.scene)
         part = document.active_part
@@ -124,7 +128,9 @@ class PARAMETRIC_CAD_PT_sketch_tools(bpy.types.Panel):
             else "Feature End Plane"
         )
         layout.label(text=f"Editing {sketch.name} ({plane_label})")
-        layout.label(text="Orange crosses mark intersections; drawing snaps to them.", icon="SNAP_ON")
+        snap_help = layout.box()
+        snap_help.label(text="Snap enabled", icon="SNAP_ON")
+        snap_help.label(text="Orange = intersection  •  Green = active target")
         row = layout.row(align=True)
         row.operator("parametric_cad.select_tool", text="Select", icon="RESTRICT_SELECT_OFF")
         row.operator("parametric_cad.draw_line", text="Line", icon="IPO_LINEAR")
@@ -139,6 +145,16 @@ class PARAMETRIC_CAD_PT_sketch_tools(bpy.types.Panel):
             text="Delete Region",
             icon="X",
         )
+        row = layout.row(align=True)
+        if ui.active_sketch_entity_id and any(
+            entity.id == ui.active_sketch_entity_id for entity in sketch.entities
+        ):
+            delete_selected = row.operator(
+                "parametric_cad.delete_geometry",
+                text="Delete Selected",
+                icon="X",
+            )
+            delete_selected.selected_only = True
         row.operator(
             "parametric_cad.delete_geometry",
             text="Delete Geometry",
@@ -150,36 +166,49 @@ class PARAMETRIC_CAD_PT_sketch_tools(bpy.types.Panel):
         coordinates.label(text=f"Y: {ui.mouse_y_mm:.2f} mm")
         dimensions = layout.box()
         entity_id = ui.active_sketch_entity_id
+        if entity_id:
+            selected_entity = next(
+                (entity for entity in sketch.entities if entity.id == entity_id), None
+            )
+            if selected_entity is not None:
+                dimensions.label(
+                    text=f"Selected: {selected_entity.entity_type.title()}",
+                    icon="RESTRICT_SELECT_OFF",
+                )
         if rectangle_parameters(sketch, entity_id) is not None:
             dimensions.label(text="Rectangle Dimensions")
-            dimensions.prop(ui, "rectangle_x_mm")
-            dimensions.prop(ui, "rectangle_y_mm")
-            dimensions.prop(ui, "rectangle_width_mm")
-            dimensions.prop(ui, "rectangle_height_mm")
+            dimensions.prop(ui, "rectangle_x_mm", text="X (mm)")
+            dimensions.prop(ui, "rectangle_y_mm", text="Y (mm)")
+            dimensions.prop(ui, "rectangle_width_mm", text="Width (mm)")
+            dimensions.prop(ui, "rectangle_height_mm", text="Height (mm)")
             dimensions.operator("parametric_cad.numeric_rectangle", text="Update Rectangle")
         elif circle_parameters(sketch, entity_id) is not None:
             dimensions.label(text="Circle Dimensions")
-            dimensions.prop(ui, "circle_x_mm")
-            dimensions.prop(ui, "circle_y_mm")
-            dimensions.prop(ui, "circle_diameter_mm")
+            dimensions.prop(ui, "circle_x_mm", text="Center X (mm)")
+            dimensions.prop(ui, "circle_y_mm", text="Center Y (mm)")
+            dimensions.prop(ui, "circle_diameter_mm", text="Diameter (mm)")
             dimensions.operator("parametric_cad.numeric_circle", text="Update Circle")
         elif arc_parameters(sketch, entity_id) is not None:
             dimensions.label(text="Arc Dimensions")
-            dimensions.prop(ui, "arc_x_mm")
-            dimensions.prop(ui, "arc_y_mm")
-            dimensions.prop(ui, "arc_radius_mm")
-            dimensions.prop(ui, "arc_start_deg")
-            dimensions.prop(ui, "arc_end_deg")
+            dimensions.prop(ui, "arc_x_mm", text="Center X (mm)")
+            dimensions.prop(ui, "arc_y_mm", text="Center Y (mm)")
+            dimensions.prop(ui, "arc_radius_mm", text="Radius (mm)")
+            dimensions.prop(ui, "arc_start_deg", text="Start (deg)")
+            dimensions.prop(ui, "arc_end_deg", text="End (deg)")
             dimensions.operator("parametric_cad.numeric_arc", text="Update Arc")
         else:
             dimensions.label(text="Dimensions")
             dimensions.label(
-                text="Selected geometry has no numeric dimensions.",
+                text=(
+                    "Select a Rectangle, Circle, or Arc to edit dimensions."
+                    if not entity_id
+                    else "Selected geometry has no numeric dimensions."
+                ),
                 icon="INFO",
             )
         if sketch.deleted_regions:
             dimensions.label(
-                text=f"Deleted regions: {len(sketch.deleted_regions)}",
+                text=f"Deleted regions: {len(sketch.deleted_regions)} (outer edges hidden)",
                 icon="X",
             )
         layout.operator("parametric_cad.clear_sketch", icon="TRASH")

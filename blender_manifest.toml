@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "blender_parametric_cad"
-version = "0.6.0"
+version = "0.7.0"
 name = "Blender Parametric CAD"
 tagline = "Part Studios, interactive sketch editing, split regions, and Revolve"
 maintainer = "Blender Parametric CAD contributors"

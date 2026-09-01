@@ -1,9 +1,10 @@
 # Blender Parametric CAD
 
-History-based parametric modeling extension for Blender 5.1.2. Version 0.6.0
+History-based parametric modeling extension for Blender 5.1.2. Version 0.7.0
 implements the M3.5–M3.6 Part Studio, precise Sketch and unified Extrude
 workflows, the M4 semantic face-selection/Revolve milestone, arc-based
-composite sketch regions, and interactive sketch cleanup/snapping.
+composite sketch regions, interactive sketch cleanup/snapping, and robust
+Revolve Boolean tools.
 
 The persistent JSON CAD history is authoritative. Blender result meshes,
 Boolean tools, and sketch overlays are disposable outputs resolved from stable
@@ -12,7 +13,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.6.0.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.7.0.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## Part Studio workflow
@@ -25,7 +26,9 @@ In a 3D View, press `N` and open the **CAD** tab:
    Arc uses three clicks: center, start, and end.
 4. To edit exact dimensions, use **Select**, click a Rectangle, Circle, or Arc,
    then update its millimeter fields. Individual lines can also be selected and
-   highlighted; use **Delete Geometry** to remove one entity.
+   highlighted; use **Delete Selected** (or the click-based **Delete Geometry**)
+   to remove one entity. A green cross shows the active snap target while
+   drawing.
 5. To split a closed boundary, choose **Line** and click two points on its
    boundary. Endpoints snap to nearby vertices/edges/intersections and the
    boundary is split into bounded regions. Choose **Delete Region**, then click
@@ -71,6 +74,8 @@ Part Studios can be renamed or deleted without relying on Blender object names.
   but report that they cannot yet be persistent CAD references.
 - Revolve supports New, Add, and Remove with datum axes or SketchLine axes,
   including persistent positive/negative axis direction.
+- Full-turn Revolve tools are topologically closed at the seam for reliable
+  Add/Remove Boolean operations.
 
 Numeric edits update the existing Sketch entities and preserve entity UUIDs.
 Closed loop winding is normalized before mesh generation so clockwise and

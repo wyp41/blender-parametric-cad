@@ -14,7 +14,13 @@ from ...sketch.snapping import snap_point
 from ...sketch.sketch import SketchFeature, sketch_to_world
 from ..adapter import load_document_from_scene, save_document_to_scene
 from ..viewport.projection import screen_to_sketch
-from ..viewport.sketch_overlay import clear_preview, set_preview, tag_redraw
+from ..viewport.sketch_overlay import (
+    clear_preview,
+    clear_snap_preview,
+    set_preview,
+    set_snap_preview,
+    tag_redraw,
+)
 
 
 class _ModalSketchTool:
@@ -80,7 +86,15 @@ class _ModalSketchTool:
             return None, None
         point = screen_to_sketch(context, event, sketch)
         if point is not None and self.snap_points:
+            raw_point = point
             point = _snap_point(sketch, point)
+            set_snap_preview(
+                sketch_to_world(sketch, *point),
+                (sketch.x_axis, sketch.y_axis),
+                snapped=point != raw_point,
+            )
+        elif point is not None:
+            clear_snap_preview()
         return point, sketch
 
     def _update_preview(self, sketch, first, second):
@@ -397,10 +411,41 @@ class PARAMETRIC_CAD_OT_delete_geometry(_ModalSketchTool, bpy.types.Operator):
 
     bl_idname = "parametric_cad.delete_geometry"
     bl_label = "Delete Geometry"
-    bl_description = "Delete the one line, circle, or arc under the cursor"
+    bl_description = "Delete the selected geometry or click one line, circle, or arc"
     bl_options = {"REGISTER", "UNDO", "BLOCKING"}
+    selected_only: bpy.props.BoolProperty(
+        name="Selected Only",
+        default=False,
+        options={"HIDDEN"},
+    )
 
     def invoke(self, context, event):
+        if self.selected_only:
+            ui = context.scene.parametric_cad_ui
+            if context.area.type != "VIEW_3D" or ui.mode != "SKETCH_EDIT":
+                return {"CANCELLED"}
+            document = load_document_from_scene(context.scene)
+            part = document.active_part
+            sketch = part.get_feature(ui.active_sketch_id) if part else None
+            entity_id = ui.active_sketch_entity_id
+            if not isinstance(sketch, SketchFeature) or not entity_id:
+                self.report({"INFO"}, "Select a geometry first.")
+                return {"CANCELLED"}
+            entity = next((item for item in sketch.entities if item.id == entity_id), None)
+            if entity is None:
+                ui.active_sketch_entity_id = ""
+                self.report({"INFO"}, "The selected geometry is no longer available.")
+                return {"CANCELLED"}
+            stored = part.get_feature(sketch.id) if part else None
+            if not isinstance(stored, SketchFeature):
+                return {"CANCELLED"}
+            _remove_entity(stored, entity.id)
+            ui.active_sketch_entity_id = ""
+            save_document_to_scene(context.scene, document)
+            self.report({"INFO"}, f"Deleted {entity.entity_type.title()} geometry.")
+            clear_preview()
+            tag_redraw()
+            return {"FINISHED"}
         result = super().invoke(context, event)
         if result == {"RUNNING_MODAL"}:
             context.area.header_text_set("CAD: click one geometry to delete; Esc cancels")
@@ -426,10 +471,7 @@ class PARAMETRIC_CAD_OT_delete_geometry(_ModalSketchTool, bpy.types.Operator):
         if not isinstance(stored, SketchFeature):
             self._finish(context)
             return {"CANCELLED"}
-        stored.entities = [item for item in stored.entities if item.id != entity.id]
-        # Region IDs contain boundary UUIDs, so any geometry edit invalidates
-        # old exclusions. They must be reselected from the new profile graph.
-        stored.deleted_regions.clear()
+        _remove_entity(stored, entity.id)
         context.scene.parametric_cad_ui.active_sketch_entity_id = ""
         save_document_to_scene(context.scene, document)
         self.report({"INFO"}, f"Deleted {entity.entity_type.title()} geometry.")
@@ -512,6 +554,13 @@ def _nearest_entity(sketch: SketchFeature, point):
         key=lambda entity: _entity_distance(entity, point),
         default=None,
     )
+
+
+def _remove_entity(sketch: SketchFeature, entity_id: str) -> None:
+    sketch.entities = [item for item in sketch.entities if item.id != entity_id]
+    # Region IDs contain boundary UUIDs, so any geometry edit invalidates old
+    # exclusions. They must be reselected from the new profile graph.
+    sketch.deleted_regions.clear()
 
 
 def _snap_point(sketch: SketchFeature, point):

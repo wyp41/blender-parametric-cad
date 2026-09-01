@@ -92,12 +92,14 @@ class BlenderMeshBackend(GeometryBackend):
             raise ValueError("Revolve axis has zero length.")
         direction = tuple(value / normal_length for value in axis_direction)
         segments = max(8, int(ceil(64.0 * abs(angle) / tau)))
+        full_turn = abs(abs(angle) - tau) <= 1e-9
         vertices: list[tuple[float, float, float]] = []
         faces: list[tuple[int, ...]] = []
         for points, _entity_ids in self._profile_loops_and_ids(profile):
             base = [sketch_to_world(sketch, u, v) for u, v in points]
             offset = len(vertices)
-            for ring in range(segments + 1):
+            ring_count = segments if full_turn else segments + 1
+            for ring in range(ring_count):
                 ring_angle = angle * ring / segments
                 vertices.extend(
                     self._rotate_about_axis(point, axis_origin, direction, ring_angle)
@@ -106,7 +108,7 @@ class BlenderMeshBackend(GeometryBackend):
 
             count = len(base)
             for ring in range(segments):
-                next_ring = ring + 1
+                next_ring = (ring + 1) % segments if full_turn else ring + 1
                 for index in range(count):
                     next_index = (index + 1) % count
                     faces.append(
@@ -117,7 +119,7 @@ class BlenderMeshBackend(GeometryBackend):
                             offset + next_ring * count + index,
                         )
                     )
-            if abs(angle) < tau - 1e-9:
+            if not full_turn:
                 faces.append(tuple(offset + index for index in reversed(range(count))))
                 end = offset + segments * count
                 faces.append(tuple(end + index for index in range(count)))

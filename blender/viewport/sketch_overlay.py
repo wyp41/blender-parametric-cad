@@ -21,6 +21,11 @@ from .provenance import get_face_provenance
 _draw_handle = None
 _preview_points: list[tuple[float, float, float]] = []
 _preview_closed = False
+_snap_preview: tuple[
+    tuple[float, float, float],
+    tuple[float, float, float],
+    tuple[float, float, float],
+] | None = None
 _hover_face = None
 _selected_face = None
 
@@ -33,7 +38,33 @@ def set_preview(points: list[tuple[float, float, float]], closed: bool = False) 
 
 
 def clear_preview() -> None:
-    set_preview([])
+    global _preview_points, _preview_closed, _snap_preview
+    _preview_points = []
+    _preview_closed = False
+    _snap_preview = None
+    tag_redraw()
+
+
+def set_snap_preview(
+    point: tuple[float, float, float] | None,
+    axes: tuple[tuple[float, float, float], tuple[float, float, float]] | None = None,
+    snapped: bool = True,
+) -> None:
+    """Show a transient marker at the point a drawing tool will use."""
+
+    global _snap_preview
+    if point is None or not snapped:
+        _snap_preview = None
+    else:
+        x_axis, y_axis = axes or ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0))
+        _snap_preview = (point, x_axis, y_axis)
+    tag_redraw()
+
+
+def clear_snap_preview() -> None:
+    global _snap_preview
+    _snap_preview = None
+    tag_redraw()
 
 
 def set_face_hover(hit) -> None:
@@ -152,6 +183,9 @@ def _draw_callback() -> None:
             )
             _draw_segments([origin, x_end], (1.0, 0.2, 0.2, 1.0))
             _draw_segments([origin, y_end], (0.2, 1.0, 0.2, 1.0))
+
+    if editing and _snap_preview is not None:
+        _draw_snap_preview()
 
     if not editing:
         return
@@ -309,6 +343,35 @@ def _draw_intersection_markers(sketch: SketchFeature, hidden_ids: set[str]) -> N
             ]
         )
     _draw_segments(segments, (1.0, 0.85, 0.1, 1.0), 5.0)
+
+
+def _draw_snap_preview() -> None:
+    if _snap_preview is None:
+        return
+    size = 0.0015
+    point, x_axis, y_axis = _snap_preview
+    x_offset = tuple(value * size for value in x_axis)
+    y_offset = tuple(value * size for value in y_axis)
+    segments = [
+        (
+            point,
+            tuple(point[index] + x_offset[index] for index in range(3)),
+        ),
+        (
+            point,
+            tuple(point[index] - x_offset[index] for index in range(3)),
+        ),
+        (
+            point,
+            tuple(point[index] + y_offset[index] for index in range(3)),
+        ),
+        (
+            point,
+            tuple(point[index] - y_offset[index] for index in range(3)),
+        ),
+    ]
+    flattened = [item for segment in segments for item in segment]
+    _draw_segments(flattened, (0.25, 1.0, 0.35, 1.0), 6.0)
 
 
 def _draw_segments(points, color, width: float = 3.5) -> None:

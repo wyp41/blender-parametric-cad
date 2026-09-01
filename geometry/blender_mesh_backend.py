@@ -177,14 +177,21 @@ class BlenderMeshBackend(GeometryBackend):
 
     def _profile_points(self, profile: SketchProfile) -> list[tuple[float, float]]:
         if profile.points:
-            return list(profile.points)
-        if profile.kind == "CIRCLE" and profile.circle is not None:
+            points = list(profile.points)
+        elif profile.kind == "CIRCLE" and profile.circle is not None:
             cx, cy, radius = profile.circle
-            return [
+            points = [
                 (
                     cx + radius * cos(2.0 * pi * index / self.circle_segments),
                     cy + radius * sin(2.0 * pi * index / self.circle_segments),
                 )
                 for index in range(self.circle_segments)
             ]
-        raise ValueError(f"Unsupported profile kind: {profile.kind}")
+        else:
+            raise ValueError(f"Unsupported profile kind: {profile.kind}")
+        signed_area = sum(
+            points[index][0] * points[(index + 1) % len(points)][1]
+            - points[(index + 1) % len(points)][0] * points[index][1]
+            for index in range(len(points))
+        )
+        return list(reversed(points)) if signed_area < 0.0 else points

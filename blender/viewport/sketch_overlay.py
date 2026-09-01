@@ -9,6 +9,7 @@ import gpu
 from gpu_extras.batch import batch_for_shader
 
 from ...sketch.entities import SketchCircle, SketchLine
+from ...sketch.numeric import rectangle_entity_ids
 from ...sketch.plane import PlaneResolutionError, resolve_sketch_plane_from_history
 from ...sketch.sketch import SketchFeature, sketch_to_world
 from ..adapter import load_document_from_scene
@@ -89,7 +90,18 @@ def _draw_callback() -> None:
             if sketch.id == ui.active_feature_id
             else (0.55, 0.65, 0.72, 0.8)
         )
-        _draw_segments(_entity_segments(sketch), color)
+        selected_ids: set[str] = set()
+        if editing and sketch.id == ui.active_sketch_id and ui.active_sketch_entity_id:
+            selected_ids = set(
+                rectangle_entity_ids(sketch, ui.active_sketch_entity_id)
+                or (ui.active_sketch_entity_id,)
+            )
+        _draw_segments(_entity_segments(sketch, exclude=selected_ids), color, 3.5)
+        _draw_segments(
+            _entity_segments(sketch, include=selected_ids),
+            (1.0, 0.65, 0.1, 1.0),
+            5.0,
+        )
         if editing and sketch.id == ui.active_sketch_id:
             origin = sketch.origin
             axis_length = 0.02
@@ -113,9 +125,17 @@ def _draw_callback() -> None:
     _draw_segments(preview_segments, (1.0, 0.65, 0.1, 1.0))
 
 
-def _entity_segments(sketch: SketchFeature) -> list[tuple[float, float, float]]:
+def _entity_segments(
+    sketch: SketchFeature,
+    include: set[str] | None = None,
+    exclude: set[str] | None = None,
+) -> list[tuple[float, float, float]]:
     segments: list[tuple[float, float, float]] = []
     for entity in sketch.entities:
+        if (include is not None and entity.id not in include) or (
+            exclude is not None and entity.id in exclude
+        ):
+            continue
         if isinstance(entity, SketchLine):
             segments.extend(
                 [
@@ -137,13 +157,13 @@ def _entity_segments(sketch: SketchFeature) -> list[tuple[float, float, float]]:
     return segments
 
 
-def _draw_segments(points, color) -> None:
+def _draw_segments(points, color, width: float = 3.5) -> None:
     if not points:
         return
     shader = gpu.shader.from_builtin("UNIFORM_COLOR")
     batch = batch_for_shader(shader, "LINES", {"pos": points})
     gpu.state.depth_test_set("NONE")
-    gpu.state.line_width_set(2.0)
+    gpu.state.line_width_set(width)
     shader.bind()
     shader.uniform_float("color", color)
     batch.draw(shader)

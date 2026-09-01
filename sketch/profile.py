@@ -32,6 +32,9 @@ class ProfileDetector:
 
     def detect(self, sketch: SketchFeature) -> ProfileResult:
         entities = [item for item in sketch.entities if not item.construction]
+        return self.detect_entities(entities)
+
+    def detect_entities(self, entities) -> ProfileResult:
         if len(entities) == 1 and isinstance(entities[0], SketchCircle):
             circle = entities[0]
             if circle.radius > 0.0:

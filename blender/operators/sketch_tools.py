@@ -7,6 +7,7 @@ from math import cos, hypot, pi, sin
 import bpy
 
 from ...sketch.entities import SketchCircle, SketchLine
+from ...sketch.numeric import circle_parameters, rectangle_parameters
 from ...sketch.plane import PlaneResolutionError, resolve_sketch_plane_from_history
 from ...sketch.sketch import SketchFeature, sketch_to_world
 from ..adapter import load_document_from_scene, save_document_to_scene
@@ -58,6 +59,7 @@ class _ModalSketchTool:
             stored = part.get_feature(sketch.id) if part else None
             if isinstance(stored, SketchFeature):
                 self._commit(stored, self.first_point, point)
+                context.scene.parametric_cad_ui.active_sketch_entity_id = ""
                 save_document_to_scene(context.scene, document)
             self._finish(context)
             return {"FINISHED"}
@@ -155,12 +157,88 @@ class PARAMETRIC_CAD_OT_draw_circle(_ModalSketchTool, bpy.types.Operator):
 class PARAMETRIC_CAD_OT_select_tool(bpy.types.Operator):
     bl_idname = "parametric_cad.select_tool"
     bl_label = "Select"
-    bl_description = "Return to sketch inspection; M2 editing uses Delete All and redraw"
+    bl_description = "Select a rectangle or circle to edit its dimensions"
+    bl_options = {"BLOCKING"}
 
-    def execute(self, context):
+    def invoke(self, context, _event):
+        ui = context.scene.parametric_cad_ui
+        if context.area.type != "VIEW_3D" or ui.mode != "SKETCH_EDIT":
+            return {"CANCELLED"}
         clear_preview()
-        self.report({"INFO"}, "Direct entity selection is planned for the next milestone")
+        context.window_manager.modal_handler_add(self)
+        context.area.header_text_set("CAD: click a Rectangle or Circle; Esc cancels")
+        return {"RUNNING_MODAL"}
+
+    def modal(self, context, event):
+        if event.type in {"ESC", "RIGHTMOUSE"}:
+            context.area.header_text_set(None)
+            return {"CANCELLED"}
+        if event.type != "LEFTMOUSE" or event.value != "PRESS":
+            return {"RUNNING_MODAL"}
+
+        ui = context.scene.parametric_cad_ui
+        document = load_document_from_scene(context.scene)
+        part = document.active_part
+        sketch = part.get_feature(ui.active_sketch_id) if part else None
+        if not isinstance(sketch, SketchFeature):
+            context.area.header_text_set(None)
+            return {"CANCELLED"}
+        try:
+            sketch.apply_resolved_plane(resolve_sketch_plane_from_history(part, sketch.id))
+        except PlaneResolutionError:
+            context.area.header_text_set(None)
+            return {"CANCELLED"}
+        point = screen_to_sketch(context, event, sketch)
+        if point is None:
+            return {"RUNNING_MODAL"}
+        entities = [entity for entity in sketch.entities if not entity.construction]
+        entity = min(entities, key=lambda item: self._distance(item, point), default=None)
+        if isinstance(entity, SketchCircle):
+            parameters = circle_parameters(sketch, entity.id)
+            ui.active_sketch_entity_id = entity.id
+            ui.circle_x_mm, ui.circle_y_mm, ui.circle_diameter_mm = (
+                value * 1000.0 for value in parameters
+            )
+        elif isinstance(entity, SketchLine):
+            parameters = rectangle_parameters(sketch, entity.id)
+            if parameters is None:
+                self.report({"INFO"}, "Only Rectangle and Circle dimensions are editable")
+                return {"RUNNING_MODAL"}
+            ui.active_sketch_entity_id = entity.id
+            (
+                ui.rectangle_x_mm,
+                ui.rectangle_y_mm,
+                ui.rectangle_width_mm,
+                ui.rectangle_height_mm,
+            ) = (value * 1000.0 for value in parameters)
+        else:
+            return {"RUNNING_MODAL"}
+        context.area.header_text_set(None)
+        tag_redraw()
         return {"FINISHED"}
+
+    @staticmethod
+    def _distance(entity, point):
+        if isinstance(entity, SketchCircle):
+            return abs(hypot(point[0] - entity.cx, point[1] - entity.cy) - entity.radius)
+        if isinstance(entity, SketchLine):
+            dx, dy = entity.x2 - entity.x1, entity.y2 - entity.y1
+            length_squared = dx * dx + dy * dy
+            if length_squared == 0.0:
+                return hypot(point[0] - entity.x1, point[1] - entity.y1)
+            position = max(
+                0.0,
+                min(
+                    1.0,
+                    ((point[0] - entity.x1) * dx + (point[1] - entity.y1) * dy)
+                    / length_squared,
+                ),
+            )
+            return hypot(
+                point[0] - (entity.x1 + position * dx),
+                point[1] - (entity.y1 + position * dy),
+            )
+        return float("inf")
 
 
 CLASSES = (

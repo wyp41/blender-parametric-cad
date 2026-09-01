@@ -5,6 +5,7 @@ from __future__ import annotations
 import bpy
 
 from ...sketch.sketch import SketchFeature
+from ...sketch.numeric import circle_parameters, rectangle_parameters
 from ..adapter import load_document_from_scene
 from .feature_tree import draw_feature_tree, draw_selected_feature
 
@@ -104,19 +105,24 @@ class PARAMETRIC_CAD_PT_sketch_tools(bpy.types.Panel):
         coordinates.label(text="Local Sketch Coordinates")
         coordinates.label(text=f"X: {ui.mouse_x_mm:.2f} mm")
         coordinates.label(text=f"Y: {ui.mouse_y_mm:.2f} mm")
-        rectangle = layout.box()
-        rectangle.label(text="Numeric Rectangle")
-        rectangle.prop(ui, "rectangle_x_mm")
-        rectangle.prop(ui, "rectangle_y_mm")
-        rectangle.prop(ui, "rectangle_width_mm")
-        rectangle.prop(ui, "rectangle_height_mm")
-        rectangle.operator("parametric_cad.numeric_rectangle")
-        circle = layout.box()
-        circle.label(text="Numeric Circle")
-        circle.prop(ui, "circle_x_mm")
-        circle.prop(ui, "circle_y_mm")
-        circle.prop(ui, "circle_diameter_mm")
-        circle.operator("parametric_cad.numeric_circle")
+        dimensions = layout.box()
+        entity_id = ui.active_sketch_entity_id
+        if rectangle_parameters(sketch, entity_id) is not None:
+            dimensions.label(text="Rectangle Dimensions")
+            dimensions.prop(ui, "rectangle_x_mm")
+            dimensions.prop(ui, "rectangle_y_mm")
+            dimensions.prop(ui, "rectangle_width_mm")
+            dimensions.prop(ui, "rectangle_height_mm")
+            dimensions.operator("parametric_cad.numeric_rectangle", text="Update Rectangle")
+        elif circle_parameters(sketch, entity_id) is not None:
+            dimensions.label(text="Circle Dimensions")
+            dimensions.prop(ui, "circle_x_mm")
+            dimensions.prop(ui, "circle_y_mm")
+            dimensions.prop(ui, "circle_diameter_mm")
+            dimensions.operator("parametric_cad.numeric_circle", text="Update Circle")
+        else:
+            dimensions.label(text="Dimensions")
+            dimensions.label(text="Use Select, then click a Rectangle or Circle.", icon="INFO")
         layout.operator("parametric_cad.clear_sketch", icon="TRASH")
         layout.separator()
         row = layout.row(align=True)

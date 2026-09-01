@@ -43,6 +43,7 @@ def _active_part_changed(self, context):
     self.mode = "IDLE"
     self.active_feature_id = ""
     self.active_sketch_id = ""
+    self.active_sketch_entity_id = ""
 
 
 def _sketch_plane_items(_self, context):
@@ -92,6 +93,7 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
     )
     active_feature_id: StringProperty(default="")
     active_sketch_id: StringProperty(default="")
+    active_sketch_entity_id: StringProperty(default="")
     show_sketches: BoolProperty(
         name="Show Sketches",
         description="Show resolved Sketch geometry outside Sketch Edit",

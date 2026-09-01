@@ -1,6 +1,6 @@
 # Blender Parametric CAD
 
-History-based parametric modeling extension for Blender 5.1.2. Version 0.3.0
+History-based parametric modeling extension for Blender 5.1.2. Version 0.3.1
 implements the M3.5–M3.6 Part Studio, Feature management, precise Sketch, and
 unified Extrude workflows.
 
@@ -11,7 +11,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.3.0.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.3.1.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## Part Studio workflow
@@ -20,12 +20,13 @@ In a 3D View, press `N` and open the **CAD** tab:
 
 1. Use **+** to create a Part Studio.
 2. Create a Sketch on XY, XZ, YZ, or a supported Extrude End Plane.
-3. Draw with the mouse or enter an exact Rectangle (`X`, `Y`, `Width`,
-   `Height`) or Circle (`Center X`, `Center Y`, `Diameter`) in millimeters.
-4. Finish the Sketch. **Show Sketches** keeps resolved Sketch references visible.
-5. Select the Sketch and use one **Extrude** command with **New**, **Add**, or
+3. Draw a Rectangle, Circle, or connected line loop with the mouse.
+4. To edit exact dimensions, use **Select**, click a Rectangle or Circle, then
+   update its millimeter fields. The selected shape is highlighted.
+5. Finish the Sketch. **Show Sketches** keeps resolved Sketch references visible.
+6. Select the Sketch and use one **Extrude** command with **New**, **Add**, or
    **Remove**, plus **Blind** or **Through All** where supported.
-6. Select Features to edit, rename, delete with dependency confirmation,
+7. Select Features to edit, rename, delete with dependency confirmation,
    suppress/unsuppress, or set the rollback point.
 
 The Part Studio selector switches between independent single-body histories.
@@ -40,6 +41,8 @@ Part Studios can be renamed or deleted without relying on Blender object names.
 - Existing saved `CUT` features remain compatible and evaluate as Remove.
 
 Numeric edits update the existing Sketch entities and preserve entity UUIDs.
+Closed line-loop winding is normalized before mesh generation so clockwise and
+counter-clockwise Rectangles and simple polygons use the same Add/Remove path.
 Feature-derived Sketch overlays are resolved from history, so they move with
 semantic `END_PLANE` references after rebuilds.
 

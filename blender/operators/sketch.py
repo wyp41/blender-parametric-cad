@@ -52,21 +52,9 @@ def _begin_edit(context, part, sketch: SketchFeature, is_new: bool) -> None:
     ui.mode = "SKETCH_EDIT"
     ui.active_feature_id = sketch.id
     ui.active_sketch_id = sketch.id
+    ui.active_sketch_entity_id = ""
     ui.sketch_session_new = is_new
     ui.sketch_session_backup = "" if is_new else json.dumps(feature_to_dict(sketch))
-    rectangle = rectangle_parameters(sketch)
-    if rectangle is not None:
-        (
-            ui.rectangle_x_mm,
-            ui.rectangle_y_mm,
-            ui.rectangle_width_mm,
-            ui.rectangle_height_mm,
-        ) = (value * 1000.0 for value in rectangle)
-    circle = circle_parameters(sketch)
-    if circle is not None:
-        ui.circle_x_mm, ui.circle_y_mm, ui.circle_diameter_mm = (
-            value * 1000.0 for value in circle
-        )
     clear_preview()
     _orient_to_plane(context, plane)
     if context.area and context.area.type == "VIEW_3D":
@@ -177,6 +165,7 @@ class PARAMETRIC_CAD_OT_finish_sketch(bpy.types.Operator):
         document = load_document_from_scene(context.scene)
         save_document_to_scene(context.scene, document)
         ui.mode = "FEATURE_EDIT"
+        ui.active_sketch_entity_id = ""
         ui.sketch_session_new = False
         ui.sketch_session_backup = ""
         clear_preview()
@@ -208,6 +197,7 @@ class PARAMETRIC_CAD_OT_cancel_sketch(bpy.types.Operator):
             save_document_to_scene(context.scene, document)
         ui.mode = "IDLE"
         ui.active_sketch_id = ""
+        ui.active_sketch_entity_id = ""
         ui.sketch_session_new = False
         ui.sketch_session_backup = ""
         clear_preview()
@@ -229,6 +219,7 @@ class PARAMETRIC_CAD_OT_clear_sketch(bpy.types.Operator):
         if not isinstance(sketch, SketchFeature):
             return {"CANCELLED"}
         sketch.entities.clear()
+        ui.active_sketch_entity_id = ""
         save_document_to_scene(context.scene, document)
         tag_redraw()
         return {"FINISHED"}
@@ -236,7 +227,7 @@ class PARAMETRIC_CAD_OT_clear_sketch(bpy.types.Operator):
 
 class PARAMETRIC_CAD_OT_numeric_rectangle(bpy.types.Operator):
     bl_idname = "parametric_cad.numeric_rectangle"
-    bl_label = "Add / Update Rectangle"
+    bl_label = "Update Rectangle"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -253,6 +244,7 @@ class PARAMETRIC_CAD_OT_numeric_rectangle(bpy.types.Operator):
                 ui.rectangle_y_mm / 1000.0,
                 ui.rectangle_width_mm / 1000.0,
                 ui.rectangle_height_mm / 1000.0,
+                ui.active_sketch_entity_id or None,
             )
         except ValueError as exc:
             self.report({"ERROR"}, str(exc))
@@ -264,7 +256,7 @@ class PARAMETRIC_CAD_OT_numeric_rectangle(bpy.types.Operator):
 
 class PARAMETRIC_CAD_OT_numeric_circle(bpy.types.Operator):
     bl_idname = "parametric_cad.numeric_circle"
-    bl_label = "Add / Update Circle"
+    bl_label = "Update Circle"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -280,6 +272,7 @@ class PARAMETRIC_CAD_OT_numeric_circle(bpy.types.Operator):
                 ui.circle_x_mm / 1000.0,
                 ui.circle_y_mm / 1000.0,
                 ui.circle_diameter_mm / 1000.0,
+                ui.active_sketch_entity_id or None,
             )
         except ValueError as exc:
             self.report({"ERROR"}, str(exc))

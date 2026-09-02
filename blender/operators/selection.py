@@ -8,7 +8,7 @@ import bpy
 from bpy_extras import view3d_utils
 
 from ...core.references import TopoReference
-from ..adapter import load_document_from_scene, rebuild_part
+from ..adapter import load_document_from_scene, rebuild_part, sync_active_part_from_object
 from ..viewport.sketch_overlay import (
     clear_face_selection,
     set_face_hover,
@@ -38,6 +38,10 @@ def _raycast(context, event):
     )
     if not hit or obj is None:
         return None
+    # Picking a generated object is an explicit Part Studio transition.  This
+    # prevents face references from being resolved against whichever studio
+    # happened to be active before the click.
+    sync_active_part_from_object(context.scene, obj)
     active_part = load_document_from_scene(context.scene).active_part
     if active_part is None or obj.get("cad_part_id") != active_part.id:
         return obj, polygon_index, None

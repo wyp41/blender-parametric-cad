@@ -173,9 +173,10 @@ class RebuildTests(unittest.TestCase):
 
         self.assertFalse(result.success)
         self.assertEqual(extrude.status, "SUPPRESSED")
-        self.assertEqual(hole.status, "NOT_EVALUATED")
+        self.assertEqual(hole.status, "ERROR")
         self.assertIn("dependency", hole.error_message.lower())
-        self.assertEqual(cut.status, "NOT_EVALUATED")
+        self.assertEqual(cut.status, "BLOCKED")
+        self.assertIn("blocked", cut.error_message.lower())
 
     def test_cut_error_keeps_last_valid_body(self) -> None:
         backend = RecordingBackend()

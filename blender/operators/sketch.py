@@ -9,6 +9,7 @@ import bpy
 
 from ...core.serialization import feature_from_dict, feature_to_dict
 from ...core.references import TopoReference
+from ...sketch.entities import SketchCircle
 from ...sketch.numeric import (
     arc_parameters,
     circle_parameters,
@@ -60,6 +61,8 @@ def _begin_edit(context, part, sketch: SketchFeature, is_new: bool) -> None:
     ui.active_feature_id = sketch.id
     ui.active_sketch_id = sketch.id
     ui.active_sketch_entity_id = ""
+    ui.active_sketch_entity_ids = "[]"
+    ui.sketch_dirty = False
     ui.sketch_session_new = is_new
     ui.sketch_session_backup = "" if is_new else json.dumps(feature_to_dict(sketch))
     clear_preview()
@@ -159,10 +162,12 @@ class PARAMETRIC_CAD_OT_edit_sketch(bpy.types.Operator):
     bl_label = "Edit Sketch"
     bl_options = {"REGISTER", "UNDO"}
 
+    feature_id: bpy.props.StringProperty(options={"HIDDEN"})
+
     def execute(self, context):
         document = load_document_from_scene(context.scene)
         part = document.active_part
-        feature_id = context.scene.parametric_cad_ui.active_feature_id
+        feature_id = self.feature_id or context.scene.parametric_cad_ui.active_feature_id
         sketch = part.get_feature(feature_id) if part else None
         if not isinstance(sketch, SketchFeature):
             self.report({"ERROR"}, "Select a Sketch feature")
@@ -184,16 +189,53 @@ class PARAMETRIC_CAD_OT_finish_sketch(bpy.types.Operator):
         ui = context.scene.parametric_cad_ui
         document = load_document_from_scene(context.scene)
         save_document_to_scene(context.scene, document)
-        ui.mode = "FEATURE_EDIT"
-        ui.active_sketch_entity_id = ""
-        ui.sketch_session_new = False
-        ui.sketch_session_backup = ""
         clear_preview()
         part = document.active_part
+        result = None
         if part:
             result = rebuild_part(context.scene, part.id)
             if not result.success and result.errors:
                 self.report({"WARNING"}, result.errors[0].message)
+        if result is None or result.success:
+            ui.mode = "FEATURE_EDIT"
+            ui.active_sketch_entity_id = ""
+            ui.active_sketch_entity_ids = "[]"
+            ui.sketch_session_new = False
+            ui.sketch_session_backup = ""
+            ui.sketch_dirty = False
+        else:
+            # Keep the edit session alive so the user can repair the Sketch;
+            # rebuild_part has already preserved the last valid result mesh.
+            ui.mode = "SKETCH_EDIT"
+            ui.sketch_dirty = True
+        tag_redraw()
+        return {"FINISHED"}
+
+
+class PARAMETRIC_CAD_OT_apply_sketch(bpy.types.Operator):
+    bl_idname = "parametric_cad.apply_sketch"
+    bl_label = "Apply & Rebuild"
+    bl_description = "Save Sketch dimensions and rebuild the Part Studio now"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        scene = context.scene
+        ui = scene.parametric_cad_ui
+        document = load_document_from_scene(scene)
+        part = document.active_part
+        sketch = part.get_feature(ui.active_sketch_id) if part else None
+        if not isinstance(sketch, SketchFeature):
+            self.report({"ERROR"}, "The active Sketch is unavailable")
+            return {"CANCELLED"}
+        save_document_to_scene(scene, document)
+        result = rebuild_part(scene, part.id)
+        if not result.success:
+            message = result.errors[0].message if result.errors else "Part rebuild failed"
+            ui.sketch_dirty = True
+            self.report({"ERROR"}, message)
+            return {"CANCELLED"}
+        ui.sketch_dirty = False
+        self.report({"INFO"}, "Sketch applied and Part Studio rebuilt.")
         tag_redraw()
         return {"FINISHED"}
 
@@ -218,8 +260,10 @@ class PARAMETRIC_CAD_OT_cancel_sketch(bpy.types.Operator):
         ui.mode = "IDLE"
         ui.active_sketch_id = ""
         ui.active_sketch_entity_id = ""
+        ui.active_sketch_entity_ids = "[]"
         ui.sketch_session_new = False
         ui.sketch_session_backup = ""
+        ui.sketch_dirty = False
         clear_preview()
         tag_redraw()
         return {"FINISHED"}
@@ -241,7 +285,10 @@ class PARAMETRIC_CAD_OT_clear_sketch(bpy.types.Operator):
         sketch.entities.clear()
         sketch.deleted_regions.clear()
         ui.active_sketch_entity_id = ""
+        ui.active_sketch_entity_ids = "[]"
+        ui.sketch_dirty = True
         save_document_to_scene(context.scene, document)
+        ui.sketch_dirty = True
         tag_redraw()
         return {"FINISHED"}
 
@@ -271,6 +318,7 @@ class PARAMETRIC_CAD_OT_numeric_rectangle(bpy.types.Operator):
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
         save_document_to_scene(context.scene, document)
+        ui.sketch_dirty = True
         tag_redraw()
         return {"FINISHED"}
 
@@ -299,6 +347,51 @@ class PARAMETRIC_CAD_OT_numeric_circle(bpy.types.Operator):
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
         save_document_to_scene(context.scene, document)
+        ui.sketch_dirty = True
+        tag_redraw()
+        return {"FINISHED"}
+
+
+class PARAMETRIC_CAD_OT_numeric_circle_group(bpy.types.Operator):
+    bl_idname = "parametric_cad.numeric_circle_group"
+    bl_label = "Apply Circle Group"
+    bl_description = "Apply one diameter to all selected Sketch circles and rebuild"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        scene = context.scene
+        ui = scene.parametric_cad_ui
+        document = load_document_from_scene(scene)
+        part = document.active_part
+        sketch = part.get_feature(ui.active_sketch_id) if part else None
+        if not isinstance(sketch, SketchFeature):
+            return {"CANCELLED"}
+        try:
+            entity_ids = json.loads(ui.active_sketch_entity_ids or "[]")
+        except (TypeError, ValueError):
+            entity_ids = []
+        circles = [
+            entity
+            for entity in sketch.entities
+            if entity.id in entity_ids and isinstance(entity, SketchCircle)
+        ]
+        if len(circles) < 2:
+            self.report({"ERROR"}, "Select at least two circles for a group edit.")
+            return {"CANCELLED"}
+        diameter = ui.circle_diameter_mm / 1000.0
+        if diameter <= 0.0:
+            self.report({"ERROR"}, "Circle Diameter must be greater than zero.")
+            return {"CANCELLED"}
+        for circle in circles:
+            circle.radius = diameter / 2.0
+        save_document_to_scene(scene, document)
+        result = rebuild_part(scene, part.id)
+        if not result.success:
+            ui.sketch_dirty = True
+            self.report({"ERROR"}, result.errors[0].message if result.errors else "Part rebuild failed")
+            return {"CANCELLED"}
+        ui.sketch_dirty = False
+        self.report({"INFO"}, f"Updated {len(circles)} circles and rebuilt the Part Studio.")
         tag_redraw()
         return {"FINISHED"}
 
@@ -332,6 +425,7 @@ class PARAMETRIC_CAD_OT_numeric_arc(bpy.types.Operator):
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
         save_document_to_scene(context.scene, document)
+        ui.sketch_dirty = True
         tag_redraw()
         return {"FINISHED"}
 
@@ -341,9 +435,11 @@ CLASSES = (
     PARAMETRIC_CAD_OT_new_sketch,
     PARAMETRIC_CAD_OT_edit_sketch,
     PARAMETRIC_CAD_OT_finish_sketch,
+    PARAMETRIC_CAD_OT_apply_sketch,
     PARAMETRIC_CAD_OT_cancel_sketch,
     PARAMETRIC_CAD_OT_clear_sketch,
     PARAMETRIC_CAD_OT_numeric_rectangle,
     PARAMETRIC_CAD_OT_numeric_circle,
     PARAMETRIC_CAD_OT_numeric_arc,
+    PARAMETRIC_CAD_OT_numeric_circle_group,
 )

@@ -1,7 +1,7 @@
 # Blender Parametric CAD API
 
 This reference describes the public API in the Blender Parametric CAD
-extension (current extension release 0.10.0). It covers both direct Python
+extension (current extension release 0.11.0). It covers both direct Python
 scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
 
 ## MCP bridge
@@ -39,7 +39,7 @@ The MCP tools are:
 
 | Group | Tools |
 | --- | --- |
-| Document | `cad_status`, `cad_create_part`, `cad_set_active_part`, `cad_delete_part`, `cad_save_scene` |
+| Document | `cad_status`, `cad_create_part`, `cad_set_active_part`, `cad_delete_part`, `cad_validate_document`, `cad_save_scene` |
 | Sketch | `cad_create_sketch`, `cad_add_geometry`, `cad_update_geometry`, `cad_delete_geometry`, `cad_profile`, `cad_delete_region`, `cad_restore_region` |
 | Features | `cad_create_extrude`, `cad_create_revolve`, `cad_update_feature`, `cad_delete_feature`, `cad_suppress_feature`, `cad_rollback`, `cad_rebuild` |
 | Output | `cad_export_part` |
@@ -138,7 +138,9 @@ and its Part Studio UUID in `cad_part_id`.
 - UI state fields ending in `_mm` and `_deg` use millimeters and degrees.
 - Every `Feature`, `Part`, and `SketchEntity` has a UUID. Keep references by
   UUID, never by Blender object name or mesh polygon index.
-- Feature status values are `NOT_EVALUATED`, `OK`, `ERROR`, and `SUPPRESSED`.
+- Feature status values are `NOT_EVALUATED`, `OK`, `ERROR`, `BLOCKED`, and
+  `SUPPRESSED`.  When a rebuild fails, the generated viewport result is left
+  untouched; downstream features are marked `BLOCKED` with the upstream reason.
 
 ## Add-on and scene bridge
 
@@ -154,18 +156,30 @@ The extension should normally be enabled through Blender first; do not call
 
 ```python
 from blender_parametric_cad.blender.adapter import (
+    CadDocumentError,
+    addon_enabled,
     load_document_from_scene,
     save_document_to_scene,
     rebuild_part,
     export_part,
     remove_part_geometry,
     rename_part_geometry,
+    sync_active_part_from_object,
+    validate_cad_document,
 )
 ```
 
-- `load_document_from_scene(scene) -> CadDocument`
+- `addon_enabled() -> bool`
+- `load_document_from_scene(scene) -> CadDocument`; raises `CadDocumentError`
+  with an actionable enable/re-enable message when the extension is missing,
+  scene JSON is invalid, or schema/UUID validation fails.
 - `save_document_to_scene(scene, document) -> None`
 - `rebuild_part(scene, part_id=None) -> EvaluationResult`
+- `sync_active_part_from_object(scene, object) -> str | None`; uses a generated
+  object's `cad_part_id` to switch the persistent active Part Studio.
+- `validate_cad_document(scene) -> list[str]`; read-only checks for dangling
+  dependencies, invalid Sketch/profile sources, failed features, and empty
+  generated results.
 - `remove_part_geometry(part_id) -> None`
 - `rename_part_geometry(part_id, part_name) -> None`
 - `export_part(scene, part_id, filepath, file_format="STL") -> str`
@@ -187,6 +201,12 @@ path = export_part(
     "STL",
 )
 ```
+
+Generated `*_Result` objects are disposable outputs and are treated as
+read-only. If one is selected, the CAD panel offers **Edit CAD History**; a
+double-click enters the source Sketch when the terminal Feature has one.
+Editing a result mesh directly and then rebuilding is rejected so those edits
+cannot be silently lost.
 
 ## Persistent document model
 
@@ -374,6 +394,11 @@ sketch.deleted_regions.append(regions[index].region_id)
 The region ID is derived from the sorted boundary UUIDs. To restore it, remove
 that ID from `deleted_regions`. If geometry is removed or replaced, clear stale
 region IDs before detecting again.
+
+The Blender Sketch panel shows dimensions after selecting a Circle, Rectangle,
+or Arc (the Sketch row itself has a direct edit button). Numeric edits are
+marked dirty until **Apply & Rebuild** or **Finish Sketch** succeeds. Shift-
+selecting circles exposes an overall diameter group edit.
 
 Supported profiles are circles, simple polygons, mixed line/arc loops, multiple
 closed loops, and split closed boundaries. Open, branching, self-intersecting,

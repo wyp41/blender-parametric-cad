@@ -46,6 +46,11 @@ class BlenderCadWorker:
                 status = self._bpy.ops.wm.open_mainfile(filepath=str(path))
                 if "FINISHED" not in status:
                     raise WorkerError(f"Could not open Blender file: {path}")
+        # Rehydrate generated results and validate the restored document even
+        # in MCP-only sessions where the interactive add-on UI is not loaded.
+        from blender_parametric_cad.blender import adapter
+
+        adapter.register_handlers()
 
     @staticmethod
     def _load_blender_runtime():
@@ -90,6 +95,7 @@ class BlenderCadWorker:
             "cad_suppress_feature": self._suppress_feature,
             "cad_rollback": self._rollback,
             "cad_rebuild": self._rebuild,
+            "cad_validate_document": self._validate_document,
             "cad_export_part": self._export_part,
             "cad_save_scene": self._save_scene,
         }
@@ -332,7 +338,11 @@ class BlenderCadWorker:
         sketch.entities.extend(created)
         sketch.deleted_regions.clear()
         self._save_document(document)
-        return {"sketch_id": sketch.id, "entities": [entity_to_dict(item) for item in created]}
+        return {
+            "sketch_id": sketch.id,
+            "entities": [entity_to_dict(item) for item in created],
+            "rebuild": self._rebuild_payload(_part.id),
+        }
 
     def _update_geometry(self, arguments: dict[str, Any]) -> dict[str, Any]:
         from blender_parametric_cad.core.serialization import entity_to_dict
@@ -382,7 +392,11 @@ class BlenderCadWorker:
             entity.construction = bool(geometry["construction"])
         sketch.deleted_regions.clear()
         self._save_document(document)
-        return {"sketch_id": sketch.id, "entity": entity_to_dict(entity)}
+        return {
+            "sketch_id": sketch.id,
+            "entity": entity_to_dict(entity),
+            "rebuild": self._rebuild_payload(_part.id),
+        }
 
     def _delete_geometry(self, arguments: dict[str, Any]) -> dict[str, Any]:
         from blender_parametric_cad.core.serialization import entity_to_dict
@@ -400,7 +414,11 @@ class BlenderCadWorker:
         sketch.entities = [entity for entity in sketch.entities if entity.id not in wanted]
         sketch.deleted_regions.clear()
         self._save_document(document)
-        return {"sketch_id": sketch.id, "deleted": [entity_to_dict(item) for item in removed]}
+        return {
+            "sketch_id": sketch.id,
+            "deleted": [entity_to_dict(item) for item in removed],
+            "rebuild": self._rebuild_payload(_part.id),
+        }
 
     @staticmethod
     def _loop_payload(loop, deleted: set[str]) -> dict[str, Any]:
@@ -473,7 +491,9 @@ class BlenderCadWorker:
         if region_id not in sketch.deleted_regions:
             sketch.deleted_regions.append(region_id)
         self._save_document(document)
-        return self._profile({"sketch_id": sketch.id})
+        result = self._profile({"sketch_id": sketch.id})
+        result["rebuild"] = self._rebuild_payload(_part.id)
+        return result
 
     def _restore_region(self, arguments: dict[str, Any]) -> dict[str, Any]:
         document = self._document()
@@ -482,7 +502,9 @@ class BlenderCadWorker:
         if region_id in sketch.deleted_regions:
             sketch.deleted_regions.remove(region_id)
         self._save_document(document)
-        return self._profile({"sketch_id": sketch.id})
+        result = self._profile({"sketch_id": sketch.id})
+        result["rebuild"] = self._rebuild_payload(_part.id)
+        return result
 
     @staticmethod
     def _previous_body_feature(part, before_index: int):
@@ -789,6 +811,12 @@ class BlenderCadWorker:
         document = self._document()
         part = self._part(document, arguments)
         return self._rebuild_payload(part.id)
+
+    def _validate_document(self, _arguments: dict[str, Any]) -> dict[str, Any]:
+        from blender_parametric_cad.blender.adapter import validate_cad_document
+
+        diagnostics = validate_cad_document(self.scene)
+        return {"valid": not diagnostics, "diagnostics": diagnostics}
 
     def _export_part(self, arguments: dict[str, Any]) -> dict[str, Any]:
         from blender_parametric_cad.blender.adapter import export_part

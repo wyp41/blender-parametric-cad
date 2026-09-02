@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from math import atan2, cos, degrees, hypot, pi, sin
+from types import SimpleNamespace
 
 import bpy
 
@@ -68,7 +70,10 @@ class _ModalSketchTool:
             stored = part.get_feature(sketch.id) if part else None
             if isinstance(stored, SketchFeature):
                 self._commit(stored, self.first_point, point)
-                context.scene.parametric_cad_ui.active_sketch_entity_id = ""
+                ui = context.scene.parametric_cad_ui
+                ui.active_sketch_entity_id = ""
+                ui.active_sketch_entity_ids = "[]"
+                ui.sketch_dirty = True
                 save_document_to_scene(context.scene, document)
             self._finish(context)
             return {"FINISHED"}
@@ -244,7 +249,10 @@ class PARAMETRIC_CAD_OT_draw_arc(_ModalSketchTool, bpy.types.Operator):
             stored = part.get_feature(sketch.id) if part else None
             if isinstance(stored, SketchFeature):
                 self._commit(stored, self.center, self.start, point)
-                context.scene.parametric_cad_ui.active_sketch_entity_id = ""
+                ui = context.scene.parametric_cad_ui
+                ui.active_sketch_entity_id = ""
+                ui.active_sketch_entity_ids = "[]"
+                ui.sketch_dirty = True
                 save_document_to_scene(context.scene, document)
             self._finish(context)
             return {"FINISHED"}
@@ -307,50 +315,14 @@ class PARAMETRIC_CAD_OT_select_tool(bpy.types.Operator):
         point = screen_to_sketch(context, event, sketch)
         if point is None:
             return {"RUNNING_MODAL"}
-        entities = [entity for entity in sketch.entities if not entity.construction]
-        entity = min(entities, key=lambda item: self._distance(item, point), default=None)
-        if entity is None or self._distance(entity, point) > 0.002:
+        entity = _nearest_entity(sketch, point)
+        if entity is None or self._distance(entity, point) > _selection_tolerance(
+            context, event, sketch
+        ):
             return {"RUNNING_MODAL"}
-        if isinstance(entity, SketchCircle):
-            parameters = circle_parameters(sketch, entity.id)
-            ui.active_sketch_entity_id = entity.id
-            ui.circle_x_mm, ui.circle_y_mm, ui.circle_diameter_mm = (
-                value * 1000.0 for value in parameters
-            )
-        elif isinstance(entity, SketchLine):
-            parameters = rectangle_parameters(sketch, entity.id)
-            if parameters is None:
-                ui.active_sketch_entity_id = entity.id
-                self.report({"INFO"}, "Selected individual SketchLine geometry.")
-                context.area.header_text_set(None)
-                tag_redraw()
-                return {"FINISHED"}
-            ui.active_sketch_entity_id = entity.id
-            (
-                ui.rectangle_x_mm,
-                ui.rectangle_y_mm,
-                ui.rectangle_width_mm,
-                ui.rectangle_height_mm,
-            ) = (value * 1000.0 for value in parameters)
-        elif isinstance(entity, SketchArc):
-            parameters = arc_parameters(sketch, entity.id)
-            if parameters is None:
-                return {"RUNNING_MODAL"}
-            ui.active_sketch_entity_id = entity.id
-            (
-                ui.arc_x_mm,
-                ui.arc_y_mm,
-                ui.arc_radius_mm,
-                ui.arc_start_deg,
-                ui.arc_end_deg,
-            ) = (
-                parameters[0] * 1000.0,
-                parameters[1] * 1000.0,
-                parameters[2] * 1000.0,
-                degrees(parameters[3]),
-                degrees(parameters[4]),
-            )
-        else:
+        if not _select_entity_dimensions(
+            ui, sketch, entity, extend=getattr(event, "shift", False)
+        ):
             return {"RUNNING_MODAL"}
         context.area.header_text_set(None)
         tag_redraw()
@@ -359,6 +331,56 @@ class PARAMETRIC_CAD_OT_select_tool(bpy.types.Operator):
     @staticmethod
     def _distance(entity, point):
         return _entity_distance(entity, point)
+
+
+class PARAMETRIC_CAD_OT_edit_sketch_geometry(bpy.types.Operator):
+    """Select Sketch geometry from a double-click and expose its dimensions."""
+
+    bl_idname = "parametric_cad.edit_sketch_geometry"
+    bl_label = "Edit Sketch Geometry"
+    bl_description = "Double-click a circle, rectangle, arc, or line to edit it"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def invoke(self, context, event):
+        ui = getattr(context.scene, "parametric_cad_ui", None)
+        if (
+            ui is None
+            or context.area is None
+            or context.area.type != "VIEW_3D"
+        ):
+            return {"CANCELLED"}
+        document = load_document_from_scene(context.scene)
+        part = document.active_part
+        sketch = part.get_feature(ui.active_sketch_id) if part and ui.active_sketch_id else None
+        if not isinstance(sketch, SketchFeature) and ui.mode != "SKETCH_EDIT":
+            candidate = part.get_feature(ui.active_feature_id) if part else None
+            if isinstance(candidate, SketchFeature):
+                from .sketch import _begin_edit
+
+                try:
+                    _begin_edit(context, part, candidate, False)
+                except Exception:
+                    return {"CANCELLED"}
+                sketch = candidate
+        if not isinstance(sketch, SketchFeature):
+            return {"CANCELLED"}
+        try:
+            sketch.apply_resolved_plane(resolve_sketch_plane_from_history(part, sketch.id))
+        except PlaneResolutionError:
+            return {"CANCELLED"}
+        point = screen_to_sketch(context, event, sketch)
+        if point is None:
+            return {"CANCELLED"}
+        entity = _nearest_entity(sketch, point)
+        if entity is None or _entity_distance(entity, point) > _selection_tolerance(
+            context, event, sketch
+        ):
+            return {"CANCELLED"}
+        if not _select_entity_dimensions(ui, sketch, entity, extend=False):
+            return {"CANCELLED"}
+        context.area.header_text_set(None)
+        tag_redraw()
+        return {"FINISHED"}
 
 
 class PARAMETRIC_CAD_OT_delete_region(_ModalSketchTool, bpy.types.Operator):
@@ -403,7 +425,10 @@ class PARAMETRIC_CAD_OT_delete_region(_ModalSketchTool, bpy.types.Operator):
             self._finish(context)
             return {"CANCELLED"}
         stored.deleted_regions.append(region.region_id)
-        context.scene.parametric_cad_ui.active_sketch_entity_id = ""
+        ui = context.scene.parametric_cad_ui
+        ui.active_sketch_entity_id = ""
+        ui.active_sketch_entity_ids = "[]"
+        ui.sketch_dirty = True
         save_document_to_scene(context.scene, document)
         self.report({"INFO"}, "Sketch region deleted from Extrude/Revolve profiles.")
         self._finish(context)
@@ -445,6 +470,8 @@ class PARAMETRIC_CAD_OT_delete_geometry(_ModalSketchTool, bpy.types.Operator):
                 return {"CANCELLED"}
             _remove_entity(stored, entity.id)
             ui.active_sketch_entity_id = ""
+            ui.active_sketch_entity_ids = "[]"
+            ui.sketch_dirty = True
             save_document_to_scene(context.scene, document)
             self.report({"INFO"}, f"Deleted {entity.entity_type.title()} geometry.")
             clear_preview()
@@ -465,7 +492,9 @@ class PARAMETRIC_CAD_OT_delete_geometry(_ModalSketchTool, bpy.types.Operator):
         if point is None or sketch is None:
             return {"RUNNING_MODAL"}
         entity = _nearest_entity(sketch, point)
-        if entity is None or _entity_distance(entity, point) > 0.002:
+        if entity is None or _entity_distance(entity, point) > _selection_tolerance(
+            context, event, sketch
+        ):
             self.report({"INFO"}, "Click a line, circle, or arc to delete it.")
             self._finish(context)
             return {"FINISHED"}
@@ -476,7 +505,10 @@ class PARAMETRIC_CAD_OT_delete_geometry(_ModalSketchTool, bpy.types.Operator):
             self._finish(context)
             return {"CANCELLED"}
         _remove_entity(stored, entity.id)
-        context.scene.parametric_cad_ui.active_sketch_entity_id = ""
+        ui = context.scene.parametric_cad_ui
+        ui.active_sketch_entity_id = ""
+        ui.active_sketch_entity_ids = "[]"
+        ui.sketch_dirty = True
         save_document_to_scene(context.scene, document)
         self.report({"INFO"}, f"Deleted {entity.entity_type.title()} geometry.")
         self._finish(context)
@@ -560,6 +592,83 @@ def _nearest_entity(sketch: SketchFeature, point):
     )
 
 
+def _select_entity_dimensions(ui, sketch: SketchFeature, entity, extend=False) -> bool:
+    """Populate transient dimension fields for the selected geometry."""
+
+    if extend and isinstance(entity, SketchCircle):
+        try:
+            selected = json.loads(ui.active_sketch_entity_ids or "[]")
+        except (TypeError, ValueError):
+            selected = []
+        selected = [item for item in selected if isinstance(item, str)]
+        if entity.id not in selected:
+            selected.append(entity.id)
+        ui.active_sketch_entity_ids = json.dumps(selected, separators=(",", ":"))
+    else:
+        ui.active_sketch_entity_ids = json.dumps([entity.id])
+
+    if isinstance(entity, SketchCircle):
+        parameters = circle_parameters(sketch, entity.id)
+        if parameters is None:
+            return False
+        ui.active_sketch_entity_id = entity.id
+        ui.circle_x_mm, ui.circle_y_mm, ui.circle_diameter_mm = (
+            value * 1000.0 for value in parameters
+        )
+        return True
+    if isinstance(entity, SketchLine):
+        parameters = rectangle_parameters(sketch, entity.id)
+        ui.active_sketch_entity_id = entity.id
+        if parameters is None:
+            return True
+        (
+            ui.rectangle_x_mm,
+            ui.rectangle_y_mm,
+            ui.rectangle_width_mm,
+            ui.rectangle_height_mm,
+        ) = (value * 1000.0 for value in parameters)
+        return True
+    if isinstance(entity, SketchArc):
+        parameters = arc_parameters(sketch, entity.id)
+        if parameters is None:
+            return False
+        ui.active_sketch_entity_id = entity.id
+        (
+            ui.arc_x_mm,
+            ui.arc_y_mm,
+            ui.arc_radius_mm,
+            ui.arc_start_deg,
+            ui.arc_end_deg,
+        ) = (
+            parameters[0] * 1000.0,
+            parameters[1] * 1000.0,
+            parameters[2] * 1000.0,
+            degrees(parameters[3]),
+            degrees(parameters[4]),
+        )
+        return True
+    return False
+
+
+def _selection_tolerance(context, event, sketch) -> float:
+    """Convert a small, zoom-independent screen radius to sketch units."""
+
+    try:
+        point = screen_to_sketch(context, event, sketch)
+        if point is None:
+            return 0.002
+        pixel_event = SimpleNamespace(
+            mouse_region_x=event.mouse_region_x + 8.0,
+            mouse_region_y=event.mouse_region_y,
+        )
+        offset = screen_to_sketch(context, pixel_event, sketch)
+        if offset is not None:
+            return max(hypot(offset[0] - point[0], offset[1] - point[1]), 1e-6)
+    except (AttributeError, RuntimeError, TypeError, ValueError):
+        pass
+    return 0.002
+
+
 def _remove_entity(sketch: SketchFeature, entity_id: str) -> None:
     sketch.entities = [item for item in sketch.entities if item.id != entity_id]
     # Region IDs contain boundary UUIDs, so any geometry edit invalidates old
@@ -605,6 +714,7 @@ def _split_line_at_point(sketch: SketchFeature, point) -> None:
 
 CLASSES = (
     PARAMETRIC_CAD_OT_select_tool,
+    PARAMETRIC_CAD_OT_edit_sketch_geometry,
     PARAMETRIC_CAD_OT_draw_line,
     PARAMETRIC_CAD_OT_draw_rectangle,
     PARAMETRIC_CAD_OT_draw_circle,

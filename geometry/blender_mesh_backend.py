@@ -241,9 +241,80 @@ class BlenderMeshBackend(GeometryBackend):
                 bpy.data.meshes.remove(tool)
         if result is None:
             raise ValueError(f"Blender Boolean {operation.title()} failed.")
+        # An ADD must produce one real solid.  Blender's Boolean modifier can
+        # report success for disjoint inputs while leaving multiple islands in
+        # the output; accepting that mesh makes a Part Studio look like one
+        # part while it is actually an assembly of disconnected bodies.
+        if operation == "UNION":
+            try:
+                self._validate_union_result(result)
+            except Exception:
+                if result.users == 0:
+                    bpy.data.meshes.remove(result)
+                raise
         if body.users == 0:
             bpy.data.meshes.remove(body)
         return result
+
+    @staticmethod
+    def _validate_union_result(mesh: bpy.types.Mesh) -> None:
+        """Reject empty, disconnected, non-manifold, or zero-volume ADDs."""
+
+        if len(mesh.vertices) == 0 or len(mesh.polygons) == 0:
+            raise ValueError("Boolean Add produced an empty mesh.")
+
+        edge_faces: dict[tuple[int, int], list[int]] = {}
+        for face_index, polygon in enumerate(mesh.polygons):
+            if len(polygon.vertices) < 3:
+                raise ValueError("Boolean Add produced a degenerate face.")
+            vertices = tuple(polygon.vertices)
+            for index, vertex_index in enumerate(vertices):
+                edge = tuple(sorted((vertex_index, vertices[(index + 1) % len(vertices)])))
+                edge_faces.setdefault(edge, []).append(face_index)
+
+        face_neighbors: dict[int, set[int]] = {}
+        for faces in edge_faces.values():
+            for face_index in faces:
+                face_neighbors.setdefault(face_index, set()).update(
+                    neighbor for neighbor in faces if neighbor != face_index
+                )
+
+        components = 0
+        visited: set[int] = set()
+        for start in range(len(mesh.polygons)):
+            if start in visited:
+                continue
+            components += 1
+            stack = [start]
+            visited.add(start)
+            while stack:
+                face_index = stack.pop()
+                for neighbor in face_neighbors.get(face_index, ()):
+                    if neighbor not in visited:
+                        visited.add(neighbor)
+                        stack.append(neighbor)
+        if components != 1:
+            raise ValueError(
+                f"Boolean Add must produce one connected solid; found {components} components."
+            )
+
+        import bmesh
+
+        bmesh_data = bmesh.new()
+        try:
+            bmesh_data.from_mesh(mesh)
+            if len(bmesh_data.verts) == 0 or len(bmesh_data.faces) == 0:
+                raise ValueError("Boolean Add produced an empty mesh.")
+            if any(edge.is_wire or not edge.is_manifold for edge in bmesh_data.edges):
+                raise ValueError("Boolean Add produced a non-manifold solid.")
+            try:
+                volume = abs(float(bmesh_data.calc_volume(signed=False)))
+            except TypeError:
+                volume = abs(float(bmesh_data.calc_volume()))
+            if volume <= 1e-12:
+                raise ValueError("Boolean Add produced a zero-volume solid.")
+        finally:
+            bmesh_data.free()
 
     def _create_prism(
         self,

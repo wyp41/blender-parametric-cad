@@ -9,7 +9,7 @@ import bpy
 from ...core.references import TopoReference
 from ...sketch.sketch import SketchFeature
 from ...sketch.numeric import arc_parameters, circle_parameters, rectangle_parameters
-from ..adapter import load_document_from_scene
+from ..adapter import CadDocumentError, load_document_from_scene
 from .feature_tree import draw_feature_tree, draw_selected_feature
 
 
@@ -25,18 +25,20 @@ class PARAMETRIC_CAD_PT_main(bpy.types.Panel):
         layout.use_property_split = True
         layout.use_property_decorate = False
         scene = context.scene
-        ui = scene.parametric_cad_ui
         try:
             document = load_document_from_scene(scene)
-        except (ValueError, TypeError) as exc:
+        except CadDocumentError as exc:
             layout.label(text="CAD document could not be loaded", icon="ERROR")
             layout.label(text=str(exc))
+            return
+        ui = getattr(scene, "parametric_cad_ui", None)
+        if ui is None:
+            layout.label(text="Blender Parametric CAD is not enabled", icon="ERROR")
+            layout.label(text="Enable the extension, then reopen this file.")
             return
 
         studio = layout.box()
         studio.label(text="Part Studio", icon="MESH_CUBE")
-        if document.active_part_id and ui.active_part_id != document.active_part_id:
-            ui.active_part_id = document.active_part_id
         row = studio.row(align=True)
         row.prop(ui, "active_part_id", text="")
         row.operator("parametric_cad.new_part", text="", icon="ADD")
@@ -44,6 +46,28 @@ class PARAMETRIC_CAD_PT_main(bpy.types.Panel):
         if part is None:
             studio.label(text="Create a Part Studio to begin.", icon="INFO")
             return
+        runtime_error = scene.get("parametric_cad_runtime_error")
+        if runtime_error:
+            error = layout.box()
+            error.alert = True
+            error.label(text="CAD status", icon="ERROR")
+            error.label(text=str(runtime_error))
+        layout.operator(
+            "parametric_cad.validate_document",
+            text="Validate CAD Document",
+            icon="CHECKMARK",
+        )
+
+        active_object = getattr(context.view_layer.objects, "active", None)
+        if active_object is not None and active_object.get("cad_generated"):
+            warning = layout.box()
+            warning.label(text="Generated result mesh (read-only)", icon="LOCKED")
+            warning.label(text="Edit CAD History to change the source Sketch/Feature.")
+            warning.operator(
+                "parametric_cad.edit_cad_history",
+                text="Edit CAD History",
+                icon="GREASEPENCIL",
+            )
         row = studio.row(align=True)
         row.operator("parametric_cad.rename_part", text="Rename", icon="GREASEPENCIL")
         delete = row.operator("parametric_cad.delete_part", text="Delete", icon="TRASH")
@@ -123,7 +147,12 @@ class PARAMETRIC_CAD_PT_sketch_tools(bpy.types.Panel):
         layout.use_property_split = True
         layout.use_property_decorate = False
         ui = context.scene.parametric_cad_ui
-        document = load_document_from_scene(context.scene)
+        try:
+            document = load_document_from_scene(context.scene)
+        except CadDocumentError as exc:
+            layout.label(text="CAD document could not be loaded", icon="ERROR")
+            layout.label(text=str(exc))
+            return
         part = document.active_part
         sketch = part.get_feature(ui.active_sketch_id) if part else None
         if not isinstance(sketch, SketchFeature):
@@ -177,6 +206,20 @@ class PARAMETRIC_CAD_PT_sketch_tools(bpy.types.Panel):
         coordinates.label(text=f"Y: {ui.mouse_y_mm:.2f} mm")
         dimensions = layout.box()
         entity_id = ui.active_sketch_entity_id
+        try:
+            selected_entity_ids = json.loads(ui.active_sketch_entity_ids or "[]")
+        except (TypeError, ValueError):
+            selected_entity_ids = []
+        selected_circles = [
+            entity
+            for entity in sketch.entities
+            if entity.id in selected_entity_ids and entity.entity_type == "CIRCLE"
+        ]
+        if len(selected_circles) >= 2:
+            dimensions.label(
+                text=f"Circle group: {len(selected_circles)} selected",
+                icon="GROUP",
+            )
         if entity_id:
             selected_entity = next(
                 (entity for entity in sketch.entities if entity.id == entity_id), None
@@ -199,6 +242,12 @@ class PARAMETRIC_CAD_PT_sketch_tools(bpy.types.Panel):
             dimensions.prop(ui, "circle_y_mm", text="Center Y (mm)")
             dimensions.prop(ui, "circle_diameter_mm", text="Diameter (mm)")
             dimensions.operator("parametric_cad.numeric_circle", text="Update Circle")
+            if len(selected_circles) >= 2:
+                dimensions.operator(
+                    "parametric_cad.numeric_circle_group",
+                    text="Apply Group Diameter",
+                    icon="GROUP",
+                )
         elif arc_parameters(sketch, entity_id) is not None:
             dimensions.label(text="Arc Dimensions")
             dimensions.prop(ui, "arc_x_mm", text="Center X (mm)")
@@ -221,6 +270,15 @@ class PARAMETRIC_CAD_PT_sketch_tools(bpy.types.Panel):
             dimensions.label(
                 text=f"Deleted regions: {len(sketch.deleted_regions)} (outer edges hidden)",
                 icon="X",
+            )
+        if ui.sketch_dirty:
+            dirty = layout.box()
+            dirty.alert = True
+            dirty.label(text="Sketch changes are not rebuilt yet", icon="TIME")
+            dirty.operator(
+                "parametric_cad.apply_sketch",
+                text="Apply & Rebuild",
+                icon="FILE_REFRESH",
             )
         layout.operator("parametric_cad.clear_sketch", icon="TRASH")
         layout.separator()

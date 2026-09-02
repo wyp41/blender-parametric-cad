@@ -1,6 +1,6 @@
 # Blender Parametric CAD
 
-History-based parametric modeling extension for Blender 5.1.2. Version 0.10.0
+History-based parametric modeling extension for Blender 5.1.2. Version 0.11.0
 implements the M3.5–M3.6 Part Studio, precise Sketch and unified Extrude
 workflows, the M4 semantic face-selection/Revolve milestone, arc-based
 composite sketch regions, interactive sketch cleanup/snapping, and robust
@@ -13,7 +13,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.10.0.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.11.0.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## AI/API skill
@@ -61,11 +61,13 @@ In a 3D View, press `N` and open the **CAD** tab:
 2. Create a Sketch on XY, XZ, YZ, or a supported Extrude End Plane.
 3. Draw a Rectangle, Circle, Arc, or connected line/arc loop with the mouse.
    Arc uses three clicks: center, start, and end.
-4. To edit exact dimensions, use **Select**, click a Rectangle, Circle, or Arc,
-   then update its millimeter fields. Individual lines can also be selected and
-   highlighted; use **Delete Selected** (or the click-based **Delete Geometry**)
-   to remove one entity. A green cross shows the active snap target while
-   drawing.
+4. To edit exact dimensions, click the Sketch row's pencil button (or
+   double-click a generated result to enter its source history), then select a
+   Rectangle, Circle, or Arc. The matching millimeter fields appear
+   automatically. Use **Apply & Rebuild** for an immediate result update;
+   individual lines can be removed with **Delete Selected**. Shift-select
+   circles to edit their shared diameter. A green cross shows the active snap
+   target while drawing.
 5. To split a closed boundary, choose **Line** and click two points on its
    boundary. Endpoints snap to nearby vertices/edges/intersections and the
    boundary is split into bounded regions. Choose **Delete Region**, then click
@@ -130,6 +132,18 @@ counter-clockwise Rectangles, arcs, and simple polygons use the same Add/Remove
 path. Multiple active loops are emitted as one composite tool.
 Feature-derived Sketch overlays are resolved from history, so they move with
 semantic `END_PLANE` references after rebuilds.
+
+Generated `*_Result` meshes are disposable and read-only. The CAD panel warns
+when one is active and provides **Edit CAD History**; double-clicking the result
+opens its source Sketch/Feature. A rebuild is atomic from the viewport's point
+of view: a failed Feature leaves the previous valid mesh in place, records the
+specific error, and marks downstream Features `BLOCKED`.
+
+Use **Validate CAD Document** (or `validate_cad_document(scene)` / MCP
+`cad_validate_document`) for a read-only check of UUID dependencies, Sketch
+profiles, failed history entries, and empty generated results. When the
+extension is not enabled or the scene JSON/schema is damaged, the panel shows
+an actionable error instead of raising an AttributeError.
 
 ## Persistence and schema
 

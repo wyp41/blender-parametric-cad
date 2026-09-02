@@ -163,7 +163,7 @@ def _draw_callback() -> None:
         _draw_segments(
             _entity_segments(sketch, exclude=selected_ids | hidden_ids),
             color,
-            4.5 if editing and sketch.id == ui.active_sketch_id else 3.5,
+            6.0 if editing and sketch.id == ui.active_sketch_id else 4.5,
         )
         selected_ids -= hidden_ids
         _draw_segments(

@@ -33,6 +33,8 @@ def _set_active_feature(ui, feature) -> None:
     ui.active_feature_id = feature.id if feature else ""
     ui.active_sketch_id = feature.id if isinstance(feature, SketchFeature) else ""
     ui.active_sketch_entity_id = ""
+    ui.active_sketch_entity_ids = "[]"
+    ui.sketch_dirty = False
     ui.mode = "FEATURE_EDIT" if feature else "IDLE"
     if isinstance(feature, ExtrudeFeature):
         ui.extrude_distance_mm = feature.distance * 1000.0
@@ -68,6 +70,8 @@ class PARAMETRIC_CAD_OT_new_part(bpy.types.Operator):
         ui.active_feature_id = ""
         ui.active_sketch_id = ""
         ui.active_sketch_entity_id = ""
+        ui.active_sketch_entity_ids = "[]"
+        ui.sketch_dirty = False
         ui.selected_face_reference = ""
         self.report({"INFO"}, f"Created {part.name}")
         return {"FINISHED"}
@@ -136,6 +140,8 @@ class PARAMETRIC_CAD_OT_delete_part(bpy.types.Operator):
         ui.active_feature_id = ""
         ui.active_sketch_id = ""
         ui.active_sketch_entity_id = ""
+        ui.active_sketch_entity_ids = "[]"
+        ui.sketch_dirty = False
         ui.selected_face_reference = ""
         ui.active_part_id = document.active_part_id or "NONE"
         self.report({"INFO"}, f"Deleted {removed.name}")

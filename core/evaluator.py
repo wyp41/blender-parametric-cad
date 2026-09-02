@@ -58,6 +58,7 @@ class PartEvaluator:
         errors: list[EvaluationError] = []
         context = EvaluationContext(part)
         blocked = False
+        blocked_by: Feature | None = None
 
         for feature in part.features:
             feature.status = "NOT_EVALUATED"
@@ -75,7 +76,15 @@ class PartEvaluator:
                 feature.status = "SUPPRESSED"
                 continue
             if blocked:
-                feature.error_message = "Upstream feature evaluation failed."
+                name = blocked_by.name if blocked_by is not None else "an upstream feature"
+                message = (
+                    f"Blocked by failed feature {name}: {blocked_by.error_message}"
+                    if blocked_by
+                    else "Blocked by an upstream feature failure."
+                )
+                feature.status = "BLOCKED"
+                feature.error_message = message
+                errors.append(EvaluationError(feature.id, feature.name, message))
                 continue
 
             missing = [
@@ -85,11 +94,15 @@ class PartEvaluator:
             ]
             if missing:
                 message = "Required dependency is suppressed, invalid, or not evaluated."
+                feature.status = "ERROR"
                 feature.error_message = message
                 errors.append(EvaluationError(feature.id, feature.name, message))
                 blocked = True
+                blocked_by = feature
                 continue
 
+            previous_body = context.current_body
+            previous_provenance = dict(context.face_provenance)
             if isinstance(feature, SketchFeature):
                 blocked = not self._evaluate_sketch(feature, context, errors)
             elif isinstance(feature, ExtrudeFeature):
@@ -101,6 +114,13 @@ class PartEvaluator:
                     feature, f"Unsupported feature: {feature.feature_type}", errors
                 )
                 blocked = True
+            if blocked:
+                # Feature evaluation is transactional: a backend that created
+                # a temporary body before raising cannot leak that partial body
+                # into the result returned to the viewport.
+                context.current_body = previous_body
+                context.face_provenance = previous_provenance
+                blocked_by = feature
 
         return EvaluationResult(not errors, context.current_body, errors, context)
 

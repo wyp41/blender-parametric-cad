@@ -32,7 +32,7 @@ add-on is not required for MCP-only sessions.
 MCP tool groups:
 
 - Document: `cad_status`, `cad_create_part`, `cad_set_active_part`,
-  `cad_delete_part`, `cad_save_scene`.
+  `cad_delete_part`, `cad_validate_document`, `cad_save_scene`.
 - Sketch: `cad_create_sketch`, `cad_add_geometry`, `cad_update_geometry`,
   `cad_delete_geometry`, `cad_profile`, `cad_delete_region`,
   `cad_restore_region`.
@@ -49,6 +49,10 @@ Important invariants:
 
 - Direct `bpy` bridge functions require the extension to be enabled in Blender;
   the MCP worker registers the scene properties it needs for MCP-only sessions.
+- `load_document_from_scene` raises the user-facing `CadDocumentError` when the
+  extension is disabled, scene properties are missing, JSON is corrupt, or the
+  schema/UUID checks fail.  Do not catch this as a generic Blender traceback;
+  report the message and enable/re-enable the extension as directed.
 - Core sketch lengths and feature distances are meters; core angles are radians.
   N-panel properties use millimeters and degrees.
 - The persistent JSON in `scene.parametric_cad_document` is authoritative;
@@ -58,6 +62,15 @@ Important invariants:
   feature.
 - Use UUID references (`sketch_id`, `feature_id`, `entity_id`) and include the
   previous body feature in `dependencies` for Add/Remove operations.
+- Generated `*_Result` objects are disposable and read-only.  Never edit them in
+  Edit Mode; use the CAD history/Sketch entry point.  A failed rebuild keeps the
+  last valid result mesh and marks the failed feature `ERROR` and downstream
+  features `BLOCKED`.
+- Numeric Sketch edits set a dirty flag until `Apply & Rebuild` or `Finish
+  Sketch` succeeds.  MCP geometry updates rebuild immediately and return the
+  rebuild payload.
+- Run `cad_validate_document` (or `validate_cad_document(scene)`) before
+  handing a generated model to another agent or exporting it.
 - To export one Part Studio, call `export_part(scene, part_id, filepath,
   file_format)`. Supported formats are STL, OBJ, and PLY; the function rebuilds
   and selects only that Part Studio's generated result.

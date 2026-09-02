@@ -16,9 +16,20 @@ def _part_studio_items(_self, context):
 
             document = load_document_from_scene(context.scene)
             if document.parts:
+                name_counts = {}
+                for part in document.parts:
+                    name_counts[part.name] = name_counts.get(part.name, 0) + 1
                 _PART_STUDIO_ITEMS = [
-                    (part.id, part.name, f"Activate {part.name}")
-                    for part in document.parts
+                    (
+                        part.id,
+                        (
+                            f"{part.name} P{index + 1:02d}"
+                            if name_counts[part.name] > 1
+                            else part.name
+                        ),
+                        f"Activate {part.name} ({part.id[:8]})",
+                    )
+                    for index, part in enumerate(document.parts)
                 ]
                 return _PART_STUDIO_ITEMS
         except (AttributeError, TypeError, ValueError):
@@ -34,7 +45,10 @@ def _active_part_changed(self, context):
         return
     from .adapter import load_document_from_scene, save_document_to_scene
 
-    document = load_document_from_scene(context.scene)
+    try:
+        document = load_document_from_scene(context.scene)
+    except (AttributeError, TypeError, ValueError):
+        return
     if document.get_part(self.active_part_id) is None:
         return
     if document.active_part_id != self.active_part_id:
@@ -44,6 +58,7 @@ def _active_part_changed(self, context):
     self.active_feature_id = ""
     self.active_sketch_id = ""
     self.active_sketch_entity_id = ""
+    self.active_sketch_entity_ids = "[]"
     self.selected_face_reference = ""
 
 
@@ -125,6 +140,17 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
     active_feature_id: StringProperty(default="")
     active_sketch_id: StringProperty(default="")
     active_sketch_entity_id: StringProperty(default="")
+    active_sketch_entity_ids: StringProperty(
+        name="Selected Sketch Geometry",
+        description="JSON list of selected sketch entity IDs for group edits",
+        default="[]",
+        options={"HIDDEN"},
+    )
+    sketch_dirty: BoolProperty(
+        name="Sketch Has Unapplied Changes",
+        description="Sketch source changed but its result has not been rebuilt",
+        default=False,
+    )
     selected_face_reference: StringProperty(default="")
     show_sketches: BoolProperty(
         name="Show Sketches",

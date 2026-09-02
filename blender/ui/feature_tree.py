@@ -34,8 +34,17 @@ def draw_feature_tree(layout, part, active_feature_id: str) -> None:
             depress=feature.id == active_feature_id,
         )
         operator.feature_id = feature.id
+        if isinstance(feature, SketchFeature):
+            edit = row.operator(
+                "parametric_cad.edit_sketch",
+                text="",
+                icon="GREASEPENCIL",
+            )
+            edit.feature_id = feature.id
         if feature.status == "ERROR":
             row.label(text="", icon="ERROR")
+        elif feature.status == "BLOCKED":
+            row.label(text="", icon="CANCEL")
         elif feature.status == "SUPPRESSED":
             row.label(text="", icon="HIDE_ON")
         elif feature.status == "NOT_EVALUATED":
@@ -60,7 +69,8 @@ def draw_selected_feature(layout, feature, ui, part) -> None:
         box.label(text=f"Entities: {len(feature.entities)}")
         if feature.deleted_regions:
             box.label(text=f"Deleted regions: {len(feature.deleted_regions)}", icon="X")
-        box.operator("parametric_cad.edit_sketch", icon="GREASEPENCIL")
+        edit = box.operator("parametric_cad.edit_sketch", icon="GREASEPENCIL")
+        edit.feature_id = feature.id
         box.separator()
         box.prop(ui, "extrude_operation")
         box.prop(ui, "extrude_depth_mode")
@@ -81,7 +91,7 @@ def draw_selected_feature(layout, feature, ui, part) -> None:
         if ui.extrude_depth_mode == "BLIND":
             box.prop(ui, "extrude_distance_mm", text="Distance (mm)")
         box.operator("parametric_cad.apply_extrude", icon="FILE_REFRESH")
-        if feature.status == "ERROR" and feature.error_message:
+        if feature.status in {"ERROR", "BLOCKED"} and feature.error_message:
             error = box.box()
             error.alert = True
             error.label(text=feature.error_message, icon="ERROR")
@@ -89,7 +99,7 @@ def draw_selected_feature(layout, feature, ui, part) -> None:
         box = layout.box()
         box.label(text=feature.name, icon="MOD_SCREW")
         _draw_revolve_controls(box, ui, "Apply Revolve")
-        if feature.status == "ERROR" and feature.error_message:
+        if feature.status in {"ERROR", "BLOCKED"} and feature.error_message:
             error = box.box()
             error.alert = True
             error.label(text=feature.error_message, icon="ERROR")

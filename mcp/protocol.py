@@ -16,7 +16,7 @@ from typing import Any
 PROTOCOL_VERSION = "2025-06-18"
 SUPPORTED_PROTOCOL_VERSIONS = {"2024-11-05", "2025-03-26", PROTOCOL_VERSION}
 SERVER_NAME = "blender-parametric-cad"
-SERVER_VERSION = "0.10.0"
+SERVER_VERSION = "0.11.0"
 
 
 def _object(properties: dict[str, Any] | None = None, required: list[str] | None = None) -> dict[str, Any]:
@@ -245,6 +245,11 @@ TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
         "name": "cad_rebuild",
         "description": "Evaluate one Part Studio from persistent history and return feature errors/status.",
         "inputSchema": _object({"part_id": _PART_ID}),
+    },
+    {
+        "name": "cad_validate_document",
+        "description": "Run read-only document validation for dependencies, Sketches, failed Features, and generated results.",
+        "inputSchema": _object(),
     },
     {
         "name": "cad_export_part",

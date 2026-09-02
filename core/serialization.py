@@ -7,13 +7,43 @@ from copy import deepcopy
 from typing import Any
 
 from ..features.extrude import ExtrudeFeature
+from ..features.mirror import MirrorFeature
 from ..features.revolve import RevolveFeature
+from ..features.transform import TransformFeature
 from ..sketch.entities import SketchArc, SketchCircle, SketchEntity, SketchLine
 from ..sketch.plane import SketchPlaneReference
 from ..sketch.sketch import SketchFeature
 from .feature import Feature
 from .part import Part
 from .references import AxisReference
+
+
+def plane_reference_to_dict(reference: SketchPlaneReference) -> dict[str, Any]:
+    return {
+        "reference_type": reference.reference_type,
+        "datum_plane": reference.datum_plane,
+        "feature_id": reference.feature_id,
+        "role": reference.role,
+        "source_entity_id": reference.source_entity_id,
+        "offset": reference.offset,
+    }
+
+
+def plane_reference_from_dict(data: dict[str, Any] | None) -> SketchPlaneReference:
+    if data is None:
+        value: dict[str, Any] = {}
+    elif isinstance(data, dict):
+        value = data
+    else:
+        raise ValueError("Plane reference must be a JSON object.")
+    return SketchPlaneReference(
+        reference_type=str(value.get("reference_type", "DATUM")),
+        datum_plane=value.get("datum_plane"),
+        feature_id=value.get("feature_id"),
+        role=value.get("role"),
+        source_entity_id=value.get("source_entity_id"),
+        offset=float(value.get("offset", 0.0) or 0.0),
+    )
 
 
 def entity_to_dict(entity: SketchEntity) -> dict[str, Any]:
@@ -83,13 +113,7 @@ def feature_to_dict(feature: Feature) -> dict[str, Any]:
     }
     if isinstance(feature, SketchFeature):
         data.update(
-            plane_reference={
-                "reference_type": feature.plane_reference.reference_type,
-                "datum_plane": feature.plane_reference.datum_plane,
-                "feature_id": feature.plane_reference.feature_id,
-                "role": feature.plane_reference.role,
-                "source_entity_id": feature.plane_reference.source_entity_id,
-            },
+            plane_reference=plane_reference_to_dict(feature.plane_reference),
             entities=[entity_to_dict(item) for item in feature.entities],
             deleted_regions=list(feature.deleted_regions),
         )
@@ -108,6 +132,16 @@ def feature_to_dict(feature: Feature) -> dict[str, Any]:
             angle=feature.angle,
             operation=feature.operation,
         )
+    elif isinstance(feature, TransformFeature):
+        data.update(
+            translation=list(feature.translation),
+            rotation=list(feature.rotation),
+        )
+    elif isinstance(feature, MirrorFeature):
+        data.update(
+            source_feature_id=feature.source_feature_id,
+            mirror_plane=plane_reference_to_dict(feature.mirror_plane),
+        )
     else:
         raise ValueError(f"Unsupported CAD feature: {feature.feature_type}")
     return data
@@ -123,16 +157,9 @@ def feature_from_dict(data: dict[str, Any]) -> Feature:
         "dependencies": list(data.get("dependencies", [])),
     }
     if data["feature_type"] == "SKETCH":
-        reference = data["plane_reference"]
         return SketchFeature(
             **common,
-            plane_reference=SketchPlaneReference(
-                reference_type=reference["reference_type"],
-                datum_plane=reference.get("datum_plane"),
-                feature_id=reference.get("feature_id"),
-                role=reference.get("role"),
-                source_entity_id=reference.get("source_entity_id"),
-            ),
+            plane_reference=plane_reference_from_dict(data.get("plane_reference")),
             entities=[entity_from_dict(item) for item in data.get("entities", [])],
             deleted_regions=list(data.get("deleted_regions", [])),
         )
@@ -152,6 +179,20 @@ def feature_from_dict(data: dict[str, Any]) -> Feature:
             axis_reference=AxisReference.from_dict(data.get("axis_reference", {})),
             angle=float(data.get("angle", 6.283185307179586)),
             operation=data.get("operation", "NEW"),
+        )
+    if data["feature_type"] == "TRANSFORM":
+        translation = tuple(float(value) for value in data.get("translation", (0.0, 0.0, 0.0)))
+        rotation = tuple(float(value) for value in data.get("rotation", (0.0, 0.0, 0.0)))
+        return TransformFeature(
+            **common,
+            translation=translation,
+            rotation=rotation,
+        )
+    if data["feature_type"] == "MIRROR":
+        return MirrorFeature(
+            **common,
+            source_feature_id=str(data.get("source_feature_id", "")),
+            mirror_plane=plane_reference_from_dict(data.get("mirror_plane")),
         )
     raise ValueError(f"Unsupported CAD feature type: {data['feature_type']}")
 

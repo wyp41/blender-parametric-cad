@@ -1,10 +1,11 @@
 # Blender Parametric CAD
 
-History-based parametric modeling extension for Blender 5.1.2. Version 0.11.0
+History-based parametric modeling extension for Blender 5.1.2. Version 0.12.0
 implements the M3.5–M3.6 Part Studio, precise Sketch and unified Extrude
-workflows, the M4 semantic face-selection/Revolve milestone, arc-based
+workflows, the M4 semantic face-selection/Revolve milestone, and M5
+parametric Transform, Sketch-plane offset, and Mirror features. Arc-based
 composite sketch regions, interactive sketch cleanup/snapping, and robust
-Revolve Boolean tools.
+Boolean connectivity checks remain enabled.
 
 The persistent JSON CAD history is authoritative. Blender result meshes,
 Boolean tools, and sketch overlays are disposable outputs resolved from stable
@@ -13,7 +14,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.11.0.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.12.0.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## AI/API skill
@@ -76,7 +77,13 @@ In a 3D View, press `N` and open the **CAD** tab:
 6. Finish the Sketch. **Show Sketches** keeps resolved Sketch references visible.
 7. Select the Sketch and use one **Extrude** command with **New**, **Add**, or
    **Remove**, plus **Blind** or **Through All** where supported.
-8. Select Features to edit, rename, delete with dependency confirmation,
+8. Add a **Transform** after the current body to enter translation in mm and
+   rotation in degrees. Downstream datum/semantic Sketch planes follow its
+   transformed coordinate frame.
+9. Add a **Mirror**, choose an earlier additive Extrude or Revolve and a datum
+   or semantic plane (with optional offset). The mirrored tool is unioned with
+   the current body and must remain one connected solid.
+10. Select Features to edit, rename, delete with dependency confirmation,
    suppress/unsuppress, or set the rollback point.
 
 To attach a Sketch to generated geometry, press **Select Face**, click a
@@ -123,6 +130,17 @@ part_id, filepath, file_format)`. Supported formats are `STL`, `OBJ`, and
 - Full-turn Revolve tools are topologically closed at the seam, and their face
   winding is normalized for reliable Add/Remove Boolean operations even when
   the axis direction is reversed.
+- Transform is a persistent rigid history feature. Its translation is stored in
+  meters and its XYZ Euler rotation in radians; the UI/MCP expose mm/degrees.
+  The same frame is used to resolve all downstream datum and semantic Sketch
+  references after a rebuild.
+- Sketch supports a parametric plane offset along the resolved support normal;
+  changing the upstream face/feature or the offset moves downstream geometry
+  without changing local entity coordinates.
+- Mirror duplicates one earlier additive Extrude or Revolve tool across a datum
+  plane or supported semantic plane and unions it with the current body. A
+  disconnected or non-manifold Boolean Add is rejected; multiple Bodies are
+  still out of scope.
 - The active Part Studio can be exported independently as STL, OBJ, or PLY;
   other Part Studio result objects are never included in that export.
 
@@ -141,7 +159,8 @@ specific error, and marks downstream Features `BLOCKED`.
 
 Use **Validate CAD Document** (or `validate_cad_document(scene)` / MCP
 `cad_validate_document`) for a read-only check of UUID dependencies, Sketch
-profiles, failed history entries, and empty generated results. When the
+profiles, Transform/Mirror references, disconnected generated results, failed
+history entries, and empty generated results. When the
 extension is not enabled or the scene JSON/schema is damaged, the panel shows
 an actionable error instead of raising an AttributeError.
 
@@ -176,4 +195,8 @@ The Blender validations cover the legacy M3 model, independent Part Studios,
 Feature lifecycle controls, numeric Sketch editing, persistent semantic overlays,
 generic Remove profiles, Add, blind pocket depth, semantic END/SIDE face
 supports, datum and SketchLine Revolve axes, Revolve Add/Remove, and save/reopen
-editing.
+editing. The pure-Python suite additionally covers the M5 single-body history
+sequence, Transform frame/edit rebuilds, Sketch offsets, six-line guides,
+Mirror source UUIDs, mirrored Add failure atomicity, and multi-circle Through All
+Remove. Per the extension workflow, Blender UI/headless validation is optional;
+the source-level suite does not launch Blender.

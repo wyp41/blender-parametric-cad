@@ -8,6 +8,7 @@ from typing import Any
 from ..sketch.profile import SketchProfile
 from ..sketch.sketch import SketchFeature
 from ..core.references import TopoReference
+from ..core.transform import Transform
 
 
 class GeometryBackend(ABC):
@@ -77,5 +78,20 @@ class GeometryBackend(ABC):
 
     def boolean_union(self, body: Any, tool: Any) -> Any:
         """Return a new body equal to the union of body and tool."""
+
+        raise NotImplementedError
+
+    def transform_body(self, body: Any, transform: Transform) -> Any:
+        """Return ``body`` transformed by a persistent CAD rigid transform."""
+
+        raise NotImplementedError
+
+    def mirror_tool(
+        self,
+        tool: Any,
+        plane_origin: tuple[float, float, float],
+        plane_normal: tuple[float, float, float],
+    ) -> Any:
+        """Reflect a feature tool across a resolved semantic plane."""
 
         raise NotImplementedError

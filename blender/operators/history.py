@@ -60,7 +60,9 @@ class PARAMETRIC_CAD_OT_edit_cad_history(bpy.types.Operator):
             )
         ui = scene.parametric_cad_ui
         source_sketch = None
-        if isinstance(feature, (ExtrudeFeature, RevolveFeature)):
+        if isinstance(feature, SketchFeature):
+            source_sketch = feature
+        elif isinstance(feature, (ExtrudeFeature, RevolveFeature)):
             source_sketch = part.get_feature(feature.sketch_id)
         if isinstance(source_sketch, SketchFeature):
             from .sketch import _begin_edit

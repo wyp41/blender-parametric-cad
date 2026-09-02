@@ -36,7 +36,8 @@ MCP tool groups:
 - Sketch: `cad_create_sketch`, `cad_add_geometry`, `cad_update_geometry`,
   `cad_delete_geometry`, `cad_profile`, `cad_delete_region`,
   `cad_restore_region`.
-- Features: `cad_create_extrude`, `cad_create_revolve`, `cad_update_feature`,
+- Features: `cad_create_extrude`, `cad_create_revolve`, `cad_create_transform`,
+  `cad_create_mirror`, `cad_update_feature`,
   `cad_delete_feature`, `cad_suppress_feature`, `cad_rollback`,
   `cad_rebuild`.
 - Output: `cad_export_part` (isolated STL, OBJ, or PLY export by `part_id`).
@@ -62,6 +63,18 @@ Important invariants:
   feature.
 - Use UUID references (`sketch_id`, `feature_id`, `entity_id`) and include the
   previous body feature in `dependencies` for Add/Remove operations.
+- `TransformFeature` is a normal single-body history entry. Store translation in
+  meters and XYZ Euler rotation in radians in direct Python; MCP/UI inputs use
+  millimeters/degrees. Its frame is applied to downstream datum and semantic
+  Sketch references during every rebuild.
+- Store Sketch support plus `plane_reference.offset` (meters) instead of baking
+  an offset into `origin`; use `SketchFeature.set_plane_offset()` or the MCP
+  `offset_mm` field.
+- `MirrorFeature` references one earlier additive `ExtrudeFeature` or
+  `RevolveFeature` UUID and a datum/semantic `SketchPlaneReference`. It mirrors
+  only that source tool and unions it with the current body. Keep the P0
+  one-connected-solid invariant: a disconnected/non-manifold Boolean Add is an
+  error.
 - Generated `*_Result` objects are disposable and read-only.  Never edit them in
   Edit Mode; use the CAD history/Sketch entry point.  A failed rebuild keeps the
   last valid result mesh and marks the failed feature `ERROR` and downstream

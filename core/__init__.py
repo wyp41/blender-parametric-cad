@@ -5,5 +5,13 @@ not eagerly load the complete feature/evaluator graph.
 """
 
 from .references import AxisReference, SelectionReference, TopoReference
+from .transform import Matrix4, Transform, Vector3
 
-__all__ = ["AxisReference", "SelectionReference", "TopoReference"]
+__all__ = [
+    "AxisReference",
+    "SelectionReference",
+    "TopoReference",
+    "Matrix4",
+    "Transform",
+    "Vector3",
+]

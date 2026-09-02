@@ -9,6 +9,7 @@ import bpy
 from ..sketch.profile import SketchProfile
 from ..sketch.sketch import SketchFeature, sketch_normal, sketch_to_world
 from ..core.references import TopoReference
+from ..core.transform import Transform
 from .backend import GeometryBackend
 
 
@@ -209,6 +210,59 @@ class BlenderMeshBackend(GeometryBackend):
 
     def boolean_union(self, body: bpy.types.Mesh, tool: bpy.types.Mesh) -> bpy.types.Mesh:
         return self._boolean(body, tool, "UNION")
+
+    def transform_body(
+        self, body: bpy.types.Mesh, transform: Transform
+    ) -> bpy.types.Mesh:
+        """Transform every vertex in a disposable body mesh."""
+
+        vertices = [transform.apply_point(tuple(vertex.co)) for vertex in body.vertices]
+        faces = [tuple(polygon.vertices) for polygon in body.polygons]
+        result = bpy.data.meshes.new("CAD_Transform_Result")
+        result.from_pydata(vertices, [], faces)
+        result.validate()
+        result.update()
+        provenance = self._face_provenance.get(id(body))
+        if provenance is not None:
+            self._face_provenance[id(result)] = dict(provenance)
+        if body.users == 0:
+            self._face_provenance.pop(id(body), None)
+            bpy.data.meshes.remove(body)
+        return result
+
+    def mirror_tool(
+        self,
+        tool: bpy.types.Mesh,
+        plane_origin: tuple[float, float, float],
+        plane_normal: tuple[float, float, float],
+    ) -> bpy.types.Mesh:
+        """Reflect a tool across a semantic plane and reverse its winding."""
+
+        length = sqrt(sum(value * value for value in plane_normal))
+        if length <= 1e-12:
+            raise ValueError("Mirror plane has zero-length normal.")
+        normal = tuple(value / length for value in plane_normal)
+        vertices: list[tuple[float, float, float]] = []
+        for vertex in tool.vertices:
+            point = tuple(vertex.co)
+            distance = sum(
+                (point[index] - plane_origin[index]) * normal[index]
+                for index in range(3)
+            )
+            vertices.append(
+                tuple(
+                    point[index] - 2.0 * distance * normal[index]
+                    for index in range(3)
+                )
+            )
+        faces = [tuple(reversed(polygon.vertices)) for polygon in tool.polygons]
+        result = bpy.data.meshes.new("CAD_Mirror_Tool")
+        result.from_pydata(vertices, [], faces)
+        result.validate()
+        result.update()
+        if tool.users == 0:
+            bpy.data.meshes.remove(tool)
+        return result
 
     def _boolean(
         self, body: bpy.types.Mesh, tool: bpy.types.Mesh, operation: str

@@ -6,6 +6,7 @@ import bpy
 from bpy.props import BoolProperty, EnumProperty, FloatProperty, PointerProperty, StringProperty
 
 _PART_STUDIO_ITEMS = []
+_MIRROR_SOURCE_ITEMS = []
 
 
 def _part_studio_items(_self, context):
@@ -122,6 +123,55 @@ def _revolve_axis_line_items(_self, context):
     return [("NONE", "No SketchLines", "Create a SketchLine axis first")]
 
 
+def _mirror_source_items(_self, context):
+    """List earlier additive Extrude/Revolve features that can be mirrored."""
+
+    global _MIRROR_SOURCE_ITEMS
+    if context is not None:
+        try:
+            from ..features.extrude import ExtrudeFeature
+            from ..features.revolve import RevolveFeature
+            from .adapter import load_document_from_scene
+
+            part = load_document_from_scene(context.scene).active_part
+            if part is not None:
+                ui = getattr(context.scene, "parametric_cad_ui", None)
+                active_index = part.get_feature_index(ui.active_feature_id) if ui else None
+                if active_index is not None and part.features[active_index].feature_type == "MIRROR":
+                    source_features = part.features[:active_index]
+                else:
+                    source_features = part.features
+                _MIRROR_SOURCE_ITEMS = [
+                    (
+                        feature.id,
+                        feature.name,
+                        "Mirror this additive Extrude or Revolve feature",
+                    )
+                    for feature in source_features
+                    if isinstance(feature, (ExtrudeFeature, RevolveFeature))
+                    and feature.operation == "ADD"
+                    and not feature.suppressed
+                ]
+                if _MIRROR_SOURCE_ITEMS:
+                    return _MIRROR_SOURCE_ITEMS
+        except (AttributeError, TypeError, ValueError):
+            pass
+    _MIRROR_SOURCE_ITEMS = [
+        (
+            "NONE",
+            "No additive features",
+            "Create an additive Extrude or Revolve first",
+        )
+    ]
+    return _MIRROR_SOURCE_ITEMS
+
+
+def _mirror_plane_items(_self, context):
+    """Return datum and supported semantic planes for Mirror."""
+
+    return _sketch_plane_items(_self, context)
+
+
 class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
     active_part_id: EnumProperty(
         name="Active Part Studio",
@@ -184,6 +234,16 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
     new_sketch_reference: EnumProperty(
         name="Sketch Plane",
         items=_sketch_plane_items,
+    )
+    new_sketch_offset_mm: FloatProperty(
+        name="Plane Offset",
+        description="Offset the new Sketch along its resolved support normal",
+        default=0.0,
+    )
+    sketch_plane_offset_mm: FloatProperty(
+        name="Plane Offset",
+        description="Offset the active Sketch along its resolved support normal",
+        default=0.0,
     )
     extrude_distance_mm: FloatProperty(
         name="Distance",
@@ -251,6 +311,26 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
         min=0.001,
         max=360.0,
         soft_max=360.0,
+    )
+    transform_translate_x_mm: FloatProperty(name="Translate X", default=0.0)
+    transform_translate_y_mm: FloatProperty(name="Translate Y", default=0.0)
+    transform_translate_z_mm: FloatProperty(name="Translate Z", default=0.0)
+    transform_rotate_x_deg: FloatProperty(name="Rotate X", default=0.0)
+    transform_rotate_y_deg: FloatProperty(name="Rotate Y", default=0.0)
+    transform_rotate_z_deg: FloatProperty(name="Rotate Z", default=0.0)
+    mirror_source_feature_id: EnumProperty(
+        name="Source Feature",
+        items=_mirror_source_items,
+    )
+    mirror_plane_reference: EnumProperty(
+        name="Mirror Plane",
+        items=_mirror_plane_items,
+        default="DATUM|YZ",
+    )
+    mirror_plane_offset_mm: FloatProperty(
+        name="Plane Offset",
+        description="Offset the mirror plane along its normal",
+        default=0.0,
     )
     rectangle_x_mm: FloatProperty(name="X", default=-40.0)
     rectangle_y_mm: FloatProperty(name="Y", default=-25.0)

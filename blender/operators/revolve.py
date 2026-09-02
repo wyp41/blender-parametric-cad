@@ -7,7 +7,7 @@ from math import radians
 import bpy
 
 from ...core.references import AxisReference
-from ...features.extrude import ExtrudeFeature
+from ...core.part import previous_body_feature
 from ...features.revolve import RevolveFeature
 from ...sketch.entities import SketchLine
 from ...sketch.sketch import SketchFeature
@@ -15,15 +15,7 @@ from ..adapter import load_document_from_scene, rebuild_part, save_document_to_s
 
 
 def _previous_body_feature(part, before_index: int):
-    return next(
-        (
-            feature
-            for feature in reversed(part.features[:before_index])
-            if isinstance(feature, (ExtrudeFeature, RevolveFeature))
-            and not feature.suppressed
-        ),
-        None,
-    )
+    return previous_body_feature(part, before_index)
 
 
 def _axis_reference(ui, sketch: SketchFeature) -> AxisReference:

@@ -10,7 +10,9 @@ from ...core.document import CadDocument
 from ...core.part import Part
 from ...core.part import delete_feature, get_recursive_dependents
 from ...features.extrude import ExtrudeFeature
+from ...features.mirror import MirrorFeature
 from ...features.revolve import RevolveFeature
+from ...features.transform import TransformFeature
 from ...sketch.sketch import SketchFeature
 from ..adapter import (
     load_document_from_scene,
@@ -51,6 +53,33 @@ def _set_active_feature(ui, feature) -> None:
             ui.revolve_axis = feature.axis_reference.axis or "Z"
         elif feature.axis_reference.entity_id:
             ui.revolve_axis_line_id = feature.axis_reference.entity_id
+    elif isinstance(feature, SketchFeature):
+        ui.sketch_plane_offset_mm = feature.plane_offset * 1000.0
+    elif isinstance(feature, TransformFeature):
+        ui.transform_translate_x_mm = feature.translation[0] * 1000.0
+        ui.transform_translate_y_mm = feature.translation[1] * 1000.0
+        ui.transform_translate_z_mm = feature.translation[2] * 1000.0
+        ui.transform_rotate_x_deg = degrees(feature.rotation[0])
+        ui.transform_rotate_y_deg = degrees(feature.rotation[1])
+        ui.transform_rotate_z_deg = degrees(feature.rotation[2])
+    elif isinstance(feature, MirrorFeature):
+        try:
+            ui.mirror_source_feature_id = feature.source_feature_id
+        except (TypeError, ValueError):
+            pass
+        reference = feature.mirror_plane
+        token = (
+            f"DATUM|{reference.datum_plane}"
+            if reference.reference_type == "DATUM"
+            else f"FEATURE|{reference.feature_id}|{reference.role}"
+            if reference.reference_type == "FEATURE_PLANE"
+            else "DATUM|YZ"
+        )
+        try:
+            ui.mirror_plane_reference = token
+        except (TypeError, ValueError):
+            pass
+        ui.mirror_plane_offset_mm = reference.offset * 1000.0
 
 
 class PARAMETRIC_CAD_OT_new_part(bpy.types.Operator):

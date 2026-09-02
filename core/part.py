@@ -7,6 +7,9 @@ from dataclasses import dataclass, field
 from .feature import Feature, new_uuid
 
 
+BODY_FEATURE_TYPES = {"EXTRUDE", "REVOLVE", "TRANSFORM", "MIRROR"}
+
+
 @dataclass
 class Part:
     """A single CAD part with an ordered feature list."""
@@ -35,6 +38,20 @@ class Part:
     def next_feature_name(self, prefix: str) -> str:
         count = sum(item.name.startswith(prefix) for item in self.features) + 1
         return f"{prefix}{count:03d}"
+
+
+def previous_body_feature(part: Part, before_index: int | None = None) -> Feature | None:
+    """Return the nearest feature that produces or changes the Part body."""
+
+    limit = len(part.features) if before_index is None else before_index
+    return next(
+        (
+            feature
+            for feature in reversed(part.features[:limit])
+            if feature.feature_type in BODY_FEATURE_TYPES and not feature.suppressed
+        ),
+        None,
+    )
 
 
 def get_recursive_dependents(part: Part, feature_id: str) -> list[str]:

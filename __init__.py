@@ -17,6 +17,7 @@ def register() -> None:
         sketch,
         sketch_tools,
         history,
+        transform,
     )
     from .blender.ui import panels
     from .blender.viewport import sketch_overlay
@@ -30,6 +31,7 @@ def register() -> None:
         sketch_tools.CLASSES,
         extrude.CLASSES,
         revolve.CLASSES,
+        transform.CLASSES,
         history.CLASSES,
         panels.CLASSES,
     ):
@@ -54,6 +56,7 @@ def unregister() -> None:
         sketch,
         sketch_tools,
         history,
+        transform,
     )
     from .blender.ui import panels
     from .blender.viewport import sketch_overlay
@@ -69,6 +72,7 @@ def unregister() -> None:
         sketch_tools.CLASSES,
         extrude.CLASSES,
         revolve.CLASSES,
+        transform.CLASSES,
         history.CLASSES,
         panels.CLASSES,
     )

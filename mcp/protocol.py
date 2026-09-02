@@ -16,7 +16,7 @@ from typing import Any
 PROTOCOL_VERSION = "2025-06-18"
 SUPPORTED_PROTOCOL_VERSIONS = {"2024-11-05", "2025-03-26", PROTOCOL_VERSION}
 SERVER_NAME = "blender-parametric-cad"
-SERVER_VERSION = "0.11.0"
+SERVER_VERSION = "0.12.0"
 
 
 def _object(properties: dict[str, Any] | None = None, required: list[str] | None = None) -> dict[str, Any]:
@@ -46,6 +46,31 @@ def _integer(description: str) -> dict[str, Any]:
 _PART_ID = _string("Part Studio UUID. Omit to use the active Part Studio.")
 _SKETCH_ID = _string("Sketch feature UUID.")
 _FEATURE_ID = _string("Feature UUID.")
+_VECTOR3 = {
+    "type": "object",
+    "description": "Object with numeric x, y, and z fields.",
+    "additionalProperties": False,
+    "properties": {"x": _number("X value."), "y": _number("Y value."), "z": _number("Z value.")},
+}
+_MIRROR_PLANE = {
+    "description": "Datum plane string or semantic plane object.",
+    "oneOf": [
+        {"type": "string", "enum": ["XY", "XZ", "YZ"]},
+        {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": {
+                "type": _string("Plane reference type.", ["DATUM", "FEATURE_PLANE", "FACE"]),
+                "plane": _string("Datum plane.", ["XY", "XZ", "YZ"]),
+                "datum_plane": _string("Datum plane.", ["XY", "XZ", "YZ"]),
+                "feature_id": _FEATURE_ID,
+                "role": _string("Semantic plane/face role."),
+                "source_entity_id": _string("Optional source SketchLine UUID."),
+                "offset_mm": _number("Offset along the plane normal in millimeters."),
+            },
+        },
+    ],
+}
 
 
 TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
@@ -81,6 +106,7 @@ TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
                 "plane": _string("Datum plane when no feature/face support is supplied.", ["XY", "XZ", "YZ"]),
                 "feature_id": _string("Optional source NEW Extrude UUID for an END_PLANE support."),
                 "role": _string("Feature support role; currently END_PLANE.", ["END_PLANE"]),
+                "offset_mm": _number("Offset along the resolved plane normal in millimeters."),
                 "face_reference": {
                     "type": "object",
                     "description": "Optional TopoReference JSON: feature_id, role, and optional source_entity_id.",
@@ -205,8 +231,33 @@ TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
         ),
     },
     {
+        "name": "cad_create_transform",
+        "description": "Create a history Transform feature that moves the current single body and downstream reference frame. Translation is millimeters; rotation is degrees.",
+        "inputSchema": _object(
+            {
+                "part_id": _PART_ID,
+                "name": _string("Optional feature display name."),
+                "translation_mm": _VECTOR3,
+                "rotation_deg": _VECTOR3,
+            }
+        ),
+    },
+    {
+        "name": "cad_create_mirror",
+        "description": "Mirror one earlier additive Extrude or Revolve feature across a datum or semantic plane and union it with the current body.",
+        "inputSchema": _object(
+            {
+                "part_id": _PART_ID,
+                "name": _string("Optional feature display name."),
+                "source_feature_id": _FEATURE_ID,
+                "mirror_plane": _MIRROR_PLANE,
+            },
+            ["source_feature_id", "mirror_plane"],
+        ),
+    },
+    {
         "name": "cad_update_feature",
-        "description": "Edit an existing Extrude or Revolve feature and rebuild the Part Studio.",
+        "description": "Edit an existing Sketch, Extrude, Revolve, Transform, or Mirror feature and rebuild the Part Studio.",
         "inputSchema": _object(
             {
                 "feature_id": _FEATURE_ID,
@@ -219,6 +270,11 @@ TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
                 "axis": {"description": "Revolve datum axis or SketchLine axis object."},
                 "axis_reverse": {"type": "boolean", "description": "Reverse the Revolve axis direction."},
                 "operation": _string("Feature operation.", ["NEW", "ADD", "REMOVE"]),
+                "offset_mm": _number("Sketch support-plane offset in millimeters."),
+                "translation_mm": _VECTOR3,
+                "rotation_deg": _VECTOR3,
+                "source_feature_id": _FEATURE_ID,
+                "mirror_plane": _MIRROR_PLANE,
             },
             ["feature_id"],
         ),

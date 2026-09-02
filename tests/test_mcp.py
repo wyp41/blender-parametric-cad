@@ -30,7 +30,22 @@ class McpProtocolTests(unittest.TestCase):
         self.assertEqual(len(tool_names), len(set(tool_names)))
         self.assertEqual(len(resource_uris), len(set(resource_uris)))
         self.assertIn("cad_export_part", tool_names)
+        self.assertIn("cad_create_transform", tool_names)
+        self.assertIn("cad_create_mirror", tool_names)
         self.assertIn("cad://api-reference", resource_uris)
+
+    def test_m5_tool_schemas_expose_offset_and_history_parameters(self):
+        tools = {item["name"]: item for item in TOOL_DEFINITIONS}
+        sketch_properties = tools["cad_create_sketch"]["inputSchema"]["properties"]
+        self.assertIn("offset_mm", sketch_properties)
+        transform_properties = tools["cad_create_transform"]["inputSchema"]["properties"]
+        self.assertIn("translation_mm", transform_properties)
+        self.assertIn("rotation_deg", transform_properties)
+        mirror_properties = tools["cad_create_mirror"]["inputSchema"]["properties"]
+        self.assertIn("source_feature_id", mirror_properties)
+        self.assertIn("mirror_plane", mirror_properties)
+        update_properties = tools["cad_update_feature"]["inputSchema"]["properties"]
+        self.assertIn("offset_mm", update_properties)
 
     def test_initialize_and_tool_list(self):
         server = StdioMcpServer(_FakeBridge())

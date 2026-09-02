@@ -9,6 +9,7 @@ registered.
 from __future__ import annotations
 
 import json
+from math import isfinite
 from pathlib import Path
 
 import bpy
@@ -182,7 +183,9 @@ def validate_cad_document(scene: bpy.types.Scene) -> list[str]:
     except CadDocumentError as exc:
         return [str(exc)]
     from ..features.extrude import ExtrudeFeature
+    from ..features.mirror import MirrorFeature
     from ..features.revolve import RevolveFeature
+    from ..features.transform import TransformFeature
     from ..sketch.profile import ProfileDetector
     from ..sketch.sketch import SketchFeature
     from ..sketch.solver import SketchSolver
@@ -206,6 +209,12 @@ def validate_cad_document(scene: bpy.types.Scene) -> list[str]:
                 reference = feature.plane_reference
                 if reference.reference_type != "DATUM" and not reference.feature_id:
                     diagnostics.append(f"{part.name}/{feature.name}: sketch plane reference is missing.")
+                try:
+                    offset = float(reference.offset)
+                except (TypeError, ValueError):
+                    offset = None
+                if offset is None or not isfinite(offset):
+                    diagnostics.append(f"{part.name}/{feature.name}: sketch plane offset is not finite.")
             elif isinstance(feature, (ExtrudeFeature, RevolveFeature)):
                 source = part.get_feature(feature.sketch_id)
                 if not isinstance(source, SketchFeature):
@@ -216,6 +225,36 @@ def validate_cad_document(scene: bpy.types.Scene) -> list[str]:
                     profile = ProfileDetector().detect(source)
                     if not profile.success:
                         diagnostics.append(f"{part.name}/{feature.name}: {profile.message}")
+            elif isinstance(feature, TransformFeature):
+                try:
+                    feature.as_transform()
+                except (TypeError, ValueError) as exc:
+                    diagnostics.append(f"{part.name}/{feature.name}: invalid transform: {exc}")
+            elif isinstance(feature, MirrorFeature):
+                source = part.get_feature(feature.source_feature_id)
+                if not isinstance(source, (ExtrudeFeature, RevolveFeature)) or source.operation != "ADD":
+                    diagnostics.append(
+                        f"{part.name}/{feature.name}: mirror source must be an additive Extrude or Revolve."
+                    )
+                source_index = part.get_feature_index(feature.source_feature_id)
+                feature_index = part.get_feature_index(feature.id)
+                if source_index is None or feature_index is None or source_index >= feature_index:
+                    diagnostics.append(
+                        f"{part.name}/{feature.name}: mirror source must precede the Mirror feature."
+                    )
+                reference = feature.mirror_plane
+                if reference.reference_type not in {"DATUM", "FEATURE_PLANE", "FACE"}:
+                    diagnostics.append(f"{part.name}/{feature.name}: unsupported mirror plane reference.")
+                if reference.reference_type == "DATUM" and reference.datum_plane not in {"XY", "XZ", "YZ"}:
+                    diagnostics.append(f"{part.name}/{feature.name}: invalid mirror datum plane.")
+                if reference.reference_type != "DATUM" and not reference.feature_id:
+                    diagnostics.append(f"{part.name}/{feature.name}: mirror plane reference is missing.")
+                try:
+                    offset = float(reference.offset)
+                except (TypeError, ValueError):
+                    offset = None
+                if offset is None or not isfinite(offset):
+                    diagnostics.append(f"{part.name}/{feature.name}: mirror plane offset is not finite.")
 
         result_object = _find_result_object(part.id)
         if result_object is None:
@@ -223,6 +262,10 @@ def validate_cad_document(scene: bpy.types.Scene) -> list[str]:
         mesh = getattr(result_object, "data", None)
         if mesh is None or len(mesh.vertices) == 0 or len(mesh.polygons) == 0:
             diagnostics.append(f"{part.name}: generated result is empty.")
+        elif (components := _mesh_component_count(mesh)) != 1:
+            diagnostics.append(
+                f"{part.name}: generated result has {components} disconnected components."
+            )
     return diagnostics
 
 
@@ -502,6 +545,40 @@ def _find_result_object(part_id: str) -> bpy.types.Object | None:
         ),
         None,
     )
+
+
+def _mesh_component_count(mesh) -> int:
+    """Count face-connected components without changing the generated mesh."""
+
+    edge_faces: dict[tuple[int, int], list[int]] = {}
+    for face_index, polygon in enumerate(getattr(mesh, "polygons", ())):
+        vertices = tuple(polygon.vertices)
+        if len(vertices) < 3:
+            continue
+        for index, vertex_index in enumerate(vertices):
+            edge = tuple(sorted((vertex_index, vertices[(index + 1) % len(vertices)])))
+            edge_faces.setdefault(edge, []).append(face_index)
+    neighbors: dict[int, set[int]] = {}
+    for faces in edge_faces.values():
+        for face_index in faces:
+            neighbors.setdefault(face_index, set()).update(
+                neighbor for neighbor in faces if neighbor != face_index
+            )
+    components = 0
+    visited: set[int] = set()
+    for start in range(len(getattr(mesh, "polygons", ()))):
+        if start in visited:
+            continue
+        components += 1
+        stack = [start]
+        visited.add(start)
+        while stack:
+            face_index = stack.pop()
+            for neighbor in neighbors.get(face_index, ()):
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    stack.append(neighbor)
+    return components
 
 
 def _remove_result_object(result_object: bpy.types.Object) -> None:

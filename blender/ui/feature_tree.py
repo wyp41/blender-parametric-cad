@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from ...features.extrude import ExtrudeFeature
+from ...features.mirror import MirrorFeature
 from ...features.revolve import RevolveFeature
+from ...features.transform import TransformFeature
 from ...sketch.sketch import SketchFeature
 
 
@@ -27,6 +29,10 @@ def draw_feature_tree(layout, part, active_feature_id: str) -> None:
         )
         if isinstance(feature, RevolveFeature):
             icon = "MOD_SCREW"
+        elif isinstance(feature, TransformFeature):
+            icon = "OBJECT_ORIGIN"
+        elif isinstance(feature, MirrorFeature):
+            icon = "MOD_MIRROR"
         operator = row.operator(
             "parametric_cad.select_feature",
             text=feature.name,
@@ -67,6 +73,12 @@ def draw_selected_feature(layout, feature, ui, part) -> None:
             plane_label = f"{source_name} End Plane"
         box.label(text=f"{feature.name} — {plane_label}")
         box.label(text=f"Entities: {len(feature.entities)}")
+        box.prop(ui, "sketch_plane_offset_mm", text="Plane Offset (mm)")
+        box.operator(
+            "parametric_cad.apply_sketch",
+            text="Apply Offset & Rebuild",
+            icon="FILE_REFRESH",
+        )
         if feature.deleted_regions:
             box.label(text=f"Deleted regions: {len(feature.deleted_regions)}", icon="X")
         edit = box.operator("parametric_cad.edit_sketch", icon="GREASEPENCIL")
@@ -99,6 +111,35 @@ def draw_selected_feature(layout, feature, ui, part) -> None:
         box = layout.box()
         box.label(text=feature.name, icon="MOD_SCREW")
         _draw_revolve_controls(box, ui, "Apply Revolve")
+        if feature.status in {"ERROR", "BLOCKED"} and feature.error_message:
+            error = box.box()
+            error.alert = True
+            error.label(text=feature.error_message, icon="ERROR")
+    elif isinstance(feature, TransformFeature):
+        box = layout.box()
+        box.label(text=feature.name, icon="OBJECT_ORIGIN")
+        translate = box.box()
+        translate.label(text="Translate (mm)")
+        translate.prop(ui, "transform_translate_x_mm", text="X")
+        translate.prop(ui, "transform_translate_y_mm", text="Y")
+        translate.prop(ui, "transform_translate_z_mm", text="Z")
+        rotate = box.box()
+        rotate.label(text="Rotate (degrees)")
+        rotate.prop(ui, "transform_rotate_x_deg", text="X")
+        rotate.prop(ui, "transform_rotate_y_deg", text="Y")
+        rotate.prop(ui, "transform_rotate_z_deg", text="Z")
+        box.operator("parametric_cad.apply_transform", icon="FILE_REFRESH")
+        if feature.status in {"ERROR", "BLOCKED"} and feature.error_message:
+            error = box.box()
+            error.alert = True
+            error.label(text=feature.error_message, icon="ERROR")
+    elif isinstance(feature, MirrorFeature):
+        box = layout.box()
+        box.label(text=feature.name, icon="MOD_MIRROR")
+        box.prop(ui, "mirror_source_feature_id", text="Source Feature")
+        box.prop(ui, "mirror_plane_reference", text="Mirror Plane")
+        box.prop(ui, "mirror_plane_offset_mm", text="Plane Offset (mm)")
+        box.operator("parametric_cad.apply_mirror", icon="FILE_REFRESH")
         if feature.status in {"ERROR", "BLOCKED"} and feature.error_message:
             error = box.box()
             error.alert = True

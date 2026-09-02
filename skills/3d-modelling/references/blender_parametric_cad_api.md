@@ -1,7 +1,7 @@
 # Blender Parametric CAD API
 
 This reference describes the public API in the Blender Parametric CAD
-extension (current extension release 0.11.0). It covers both direct Python
+extension (current extension release 0.12.0). It covers both direct Python
 scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
 
 ## MCP bridge
@@ -41,7 +41,7 @@ The MCP tools are:
 | --- | --- |
 | Document | `cad_status`, `cad_create_part`, `cad_set_active_part`, `cad_delete_part`, `cad_validate_document`, `cad_save_scene` |
 | Sketch | `cad_create_sketch`, `cad_add_geometry`, `cad_update_geometry`, `cad_delete_geometry`, `cad_profile`, `cad_delete_region`, `cad_restore_region` |
-| Features | `cad_create_extrude`, `cad_create_revolve`, `cad_update_feature`, `cad_delete_feature`, `cad_suppress_feature`, `cad_rollback`, `cad_rebuild` |
+| Features | `cad_create_extrude`, `cad_create_revolve`, `cad_create_transform`, `cad_create_mirror`, `cad_update_feature`, `cad_delete_feature`, `cad_suppress_feature`, `cad_rollback`, `cad_rebuild` |
 | Output | `cad_export_part` |
 
 The server exposes the same documentation through MCP resources
@@ -59,6 +59,12 @@ cad_add_geometry({
 })
 cad_create_extrude({"sketch_id": "<sketch UUID>", "distance_mm": 20,
                     "operation": "NEW", "depth_mode": "BLIND"})
+cad_create_transform({"part_id": "<part UUID>",
+                      "translation_mm": {"x": 0, "y": 0, "z": 0},
+                      "rotation_deg": {"x": 0, "y": -12, "z": 0}})
+cad_create_mirror({"part_id": "<part UUID>",
+                   "source_feature_id": "<additive feature UUID>",
+                   "mirror_plane": "YZ"})
 cad_export_part({"part_id": "<part UUID>", "filepath": "/tmp/bracket.stl",
                  "file_format": "STL"})
 ```
@@ -67,6 +73,26 @@ Use the IDs returned by each call; never infer them from Blender object names.
 For an Add/Remove feature, create or edit the source Sketch first, then pass
 the previous body feature through the persistent history (the worker computes
 the required UUID dependencies automatically).
+
+M5 MCP feature calls use these fields:
+
+- `cad_create_sketch`: add `offset_mm` to offset the datum/face/feature support
+  along its resolved normal.
+- `cad_create_transform`: optional `part_id`, `translation_mm`, and
+  `rotation_deg`; each vector is an object such as `{"x": 0, "y": -12,
+  "z": 0}` (translation is mm, rotation is degrees).
+- `cad_create_mirror`: `source_feature_id` must be an earlier additive Extrude
+  or Revolve; `mirror_plane` is `"XY"`, `"XZ"`, `"YZ"`, or a semantic object with
+  `type`, `feature_id`, `role`, and optional `offset_mm`.
+- `cad_update_feature` accepts `offset_mm` for Sketch support planes,
+  `translation_mm`/`rotation_deg` for Transform, `source_feature_id`/`mirror_plane`
+  for Mirror, and the existing Extrude or Revolve fields for those feature types.
+
+For example, a six-line closed guide profile can be appended with six `LINE`
+entities in exact local millimeter coordinates, followed by `cad_create_extrude`
+with `operation: "ADD"`; the generic detector does not special-case rectangles.
+Two independent `CIRCLE` entities in one Sketch are emitted as two loops and
+can be used by `REMOVE` + `THROUGH_ALL` to cut both holes in one feature.
 
 ## Fast path: build without UI
 
@@ -135,6 +161,8 @@ and its Part Studio UUID in `cad_part_id`.
 
 - Core 2D coordinates, radii, diameters, and Extrude distances are meters.
 - Core angles (`SketchArc`, `RevolveFeature`) are radians.
+- Transform translations are meters and XYZ Euler rotations are radians in the
+  core (`TransformFeature`); MCP and Blender UI inputs use millimeters/degrees.
 - UI state fields ending in `_mm` and `_deg` use millimeters and degrees.
 - Every `Feature`, `Part`, and `SketchEntity` has a UUID. Keep references by
   UUID, never by Blender object name or mesh polygon index.
@@ -251,16 +279,20 @@ History helpers:
 from blender_parametric_cad.core.part import (
     get_recursive_dependents,
     delete_feature,
+    previous_body_feature,
 )
 ```
 
 - `get_recursive_dependents(part, feature_id) -> list[str]`
 - `delete_feature(part, feature_id) -> list[Feature]`: cascades through all
   UUID-dependent downstream features and clears rollback.
+- `previous_body_feature(part, before_index=None) -> Feature | None`: returns
+  the nearest unsuppressed `EXTRUDE`, `REVOLVE`, `TRANSFORM`, or `MIRROR`
+  history entry that supplies the current body.
 
 ### `Feature`
 
-Base fields shared by Sketch, Extrude, and Revolve:
+Base fields shared by Sketch, Extrude, Revolve, Transform, and Mirror:
 
 ```python
 Feature(
@@ -273,7 +305,8 @@ Feature(
 )
 ```
 
-`feature_type` is `SKETCH`, `EXTRUDE`, or `REVOLVE` for concrete features.
+`feature_type` is `SKETCH`, `EXTRUDE`, `REVOLVE`, `TRANSFORM`, or `MIRROR` for
+concrete features.
 
 ## Sketch API
 
@@ -319,17 +352,21 @@ Fields include `plane_reference`, `origin`, `x_axis`, `y_axis`, `entities`, and
 
 Constructors:
 
-- `SketchFeature.on_plane(name, plane_type)` where `plane_type` is `XY`, `XZ`,
-  or `YZ`.
-- `SketchFeature.on_feature_plane(name, feature_id, role="END_PLANE")`.
+- `SketchFeature.on_plane(name, plane_type, offset=0.0)` where `plane_type` is
+  `XY`, `XZ`, or `YZ`; `offset` is meters along the resolved normal.
+- `SketchFeature.on_feature_plane(name, feature_id, role="END_PLANE", offset=0.0)`.
   Currently only an Extrude `END_PLANE` is supported.
-- `SketchFeature.on_face(name, topo_reference)` for supported Extrude faces.
+- `SketchFeature.on_face(name, topo_reference, offset=0.0)` for supported
+  Extrude faces.
 
 Other functions:
 
 - `sketch_to_world(sketch, u, v) -> (x, y, z)`
 - `sketch_normal(sketch) -> (x, y, z)`
 - `sketch.apply_resolved_plane(resolved_plane) -> None`
+- `sketch.plane_offset` returns the persistent support offset in meters.
+- `sketch.set_plane_offset(offset) -> None` updates the support offset without
+  baking it into `origin`.
 
 ### Numeric dimensions
 
@@ -445,6 +482,11 @@ Reference types:
 - `FEATURE_PLANE`: `feature_id` plus `role="END_PLANE"`.
 - `FACE`: `feature_id`, role, and optional `source_entity_id`.
 
+Every `SketchPlaneReference` also has `offset` (meters). The resolver computes
+`resolved_origin = support_origin + support_normal * offset` after resolving
+the datum, feature plane, or semantic face. A Transform history feature updates
+the downstream datum frame, so offsets follow the transformed support.
+
 - `PlaneResolver().resolve(reference, context) -> ResolvedPlane`
 - `resolve_sketch_plane_from_history(part, sketch_id) -> ResolvedPlane`
 
@@ -519,6 +561,42 @@ meaningful for partial sweeps; a full 360-degree sweep has the same geometric
 occupancy in either direction. Revolve Add/Remove tools normalize face winding
 before Blender Boolean evaluation.
 
+### `TransformFeature`
+
+```python
+from blender_parametric_cad.features.transform import TransformFeature
+
+TransformFeature(
+    translation=(0.0, 0.0, 0.0),  # meters
+    rotation=(0.0, -0.20943951, 0.0),  # XYZ radians
+    dependencies=[previous_body_id],
+)
+```
+
+`TransformFeature` applies a rigid XYZ Euler transform to the current body. The
+same accumulated frame is used by every later datum/semantic Sketch plane and
+datum Revolve axis. It requires an earlier body feature and never creates a
+second Body.
+
+### `MirrorFeature`
+
+```python
+from blender_parametric_cad.features.mirror import MirrorFeature
+from blender_parametric_cad.sketch.plane import SketchPlaneReference
+
+MirrorFeature(
+    source_feature_id=add_feature.id,
+    mirror_plane=SketchPlaneReference("DATUM", datum_plane="YZ", offset=0.0),
+    dependencies=[add_feature.id, previous_body_id],
+)
+```
+
+The supported sources are earlier additive `ExtrudeFeature` or `RevolveFeature`
+entries. Extrudes must be positive blind additions. The evaluator regenerates
+that source tool, reflects it across the resolved datum/semantic plane, then
+performs Boolean Add. The Boolean must remain one connected, manifold,
+non-zero-volume solid; disconnected mirrors are rejected.
+
 ## Evaluation and geometry backends
 
 ```python
@@ -534,7 +612,7 @@ from blender_parametric_cad.core.evaluator import (
 - `EvaluationResult.success`, `.body`, `.errors`, `.context`
 - `EvaluationError.feature_id`, `.feature_name`, `.message`
 - `EvaluationContext.part`, `.current_body`, `.resolved_planes`,
-  `.evaluated_features`, `.face_provenance`
+  `.evaluated_features`, `.face_provenance`, `.frame_matrix`
 
 `GeometryBackend` is the replaceable kernel interface:
 
@@ -546,6 +624,8 @@ from blender_parametric_cad.core.evaluator import (
 - `face_provenance(body)`
 - `boolean_difference(body, tool)`
 - `boolean_union(body, tool)`
+- `transform_body(body, transform)`
+- `mirror_tool(tool, plane_origin, plane_normal)`
 
 `BlenderMeshBackend` is the concrete Blender mesh implementation. A custom
 exact-kernel backend can implement the same interface without changing the
@@ -590,11 +670,14 @@ shape is:
 ```
 
 Sketch feature records contain `plane_reference`, `entities`, and
-`deleted_regions`. Entity records use `entity_type` values `LINE`, `CIRCLE`, or
-`ARC`. Extrude records contain `sketch_id`, `distance`, `direction`,
-`operation`, and `depth_mode`. Revolve records contain `sketch_id`,
-`axis_reference`, `angle`, and `operation`. Schema-v1 documents migrate to v2
-with `migrate_document_data`.
+`deleted_regions`; `plane_reference.offset` stores a support-plane offset in
+meters. Entity records use `entity_type` values `LINE`, `CIRCLE`, or `ARC`.
+Extrude records contain `sketch_id`, `distance`, `direction`, `operation`, and
+`depth_mode`. Revolve records contain `sketch_id`, `axis_reference`, `angle`,
+and `operation`. Transform records contain `translation` (meters) and `rotation`
+(radians). Mirror records contain `source_feature_id` and a serialized
+`mirror_plane` reference. Schema-v1 documents migrate to v2 with
+`migrate_document_data`.
 
 ## Blender operator façade
 
@@ -660,6 +743,10 @@ bpy.ops.parametric_cad.apply_extrude()
 bpy.ops.parametric_cad.cut()       # legacy Remove Through All
 bpy.ops.parametric_cad.revolve()
 bpy.ops.parametric_cad.apply_revolve()
+bpy.ops.parametric_cad.transform()
+bpy.ops.parametric_cad.apply_transform()
+bpy.ops.parametric_cad.mirror()
+bpy.ops.parametric_cad.apply_mirror()
 ```
 
 Set these fields before calling them:
@@ -674,7 +761,22 @@ ui.revolve_axis            # X / Y / Z
 ui.revolve_axis_line_id
 ui.revolve_axis_reverse
 ui.revolve_angle_deg
+ui.new_sketch_offset_mm
+ui.sketch_plane_offset_mm
+ui.transform_translate_x_mm
+ui.transform_translate_y_mm
+ui.transform_translate_z_mm
+ui.transform_rotate_x_deg
+ui.transform_rotate_y_deg
+ui.transform_rotate_z_deg
+ui.mirror_source_feature_id
+ui.mirror_plane_reference   # DATUM|XY/XZ/YZ or FEATURE|<id>|END_PLANE
+ui.mirror_plane_offset_mm
 ```
+
+The Transform and Mirror operators append history features after the current
+body; their **Apply** variants edit the selected feature and rebuild. The
+Mirror source selector only lists earlier additive Extrudes and Revolves.
 
 ### Per-Part export operator
 

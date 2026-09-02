@@ -5,6 +5,7 @@ from __future__ import annotations
 import bpy
 
 from ...features.extrude import ExtrudeFeature
+from ...core.part import previous_body_feature
 from ...sketch.profile import ProfileDetector
 from ...sketch.sketch import SketchFeature
 from ..adapter import load_document_from_scene, rebuild_part, save_document_to_scene
@@ -19,14 +20,7 @@ def _report_rebuild(operator, result) -> bool:
 
 
 def _previous_body_feature(part, before_index: int):
-    return next(
-        (
-            feature
-            for feature in reversed(part.features[:before_index])
-            if isinstance(feature, ExtrudeFeature)
-        ),
-        None,
-    )
+    return previous_body_feature(part, before_index)
 
 
 def _feature_dependencies(

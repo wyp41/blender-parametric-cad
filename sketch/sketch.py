@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from ..core.feature import Feature
 from .entities import SketchEntity
@@ -40,31 +40,41 @@ class SketchFeature(Feature):
         return "FEATURE_PLANE"
 
     @classmethod
-    def on_plane(cls, name: str, plane_type: str) -> "SketchFeature":
+    def on_plane(
+        cls, name: str, plane_type: str, offset: float = 0.0
+    ) -> "SketchFeature":
         if plane_type not in PLANE_AXES:
             raise ValueError(f"Unsupported datum plane: {plane_type}")
         x_axis, y_axis = PLANE_AXES[plane_type]
         return cls(
             name=name,
-            plane_reference=SketchPlaneReference("DATUM", datum_plane=plane_type),
+            plane_reference=SketchPlaneReference(
+                "DATUM", datum_plane=plane_type, offset=offset
+            ),
             x_axis=x_axis,
             y_axis=y_axis,
         )
 
     @classmethod
     def on_feature_plane(
-        cls, name: str, feature_id: str, role: str = "END_PLANE"
+        cls, name: str, feature_id: str, role: str = "END_PLANE", offset: float = 0.0
     ) -> "SketchFeature":
         return cls(
             name=name,
             plane_reference=SketchPlaneReference(
-                "FEATURE_PLANE", datum_plane=None, feature_id=feature_id, role=role
+                "FEATURE_PLANE",
+                datum_plane=None,
+                feature_id=feature_id,
+                role=role,
+                offset=offset,
             ),
             dependencies=[feature_id],
         )
 
     @classmethod
-    def on_face(cls, name: str, face: TopoReference) -> "SketchFeature":
+    def on_face(
+        cls, name: str, face: TopoReference, offset: float = 0.0
+    ) -> "SketchFeature":
         if face.reference_type != "FACE":
             raise ValueError("Sketch support must be a face reference.")
         return cls(
@@ -75,6 +85,7 @@ class SketchFeature(Feature):
                 feature_id=face.feature_id,
                 role=face.role,
                 source_entity_id=face.source_entity_id,
+                offset=offset,
             ),
             dependencies=[face.feature_id],
         )
@@ -83,6 +94,17 @@ class SketchFeature(Feature):
         self.origin = plane.origin
         self.x_axis = plane.x_axis
         self.y_axis = plane.y_axis
+
+    @property
+    def plane_offset(self) -> float:
+        """Persistent support-plane offset in meters."""
+
+        return self.plane_reference.offset
+
+    def set_plane_offset(self, offset: float) -> None:
+        """Update the support offset while preserving its semantic reference."""
+
+        self.plane_reference = replace(self.plane_reference, offset=float(offset))
 
 
 def sketch_to_world(sketch: SketchFeature, u: float, v: float) -> Vector3:

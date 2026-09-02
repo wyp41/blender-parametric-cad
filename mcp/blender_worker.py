@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from math import pi, radians
+from math import isfinite, pi, radians
 from pathlib import Path
 import socket
 import sys
@@ -90,6 +90,8 @@ class BlenderCadWorker:
             "cad_restore_region": self._restore_region,
             "cad_create_extrude": self._create_extrude,
             "cad_create_revolve": self._create_revolve,
+            "cad_create_transform": self._create_transform,
+            "cad_create_mirror": self._create_mirror,
             "cad_update_feature": self._update_feature,
             "cad_delete_feature": self._delete_feature,
             "cad_suppress_feature": self._suppress_feature,
@@ -226,20 +228,31 @@ class BlenderCadWorker:
             name = part.next_feature_name("Sketch")
         face_data = arguments.get("face_reference")
         feature_id = arguments.get("feature_id")
+        try:
+            offset_mm = float(arguments.get("offset_mm", 0.0) or 0.0)
+        except (TypeError, ValueError) as exc:
+            raise WorkerError("offset_mm must be numeric.") from exc
+        if not isfinite(offset_mm):
+            raise WorkerError("offset_mm must be finite.")
+        offset = offset_mm / 1000.0
         if face_data is not None:
             if not isinstance(face_data, dict):
                 raise WorkerError("face_reference must be an object.")
             try:
-                sketch = SketchFeature.on_face(name, TopoReference.from_dict(face_data))
+                sketch = SketchFeature.on_face(
+                    name, TopoReference.from_dict(face_data), offset=offset
+                )
             except (TypeError, ValueError, KeyError) as exc:
                 raise WorkerError(f"Invalid face_reference: {exc}") from exc
         elif feature_id:
             role = str(arguments.get("role") or "END_PLANE")
-            sketch = SketchFeature.on_feature_plane(name, str(feature_id), role)
+            sketch = SketchFeature.on_feature_plane(
+                name, str(feature_id), role, offset=offset
+            )
         else:
             plane = str(arguments.get("plane") or "XY").upper()
             try:
-                sketch = SketchFeature.on_plane(name, plane)
+                sketch = SketchFeature.on_plane(name, plane, offset=offset)
             except ValueError as exc:
                 raise WorkerError(str(exc)) from exc
         part.add_feature(sketch)
@@ -264,6 +277,25 @@ class BlenderCadWorker:
             return float(arguments[key])
         except (TypeError, ValueError) as exc:
             raise WorkerError(f"Field {key} must be numeric.") from exc
+
+    @staticmethod
+    def _vector(arguments: dict[str, Any], key: str) -> tuple[float, float, float]:
+        value = arguments.get(key)
+        if value is None:
+            return (0.0, 0.0, 0.0)
+        if isinstance(value, dict):
+            values = (value.get("x", 0.0), value.get("y", 0.0), value.get("z", 0.0))
+        elif isinstance(value, (list, tuple)) and len(value) == 3:
+            values = tuple(value)
+        else:
+            raise WorkerError(f"{key} must contain numeric x, y, and z values.")
+        try:
+            result = tuple(float(item) for item in values)
+        except (TypeError, ValueError) as exc:
+            raise WorkerError(f"{key} must contain numeric x, y, and z values.") from exc
+        if not all(isfinite(value) for value in result):
+            raise WorkerError(f"{key} must contain finite x, y, and z values.")
+        return result  # type: ignore[return-value]
 
     def _add_geometry(self, arguments: dict[str, Any]) -> dict[str, Any]:
         from blender_parametric_cad.core.serialization import entity_to_dict
@@ -508,14 +540,12 @@ class BlenderCadWorker:
 
     @staticmethod
     def _previous_body_feature(part, before_index: int):
-        from blender_parametric_cad.features.extrude import ExtrudeFeature
-        from blender_parametric_cad.features.revolve import RevolveFeature
-
         return next(
             (
                 feature
                 for feature in reversed(part.features[:before_index])
-                if isinstance(feature, (ExtrudeFeature, RevolveFeature)) and not feature.suppressed
+                if feature.feature_type in {"EXTRUDE", "REVOLVE", "TRANSFORM", "MIRROR"}
+                and not feature.suppressed
             ),
             None,
         )
@@ -695,10 +725,127 @@ class BlenderCadWorker:
         self._save_document(document)
         return {"part_id": part.id, "feature": feature_to_dict(feature), "rebuild": self._rebuild_payload(part.id)}
 
+    @staticmethod
+    def _mirror_plane_reference(value: Any):
+        from blender_parametric_cad.sketch.plane import SketchPlaneReference
+
+        if isinstance(value, str):
+            plane = value.upper()
+            if plane not in {"XY", "XZ", "YZ"}:
+                raise WorkerError("mirror_plane must be XY, XZ, or YZ.")
+            return SketchPlaneReference("DATUM", datum_plane=plane)
+        if not isinstance(value, dict):
+            raise WorkerError("mirror_plane must be a datum plane string or object.")
+        reference_type = str(
+            value.get("type") or value.get("reference_type") or "DATUM"
+        ).upper()
+        try:
+            offset_mm = float(value.get("offset_mm", 0.0) or 0.0)
+        except (TypeError, ValueError) as exc:
+            raise WorkerError("mirror_plane.offset_mm must be numeric.") from exc
+        if not isfinite(offset_mm):
+            raise WorkerError("mirror_plane.offset_mm must be finite.")
+        offset = offset_mm / 1000.0
+        if reference_type == "DATUM":
+            plane = str(value.get("plane") or value.get("datum_plane") or "YZ").upper()
+            if plane not in {"XY", "XZ", "YZ"}:
+                raise WorkerError("mirror_plane datum plane must be XY, XZ, or YZ.")
+            return SketchPlaneReference("DATUM", datum_plane=plane, offset=offset)
+        if reference_type == "FEATURE_PLANE":
+            source_id = str(value.get("feature_id") or "")
+            if not source_id:
+                raise WorkerError("mirror_plane FEATURE_PLANE needs feature_id.")
+            role = str(value.get("role") or "END_PLANE")
+            return SketchPlaneReference(
+                "FEATURE_PLANE",
+                datum_plane=None,
+                feature_id=source_id,
+                role=role,
+                offset=offset,
+            )
+        if reference_type == "FACE":
+            source_id = str(value.get("feature_id") or "")
+            role = str(value.get("role") or "")
+            if not source_id or not role:
+                raise WorkerError("mirror_plane FACE needs feature_id and role.")
+            return SketchPlaneReference(
+                "FACE",
+                datum_plane=None,
+                feature_id=source_id,
+                role=role,
+                source_entity_id=value.get("source_entity_id"),
+                offset=offset,
+            )
+        raise WorkerError("mirror_plane type must be DATUM, FEATURE_PLANE, or FACE.")
+
+    def _create_transform(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        from blender_parametric_cad.core.serialization import feature_to_dict
+        from blender_parametric_cad.features.transform import TransformFeature
+
+        document = self._document()
+        part = self._part(document, arguments)
+        previous = self._previous_body_feature(part, len(part.features))
+        if previous is None:
+            raise WorkerError("Transform requires an earlier body feature.")
+        translation_mm = self._vector(arguments, "translation_mm")
+        rotation_deg = self._vector(arguments, "rotation_deg")
+        feature = TransformFeature(
+            name=str(arguments.get("name") or part.next_feature_name("Transform")),
+            translation=tuple(value / 1000.0 for value in translation_mm),
+            rotation=tuple(radians(value) for value in rotation_deg),
+            dependencies=[previous.id],
+        )
+        part.add_feature(feature)
+        document.active_part_id = part.id
+        self._save_document(document)
+        return {
+            "part_id": part.id,
+            "feature": feature_to_dict(feature),
+            "rebuild": self._rebuild_payload(part.id),
+        }
+
+    def _create_mirror(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        from blender_parametric_cad.core.serialization import feature_to_dict
+        from blender_parametric_cad.features.extrude import ExtrudeFeature
+        from blender_parametric_cad.features.mirror import MirrorFeature
+        from blender_parametric_cad.features.revolve import RevolveFeature
+
+        document = self._document()
+        part = self._part(document, arguments)
+        source_id = str(arguments.get("source_feature_id") or "")
+        source = part.get_feature(source_id)
+        if not isinstance(source, (ExtrudeFeature, RevolveFeature)) or source.operation != "ADD":
+            raise WorkerError(
+                "source_feature_id must reference an additive Extrude or Revolve feature."
+            )
+        previous = self._previous_body_feature(part, len(part.features))
+        if previous is None:
+            raise WorkerError("Mirror requires an earlier body feature.")
+        plane = self._mirror_plane_reference(arguments.get("mirror_plane"))
+        dependencies = [source.id]
+        if previous.id not in dependencies:
+            dependencies.append(previous.id)
+        feature = MirrorFeature(
+            name=str(arguments.get("name") or part.next_feature_name("Mirror")),
+            source_feature_id=source.id,
+            mirror_plane=plane,
+            dependencies=dependencies,
+        )
+        part.add_feature(feature)
+        document.active_part_id = part.id
+        self._save_document(document)
+        return {
+            "part_id": part.id,
+            "feature": feature_to_dict(feature),
+            "rebuild": self._rebuild_payload(part.id),
+        }
+
     def _update_feature(self, arguments: dict[str, Any]) -> dict[str, Any]:
         from blender_parametric_cad.core.serialization import feature_to_dict
         from blender_parametric_cad.features.extrude import ExtrudeFeature
+        from blender_parametric_cad.features.mirror import MirrorFeature
         from blender_parametric_cad.features.revolve import RevolveFeature
+        from blender_parametric_cad.features.transform import TransformFeature
         from blender_parametric_cad.sketch.sketch import SketchFeature
 
         document = self._document()
@@ -711,7 +858,16 @@ class BlenderCadWorker:
             feature.name = name
         if "suppressed" in arguments:
             feature.suppressed = bool(arguments["suppressed"])
-        if isinstance(feature, ExtrudeFeature):
+        if isinstance(feature, SketchFeature):
+            if "offset_mm" in arguments:
+                try:
+                    offset_mm = float(arguments["offset_mm"])
+                except (TypeError, ValueError) as exc:
+                    raise WorkerError("offset_mm must be numeric.") from exc
+                if not isfinite(offset_mm):
+                    raise WorkerError("offset_mm must be finite.")
+                feature.set_plane_offset(offset_mm / 1000.0)
+        elif isinstance(feature, ExtrudeFeature):
             sketch = part.get_feature(feature.sketch_id)
             if not isinstance(sketch, SketchFeature):
                 raise WorkerError("Extrude source Sketch is unavailable.")
@@ -767,6 +923,37 @@ class BlenderCadWorker:
                 feature.axis_reference,
                 before_index=part.get_feature_index(feature.id),
             )
+        elif isinstance(feature, TransformFeature):
+            before_index = part.get_feature_index(feature.id)
+            if "translation_mm" in arguments:
+                feature.translation = tuple(
+                    value / 1000.0 for value in self._vector(arguments, "translation_mm")
+                )
+            if "rotation_deg" in arguments:
+                feature.rotation = tuple(
+                    radians(value) for value in self._vector(arguments, "rotation_deg")
+                )
+            previous = self._previous_body_feature(part, before_index)
+            feature.dependencies = [previous.id] if previous is not None else []
+        elif isinstance(feature, MirrorFeature):
+            before_index = part.get_feature_index(feature.id)
+            if "source_feature_id" in arguments:
+                source_id = str(arguments.get("source_feature_id") or "")
+                source = part.get_feature(source_id)
+                if not isinstance(source, (ExtrudeFeature, RevolveFeature)) or source.operation != "ADD":
+                    raise WorkerError(
+                        "source_feature_id must reference an additive Extrude or Revolve feature."
+                    )
+                if part.get_feature_index(source.id) >= before_index:
+                    raise WorkerError("source_feature_id must reference an earlier feature.")
+                feature.source_feature_id = source.id
+            if "mirror_plane" in arguments:
+                feature.mirror_plane = self._mirror_plane_reference(arguments["mirror_plane"])
+            previous = self._previous_body_feature(part, before_index)
+            dependencies = [feature.source_feature_id] if feature.source_feature_id else []
+            if previous is not None and previous.id not in dependencies:
+                dependencies.append(previous.id)
+            feature.dependencies = dependencies
         else:
             raise WorkerError(f"Unsupported feature type: {feature.feature_type}")
         document.active_part_id = part.id

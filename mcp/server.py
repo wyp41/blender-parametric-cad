@@ -270,8 +270,8 @@ class StdioMcpServer:
                     "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
                     "instructions": (
                         "Use cad_* tools for persistent Part Studios, sketches, "
-                        "features, rebuilds, and per-Part exports. MCP dimensions "
-                        "are millimeters and degrees."
+                        "features, Transform/Mirror history, rebuilds, and per-Part "
+                        "exports. MCP dimensions are millimeters and degrees."
                     ),
                 },
             )

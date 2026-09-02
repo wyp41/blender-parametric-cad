@@ -7,7 +7,17 @@ from math import isfinite, sqrt, tau
 from typing import Any
 
 from ..features.extrude import ExtrudeFeature
+from ..features.mirror import MirrorFeature
 from ..features.revolve import RevolveFeature
+from ..features.transform import TransformFeature
+from ..core.transform import (
+    IDENTITY_MATRIX,
+    Matrix4,
+    Transform,
+    matrix_multiply,
+    transform_point,
+    transform_vector,
+)
 from ..geometry.backend import GeometryBackend
 from ..sketch.entities import SketchLine
 from ..sketch.plane import PlaneResolutionError, PlaneResolver, ResolvedPlane
@@ -35,6 +45,9 @@ class EvaluationContext:
     resolved_planes: dict[str, ResolvedPlane] = field(default_factory=dict)
     evaluated_features: dict[str, Feature] = field(default_factory=dict)
     face_provenance: dict[int, TopoReference] = field(default_factory=dict)
+    # Rigid transforms applied to the Part reference frame so downstream datum
+    # Sketches resolve in the same parametric coordinate system as the body.
+    frame_matrix: Matrix4 = IDENTITY_MATRIX
 
 
 @dataclass
@@ -103,12 +116,18 @@ class PartEvaluator:
 
             previous_body = context.current_body
             previous_provenance = dict(context.face_provenance)
+            previous_frame_matrix = context.frame_matrix
+            previous_planes = dict(context.resolved_planes)
             if isinstance(feature, SketchFeature):
                 blocked = not self._evaluate_sketch(feature, context, errors)
             elif isinstance(feature, ExtrudeFeature):
                 blocked = not self._evaluate_extrude(feature, context, errors)
             elif isinstance(feature, RevolveFeature):
                 blocked = not self._evaluate_revolve(feature, context, errors)
+            elif isinstance(feature, TransformFeature):
+                blocked = not self._evaluate_transform(feature, context, errors)
+            elif isinstance(feature, MirrorFeature):
+                blocked = not self._evaluate_mirror(feature, context, errors)
             else:
                 self._record_error(
                     feature, f"Unsupported feature: {feature.feature_type}", errors
@@ -120,6 +139,8 @@ class PartEvaluator:
                 # into the result returned to the viewport.
                 context.current_body = previous_body
                 context.face_provenance = previous_provenance
+                context.frame_matrix = previous_frame_matrix
+                context.resolved_planes = previous_planes
                 blocked_by = feature
 
         return EvaluationResult(not errors, context.current_body, errors, context)
@@ -334,6 +355,121 @@ class PartEvaluator:
         self._mark_evaluated(feature, context)
         return True
 
+    def _evaluate_transform(
+        self,
+        feature: TransformFeature,
+        context: EvaluationContext,
+        errors: list[EvaluationError],
+    ) -> bool:
+        if context.current_body is None:
+            self._record_error(feature, "Transform requires an earlier body feature.", errors)
+            return False
+        try:
+            transform = feature.as_transform()
+            transformed = self.geometry_backend.transform_body(
+                context.current_body, transform
+            )
+            if transformed is None:
+                raise ValueError("Transform produced no body.")
+            context.current_body = transformed
+            context.frame_matrix = matrix_multiply(
+                transform.matrix, context.frame_matrix
+            )
+            for sketch_id, plane in list(context.resolved_planes.items()):
+                updated = _transform_resolved_plane(plane, transform)
+                context.resolved_planes[sketch_id] = updated
+                sketch = context.evaluated_features.get(sketch_id)
+                if isinstance(sketch, SketchFeature):
+                    sketch.apply_resolved_plane(updated)
+        except Exception as exc:
+            self._record_error(feature, str(exc), errors)
+            return False
+        self._mark_evaluated(feature, context)
+        return True
+
+    def _evaluate_mirror(
+        self,
+        feature: MirrorFeature,
+        context: EvaluationContext,
+        errors: list[EvaluationError],
+    ) -> bool:
+        if context.current_body is None:
+            self._record_error(feature, "Mirror requires an earlier body feature.", errors)
+            return False
+        source = context.evaluated_features.get(feature.source_feature_id)
+        if not isinstance(source, (ExtrudeFeature, RevolveFeature)) or source.operation != "ADD":
+            self._record_error(
+                feature,
+                "Mirror requires an earlier additive Extrude or Revolve feature.",
+                errors,
+            )
+            return False
+        if isinstance(source, ExtrudeFeature) and (
+            source.depth_mode != "BLIND" or source.distance <= 0.0
+        ):
+            self._record_error(
+                feature,
+                "Mirror source Extrude must be a positive blind ADD feature.",
+                errors,
+            )
+            return False
+        source_sketch = context.evaluated_features.get(source.sketch_id)
+        if not isinstance(source_sketch, SketchFeature):
+            self._record_error(feature, "Mirror source Sketch is missing or invalid.", errors)
+            return False
+        profile_entities = [
+            entity
+            for entity in source_sketch.entities
+            if not entity.construction
+            and not (
+                isinstance(source, RevolveFeature)
+                and source.axis_reference.reference_type == "SKETCH_LINE"
+                and source.axis_reference.sketch_id == source_sketch.id
+                and entity.id == source.axis_reference.entity_id
+            )
+        ]
+        detected = self.profile_detector.detect_entities(
+            profile_entities, source_sketch.deleted_regions
+        )
+        if not detected.success or detected.profile is None:
+            self._record_error(feature, detected.message, errors)
+            return False
+        try:
+            plane = self.plane_resolver.resolve(feature.mirror_plane, context)
+            if isinstance(source, ExtrudeFeature):
+                source_tool = self.geometry_backend.create_extrusion(
+                    source_sketch,
+                    detected.profile,
+                    source.distance,
+                    source.direction,
+                )
+            else:
+                axis = self._resolve_axis(source.axis_reference, context, errors, feature)
+                if axis is None:
+                    return False
+                source_tool = self.geometry_backend.revolve_profile(
+                    source_sketch,
+                    detected.profile,
+                    axis[0],
+                    axis[1],
+                    source.angle,
+                )
+            mirrored_tool = self.geometry_backend.mirror_tool(
+                source_tool, plane.origin, plane.normal
+            )
+            result_body = self.geometry_backend.boolean_union(
+                context.current_body, mirrored_tool
+            )
+            if result_body is None:
+                raise ValueError("Boolean Mirror Add produced no result.")
+            context.current_body = result_body
+            context.face_provenance = {}
+        except Exception as exc:
+            self._record_error(feature, str(exc), errors)
+            return False
+        self._mark_evaluated(feature, context)
+        return True
+
     @staticmethod
     def _resolve_axis(reference, context, errors, feature):
         datum_axes = {
@@ -348,9 +484,16 @@ class PartEvaluator:
                 )
                 return None
             direction = -1.0 if reference.direction < 0 else 1.0
-            return (0.0, 0.0, 0.0), tuple(
-                direction * value for value in datum_axes[reference.axis]
+            origin = transform_point(context.frame_matrix, (0.0, 0.0, 0.0))
+            axis = transform_vector(
+                context.frame_matrix,
+                tuple(direction * value for value in datum_axes[reference.axis]),
             )
+            length = sqrt(sum(value * value for value in axis))
+            if length <= 1e-12:
+                PartEvaluator._record_error(feature, "Transformed datum axis has zero length.", errors)
+                return None
+            return origin, tuple(value / length for value in axis)
         if reference.reference_type != "SKETCH_LINE":
             PartEvaluator._record_error(feature, "Axis is not resolved.", errors)
             return None
@@ -418,3 +561,12 @@ class PartEvaluator:
         feature.status = "ERROR"
         feature.error_message = message
         errors.append(EvaluationError(feature.id, feature.name, message))
+
+
+def _transform_resolved_plane(plane: ResolvedPlane, transform: Transform) -> ResolvedPlane:
+    return ResolvedPlane(
+        transform.apply_point(plane.origin),
+        transform.apply_vector(plane.x_axis),
+        transform.apply_vector(plane.y_axis),
+        transform.apply_vector(plane.normal),
+    )

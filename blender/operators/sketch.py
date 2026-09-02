@@ -63,6 +63,7 @@ def _begin_edit(context, part, sketch: SketchFeature, is_new: bool) -> None:
     ui.active_sketch_entity_id = ""
     ui.active_sketch_entity_ids = "[]"
     ui.sketch_dirty = False
+    ui.sketch_plane_offset_mm = sketch.plane_offset * 1000.0
     ui.sketch_session_new = is_new
     ui.sketch_session_backup = "" if is_new else json.dumps(feature_to_dict(sketch))
     clear_preview()
@@ -128,7 +129,11 @@ class PARAMETRIC_CAD_OT_new_sketch(bpy.types.Operator):
         if ui.selected_face_reference:
             try:
                 face = TopoReference.from_dict(json.loads(ui.selected_face_reference))
-                sketch = SketchFeature.on_face(part.next_feature_name("Sketch"), face)
+                sketch = SketchFeature.on_face(
+                    part.next_feature_name("Sketch"),
+                    face,
+                    offset=ui.new_sketch_offset_mm / 1000.0,
+                )
             except (TypeError, ValueError, KeyError) as exc:
                 self.report({"ERROR"}, f"Invalid selected face: {exc}")
                 return {"CANCELLED"}
@@ -137,12 +142,17 @@ class PARAMETRIC_CAD_OT_new_sketch(bpy.types.Operator):
             tokens = reference.split("|")
             if tokens[0] == "FEATURE" and len(tokens) == 3:
                 sketch = SketchFeature.on_feature_plane(
-                    part.next_feature_name("Sketch"), tokens[1], tokens[2]
+                    part.next_feature_name("Sketch"),
+                    tokens[1],
+                    tokens[2],
+                    offset=ui.new_sketch_offset_mm / 1000.0,
                 )
             else:
                 plane_type = tokens[1] if len(tokens) == 2 else "XY"
                 sketch = SketchFeature.on_plane(
-                    part.next_feature_name("Sketch"), plane_type
+                    part.next_feature_name("Sketch"),
+                    plane_type,
+                    offset=ui.new_sketch_offset_mm / 1000.0,
                 )
         part.add_feature(sketch)
         try:
@@ -188,6 +198,10 @@ class PARAMETRIC_CAD_OT_finish_sketch(bpy.types.Operator):
     def execute(self, context):
         ui = context.scene.parametric_cad_ui
         document = load_document_from_scene(context.scene)
+        part = document.active_part
+        sketch = part.get_feature(ui.active_sketch_id) if part else None
+        if isinstance(sketch, SketchFeature):
+            sketch.set_plane_offset(ui.sketch_plane_offset_mm / 1000.0)
         save_document_to_scene(context.scene, document)
         clear_preview()
         part = document.active_part
@@ -227,6 +241,7 @@ class PARAMETRIC_CAD_OT_apply_sketch(bpy.types.Operator):
         if not isinstance(sketch, SketchFeature):
             self.report({"ERROR"}, "The active Sketch is unavailable")
             return {"CANCELLED"}
+        sketch.set_plane_offset(ui.sketch_plane_offset_mm / 1000.0)
         save_document_to_scene(scene, document)
         result = rebuild_part(scene, part.id)
         if not result.success:

@@ -16,6 +16,12 @@ Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
 **Install from Disk**, and select `blender_parametric_cad-0.9.0.zip`. Enable
 **Blender Parametric CAD** if needed.
 
+## AI/API skill
+
+The repository includes the reusable [`3d-modelling` skill](skills/3d-modelling/SKILL.md)
+and its complete [Blender Parametric CAD API reference](skills/3d-modelling/references/blender_parametric_cad_api.md)
+for direct, non-UI modeling from AI-generated Python scripts.
+
 ## Part Studio workflow
 
 In a 3D View, press `N` and open the **CAD** tab:

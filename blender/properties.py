@@ -131,6 +131,21 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
         description="Show resolved Sketch geometry outside Sketch Edit",
         default=True,
     )
+    export_format: EnumProperty(
+        name="Export Format",
+        items=[
+            ("STL", "STL", "Export a mesh for fabrication"),
+            ("OBJ", "OBJ", "Export an OBJ mesh"),
+            ("PLY", "PLY", "Export a polygon mesh"),
+        ],
+        default="STL",
+    )
+    export_filepath: StringProperty(
+        name="Export Path",
+        description="File path for exporting the active Part Studio",
+        subtype="FILE_PATH",
+        default="",
+    )
     new_sketch_plane: EnumProperty(
         name="Plane",
         items=[

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import bpy
 
 from ..core.document import CadDocument
@@ -72,6 +74,69 @@ def rebuild_part(scene: bpy.types.Scene, part_id: str | None = None) -> Evaluati
     result_object.update_tag()
     bpy.context.view_layer.update()
     return result
+
+
+def export_part(
+    scene: bpy.types.Scene,
+    part_id: str,
+    filepath: str,
+    file_format: str = "STL",
+) -> str:
+    """Rebuild and export one Part Studio's generated result object.
+
+    ``file_format`` is one of ``STL``, ``OBJ``, or ``PLY``.  The export is
+    isolated to the requested Part Studio even when other Part Studios are
+    present in the scene.  A missing extension is added from ``file_format``.
+    """
+
+    if not str(filepath).strip():
+        raise ValueError("An export filepath is required.")
+    format_name = str(file_format or "").upper().lstrip(".")
+    if format_name not in {"STL", "OBJ", "PLY"}:
+        raise ValueError("Export format must be STL, OBJ, or PLY.")
+
+    result = rebuild_part(scene, part_id)
+    if not result.success:
+        message = "; ".join(error.message for error in result.errors)
+        raise ValueError(message or "Part Studio could not be rebuilt for export.")
+    result_object = _find_result_object(part_id)
+    if result_object is None:
+        raise ValueError(f"Part Studio {part_id} has no generated result body.")
+
+    path = Path(str(filepath))
+    if not path.suffix:
+        path = path.with_suffix(f".{format_name.lower()}")
+
+    selected_objects = list(bpy.context.selected_objects)
+    active_object = bpy.context.view_layer.objects.active
+    for item in selected_objects:
+        item.select_set(False)
+    result_object.select_set(True)
+    bpy.context.view_layer.objects.active = result_object
+    try:
+        operators = {
+            "STL": bpy.ops.wm.stl_export,
+            "OBJ": bpy.ops.wm.obj_export,
+            "PLY": bpy.ops.wm.ply_export,
+        }
+        status = operators[format_name](
+            filepath=str(path),
+            export_selected_objects=True,
+        )
+        if "FINISHED" not in status:
+            raise RuntimeError(f"Blender {format_name} export did not finish.")
+    finally:
+        result_object.select_set(False)
+        for item in selected_objects:
+            try:
+                item.select_set(True)
+            except ReferenceError:
+                pass
+        try:
+            bpy.context.view_layer.objects.active = active_object
+        except ReferenceError:
+            bpy.context.view_layer.objects.active = None
+    return str(path)
 
 
 def _ensure_collection(

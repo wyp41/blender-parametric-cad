@@ -50,6 +50,17 @@ class PARAMETRIC_CAD_PT_main(bpy.types.Panel):
         delete.part_id = part.id
         studio.prop(ui, "show_sketches")
 
+        export = layout.box()
+        export.label(text="Export Part Studio", icon="EXPORT")
+        export.prop(ui, "export_format", text="Format")
+        export.prop(ui, "export_filepath", text="Path")
+        export_operator = export.operator(
+            "parametric_cad.export_part", text="Export Active Part", icon="EXPORT"
+        )
+        export_operator.part_id = part.id
+        export_operator.file_format = ui.export_format
+        export_operator.filepath = ui.export_filepath
+
         support = layout.box()
         support.label(text="Viewport Selection", icon="RESTRICT_SELECT_OFF")
         support.label(

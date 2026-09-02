@@ -1,6 +1,6 @@
 # Blender Parametric CAD
 
-History-based parametric modeling extension for Blender 5.1.2. Version 0.8.0
+History-based parametric modeling extension for Blender 5.1.2. Version 0.9.0
 implements the M3.5–M3.6 Part Studio, precise Sketch and unified Extrude
 workflows, the M4 semantic face-selection/Revolve milestone, arc-based
 composite sketch regions, interactive sketch cleanup/snapping, and robust
@@ -13,7 +13,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.8.0.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.9.0.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## Part Studio workflow
@@ -53,6 +53,11 @@ and enter an angle in degrees (360° by default).
 The Part Studio selector switches between independent single-body histories.
 Part Studios can be renamed or deleted without relying on Blender object names.
 
+Each Part Studio can be exported independently from the CAD panel or from
+Python with `blender_parametric_cad.blender.adapter.export_part(scene,
+part_id, filepath, file_format)`. Supported formats are `STL`, `OBJ`, and
+`PLY`; only the requested Part Studio is rebuilt and selected for export.
+
 ## Supported profiles and operations
 
 - One Circle, mixed line/arc loop, or multiple closed loops/regions (including
@@ -79,6 +84,8 @@ Part Studios can be renamed or deleted without relying on Blender object names.
 - Full-turn Revolve tools are topologically closed at the seam, and their face
   winding is normalized for reliable Add/Remove Boolean operations even when
   the axis direction is reversed.
+- The active Part Studio can be exported independently as STL, OBJ, or PLY;
+  other Part Studio result objects are never included in that export.
 
 Numeric edits update the existing Sketch entities and preserve entity UUIDs.
 Closed loop winding is normalized before mesh generation so clockwise and

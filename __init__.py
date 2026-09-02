@@ -6,7 +6,15 @@ def register() -> None:
     import bpy
 
     from .blender import properties
-    from .blender.operators import extrude, part, revolve, selection, sketch, sketch_tools
+    from .blender.operators import (
+        export,
+        extrude,
+        part,
+        revolve,
+        selection,
+        sketch,
+        sketch_tools,
+    )
     from .blender.ui import panels
     from .blender.viewport import sketch_overlay
 
@@ -14,6 +22,7 @@ def register() -> None:
     for group in (
         part.CLASSES,
         selection.CLASSES,
+        export.CLASSES,
         sketch.CLASSES,
         sketch_tools.CLASSES,
         extrude.CLASSES,
@@ -29,7 +38,15 @@ def unregister() -> None:
     import bpy
 
     from .blender import properties
-    from .blender.operators import extrude, part, revolve, selection, sketch, sketch_tools
+    from .blender.operators import (
+        export,
+        extrude,
+        part,
+        revolve,
+        selection,
+        sketch,
+        sketch_tools,
+    )
     from .blender.ui import panels
     from .blender.viewport import sketch_overlay
 
@@ -37,6 +54,7 @@ def unregister() -> None:
     groups = (
         part.CLASSES,
         selection.CLASSES,
+        export.CLASSES,
         sketch.CLASSES,
         sketch_tools.CLASSES,
         extrude.CLASSES,

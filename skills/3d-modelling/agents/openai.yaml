@@ -1,3 +1,3 @@
 interface:
   display_name: "3d Modelling"
-  short_description: "Direct Blender CAD API modeling"
+  short_description: "Direct Blender CAD API and MCP modeling"

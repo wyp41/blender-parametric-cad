@@ -1,6 +1,6 @@
 # Blender Parametric CAD
 
-History-based parametric modeling extension for Blender 5.1.2. Version 0.9.0
+History-based parametric modeling extension for Blender 5.1.2. Version 0.10.0
 implements the M3.5–M3.6 Part Studio, precise Sketch and unified Extrude
 workflows, the M4 semantic face-selection/Revolve milestone, arc-based
 composite sketch regions, interactive sketch cleanup/snapping, and robust
@@ -13,7 +13,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.9.0.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.10.0.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## AI/API skill
@@ -21,6 +21,37 @@ Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
 The repository includes the reusable [`3d-modelling` skill](skills/3d-modelling/SKILL.md)
 and its complete [Blender Parametric CAD API reference](skills/3d-modelling/references/blender_parametric_cad_api.md)
 for direct, non-UI modeling from AI-generated Python scripts.
+
+## MCP server
+
+The repository also includes a dependency-free MCP server. It starts one
+persistent Blender 5.1.2 background worker on the first tool call, keeps it
+alive for the MCP session, and closes it when the client disconnects. This
+avoids starting/stopping Blender for every modeling operation and does not
+require mouse-driven computer use.
+
+Configure the MCP client with the checked-out server file:
+
+```json
+{
+  "mcpServers": {
+    "blender-parametric-cad": {
+      "command": "python3",
+      "args": ["/absolute/path/to/blender_parametric_cad/mcp/server.py"],
+      "env": {
+        "BLENDER_CAD_EXECUTABLE": "/Applications/Blender.app/Contents/MacOS/Blender",
+        "BLENDER_CAD_FILE": "/absolute/path/to/model.blend"
+      }
+    }
+  }
+}
+```
+
+`BLENDER_CAD_FILE` is optional. When set, the worker opens that file and
+autosaves mutations to it; otherwise use the `cad_save_scene` tool. The MCP
+tools use millimeters and degrees for human-friendly inputs, while the direct
+Python API keeps its documented meter/radian units. Tool discovery also
+exposes the skill and API reference as MCP resources.
 
 ## Part Studio workflow
 

@@ -1,24 +1,54 @@
 ---
 name: 3d-modelling
-description: "Use the Blender Parametric CAD Python API for direct, non-UI 3D modeling from sketches, features, booleans, and per-Part exports."
+description: "Use the Blender Parametric CAD Python API and MCP tools for direct, non-UI 3D modeling from sketches, features, booleans, and per-Part exports."
 ---
 
 # 3D Modelling
 
 Use this skill when an AI needs to build or edit a model in the Blender 5.1.2
-Parametric CAD extension without mouse-driven computer use. Prefer constructing
-the persistent `CadDocument`/`Part`/`Feature` graph directly, then call
-`rebuild_part` once. Use Blender operators only when an existing UI workflow is
-specifically required.
+Parametric CAD extension without mouse-driven computer use. Prefer the MCP
+tools below when an MCP client is available: the checked-out server starts one
+persistent Blender worker automatically and reuses it for the whole session.
+When writing a Blender Python script directly, construct the persistent
+`CadDocument`/`Part`/`Feature` graph, then call `rebuild_part` once. Use Blender
+operators only when an existing UI workflow is specifically required.
 
-The complete callable surface, field values, schema, units, limitations, and
-copyable examples are in [references/blender_parametric_cad_api.md](references/blender_parametric_cad_api.md).
+The complete callable surface, MCP schemas, field values, units, limitations,
+and copyable examples are in
+[references/blender_parametric_cad_api.md](references/blender_parametric_cad_api.md).
 Read that reference before generating a CAD script. Do not call names starting
 with `_`; those are implementation details.
 
+## MCP fast path
+
+Configure an MCP client to run `mcp/server.py` with Python. Set
+`BLENDER_CAD_EXECUTABLE` to the Blender 5.1.2 executable and optionally set
+`BLENDER_CAD_FILE` to the `.blend` file to open and autosave. The bridge starts
+Blender on the first `tools/call`, keeps it alive, and shuts it down only when
+the MCP client ends the session; no per-operation start/stop or computer use is
+needed. The worker loads the CAD scene properties itself, so enabling the UI
+add-on is not required for MCP-only sessions.
+
+MCP tool groups:
+
+- Document: `cad_status`, `cad_create_part`, `cad_set_active_part`,
+  `cad_delete_part`, `cad_save_scene`.
+- Sketch: `cad_create_sketch`, `cad_add_geometry`, `cad_update_geometry`,
+  `cad_delete_geometry`, `cad_profile`, `cad_delete_region`,
+  `cad_restore_region`.
+- Features: `cad_create_extrude`, `cad_create_revolve`, `cad_update_feature`,
+  `cad_delete_feature`, `cad_suppress_feature`, `cad_rollback`,
+  `cad_rebuild`.
+- Output: `cad_export_part` (isolated STL, OBJ, or PLY export by `part_id`).
+
+MCP geometry lengths are millimeters and arc/revolve angles are degrees. Every
+response includes stable UUIDs and rebuild errors where applicable. The server
+also exposes `cad://skill/3d-modelling` and `cad://api-reference` resources.
+
 Important invariants:
 
-- The extension must be enabled in Blender before using `bpy` bridge functions.
+- Direct `bpy` bridge functions require the extension to be enabled in Blender;
+  the MCP worker registers the scene properties it needs for MCP-only sessions.
 - Core sketch lengths and feature distances are meters; core angles are radians.
   N-panel properties use millimeters and degrees.
 - The persistent JSON in `scene.parametric_cad_document` is authoritative;

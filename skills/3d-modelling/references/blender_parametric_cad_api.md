@@ -1,10 +1,72 @@
 # Blender Parametric CAD API
 
 This reference describes the public API in the Blender Parametric CAD
-extension (Blender 5.1.2, current extension release 0.9.0). It is intended for
-AI-generated scripts that run inside Blender after the extension is enabled.
-The API is Python-based; there is currently no HTTP, REST, MCP, or socket
-endpoint.
+extension (current extension release 0.10.0). It covers both direct Python
+scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
+
+## MCP bridge
+
+Run `mcp/server.py` with Python as an MCP stdio server. The bridge starts one
+background Blender 5.1.2 worker on the first tool call, proxies all subsequent
+calls over a private localhost connection, and keeps that worker alive for the
+MCP session. Blender is launched once per MCP session rather than once per
+operation. Blender's own stdout is isolated from the MCP stream.
+
+Example client entry:
+
+```json
+{
+  "mcpServers": {
+    "blender-parametric-cad": {
+      "command": "python3",
+      "args": ["/absolute/path/to/blender_parametric_cad/mcp/server.py"],
+      "env": {
+        "BLENDER_CAD_EXECUTABLE": "/Applications/Blender.app/Contents/MacOS/Blender",
+        "BLENDER_CAD_FILE": "/absolute/path/to/model.blend"
+      }
+    }
+  }
+}
+```
+
+`BLENDER_CAD_EXECUTABLE` may be omitted when `blender` is on `PATH`.
+`BLENDER_CAD_FILE` is optional; when set it is opened at worker startup and
+mutations are autosaved to the same path. Without it, call `cad_save_scene`.
+MCP tool inputs use millimeters and degrees; the direct Python API below uses
+meters and radians as documented in [Units and identifiers](#units-and-identifiers).
+
+The MCP tools are:
+
+| Group | Tools |
+| --- | --- |
+| Document | `cad_status`, `cad_create_part`, `cad_set_active_part`, `cad_delete_part`, `cad_save_scene` |
+| Sketch | `cad_create_sketch`, `cad_add_geometry`, `cad_update_geometry`, `cad_delete_geometry`, `cad_profile`, `cad_delete_region`, `cad_restore_region` |
+| Features | `cad_create_extrude`, `cad_create_revolve`, `cad_update_feature`, `cad_delete_feature`, `cad_suppress_feature`, `cad_rollback`, `cad_rebuild` |
+| Output | `cad_export_part` |
+
+The server exposes the same documentation through MCP resources
+`cad://skill/3d-modelling` and `cad://api-reference`.
+
+A minimal MCP modeling sequence is:
+
+```text
+cad_create_part({"name": "Bracket"})
+cad_create_sketch({"name": "Base", "plane": "XY"})
+cad_add_geometry({
+  "sketch_id": "<sketch UUID>",
+  "geometry": {"type": "RECTANGLE", "x_mm": -40, "y_mm": -25,
+               "width_mm": 80, "height_mm": 50}
+})
+cad_create_extrude({"sketch_id": "<sketch UUID>", "distance_mm": 20,
+                    "operation": "NEW", "depth_mode": "BLIND"})
+cad_export_part({"part_id": "<part UUID>", "filepath": "/tmp/bracket.stl",
+                 "file_format": "STL"})
+```
+
+Use the IDs returned by each call; never infer them from Blender object names.
+For an Add/Remove feature, create or edit the source Sketch first, then pass
+the previous body feature through the persistent history (the worker computes
+the required UUID dependencies automatically).
 
 ## Fast path: build without UI
 

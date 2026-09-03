@@ -95,6 +95,7 @@ class PARAMETRIC_CAD_OT_transform(bpy.types.Operator):
         )
         part.add_feature(feature)
         ui.active_feature_id = feature.id
+        ui.feature_create_kind = ""
         ui.active_sketch_id = ""
         ui.mode = "FEATURE_EDIT"
         save_document_to_scene(scene, document)
@@ -154,6 +155,7 @@ class PARAMETRIC_CAD_OT_mirror(bpy.types.Operator):
         )
         part.add_feature(feature)
         ui.active_feature_id = feature.id
+        ui.feature_create_kind = ""
         ui.active_sketch_id = ""
         ui.mode = "FEATURE_EDIT"
         save_document_to_scene(scene, document)

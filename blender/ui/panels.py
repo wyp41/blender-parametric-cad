@@ -7,10 +7,15 @@ import json
 import bpy
 
 from ...core.references import TopoReference
+from ...core.part import BODY_FEATURE_TYPES
 from ...sketch.sketch import SketchFeature
 from ...sketch.numeric import arc_parameters, circle_parameters, rectangle_parameters
 from ..adapter import CadDocumentError, load_document_from_scene
-from .feature_tree import draw_feature_actions, draw_feature_tree, draw_selected_feature
+from .feature_tree import (
+    draw_feature_actions,
+    draw_feature_tree,
+    draw_selected_feature,
+)
 
 
 _PANEL_TITLES = {
@@ -205,6 +210,7 @@ def _draw_model_section(layout, part, ui):
         actions.label(text="Select a feature above to edit or remove it.", icon="INFO")
     else:
         draw_feature_actions(layout, selected)
+        _draw_next_feature(layout, part, selected, ui)
 
 
 def _draw_sketch_section(layout, context, part, ui):
@@ -243,45 +249,126 @@ def _draw_sketch_section(layout, context, part, ui):
     create.operator("parametric_cad.new_sketch", icon="OUTLINER_OB_CURVE")
 
 
+def _draw_next_feature(layout, part, selected, ui):
+    """Show the next legal modeling tools for the selected history item."""
+
+    if isinstance(selected, SketchFeature):
+        title = "Next Feature — from Sketch"
+        tools = ("EXTRUDE", "REVOLVE")
+    elif getattr(selected, "feature_type", None) in BODY_FEATURE_TYPES:
+        title = "Next Body Feature"
+        tools = ("TRANSFORM", "MIRROR")
+    else:
+        return
+
+    card = layout.box()
+    card.label(text=title, icon="ADD")
+    card.label(
+        text="Choose an operation to open its focused editor in Features.",
+        icon="INFO",
+    )
+    for kind, label, icon in (
+        ("EXTRUDE", "Extrude", "MOD_SOLIDIFY"),
+        ("REVOLVE", "Revolve", "MOD_SCREW"),
+        ("TRANSFORM", "Transform", "OBJECT_ORIGIN"),
+        ("MIRROR", "Mirror", "MOD_MIRROR"),
+    ):
+        if kind not in tools:
+            continue
+        button = card.operator(
+            "parametric_cad.open_feature_tools",
+            text=f"Create {label}",
+            icon=icon,
+        )
+        button.feature_kind = kind
+
+
+def _create_feature_panel(layout, part, selected, ui, kind, title, icon):
+    """Draw one collapsed-by-default creation form for a selected source."""
+
+    expanded = ui.feature_create_kind == kind
+    header, body = layout.panel(
+        f"cad_create_{part.id}_{selected.id}_{kind.lower()}",
+        default_closed=not expanded,
+    )
+    header.label(text=title, icon=icon)
+    if body is None:
+        return
+    body.label(text=f"Source: {selected.name}", icon="LINKED")
+    if kind == "EXTRUDE":
+        body.prop(ui, "extrude_operation", text="Operation")
+        body.prop(ui, "extrude_depth_mode", text="Extent")
+        if ui.extrude_depth_mode == "BLIND":
+            body.prop(ui, "extrude_distance_mm", text="Distance (mm)")
+        body.operator(
+            "parametric_cad.extrude",
+            text="Create Extrude",
+            icon="MOD_SOLIDIFY",
+        )
+    elif kind == "REVOLVE":
+        body.prop(ui, "revolve_operation", text="Operation")
+        body.prop(ui, "revolve_axis_type", text="Axis")
+        if ui.revolve_axis_type == "DATUM_AXIS":
+            body.prop(ui, "revolve_axis", text="Datum Axis")
+        else:
+            body.prop(ui, "revolve_axis_line_id", text="Sketch Line")
+        body.prop(ui, "revolve_axis_reverse", text="Reverse Axis")
+        body.prop(ui, "revolve_angle_deg", text="Angle (deg)")
+        body.operator(
+            "parametric_cad.revolve",
+            text="Create Revolve",
+            icon="MOD_SCREW",
+        )
+    elif kind == "TRANSFORM":
+        body.prop(ui, "transform_translate_x_mm", text="Translate X (mm)")
+        body.prop(ui, "transform_translate_y_mm", text="Translate Y (mm)")
+        body.prop(ui, "transform_translate_z_mm", text="Translate Z (mm)")
+        body.prop(ui, "transform_rotate_x_deg", text="Rotate X (deg)")
+        body.prop(ui, "transform_rotate_y_deg", text="Rotate Y (deg)")
+        body.prop(ui, "transform_rotate_z_deg", text="Rotate Z (deg)")
+        body.operator(
+            "parametric_cad.transform",
+            text="Create Transform",
+            icon="OBJECT_ORIGIN",
+        )
+    elif kind == "MIRROR":
+        body.prop(ui, "mirror_source_feature_id", text="Source Feature")
+        body.prop(ui, "mirror_plane_reference", text="Mirror Plane")
+        body.prop(ui, "mirror_plane_offset_mm", text="Plane Offset (mm)")
+        body.operator(
+            "parametric_cad.mirror",
+            text="Create Mirror",
+            icon="MOD_MIRROR",
+        )
+
+
 def _draw_features_section(layout, part, ui):
-    layout.label(text="Body Features", icon="MOD_SOLIDIFY")
-
-    transform = layout.box()
-    transform_header = transform.row(align=True)
-    transform_header.label(text="Transform", icon="OBJECT_ORIGIN")
-    transform.prop(ui, "transform_translate_x_mm", text="Translate X (mm)")
-    transform.prop(ui, "transform_translate_y_mm", text="Translate Y (mm)")
-    transform.prop(ui, "transform_translate_z_mm", text="Translate Z (mm)")
-    transform.prop(ui, "transform_rotate_x_deg", text="Rotate X (deg)")
-    transform.prop(ui, "transform_rotate_y_deg", text="Rotate Y (deg)")
-    transform.prop(ui, "transform_rotate_z_deg", text="Rotate Z (deg)")
-    transform.operator(
-        "parametric_cad.transform",
-        text="Add Transform",
-        icon="OBJECT_ORIGIN",
-    )
-
-    layout.separator()
-    mirror = layout.box()
-    mirror_header = mirror.row(align=True)
-    mirror_header.label(text="Mirror", icon="MOD_MIRROR")
-    mirror.prop(ui, "mirror_source_feature_id", text="Source Feature")
-    mirror.prop(ui, "mirror_plane_reference", text="Mirror Plane")
-    mirror.prop(ui, "mirror_plane_offset_mm", text="Plane Offset (mm)")
-    mirror.operator(
-        "parametric_cad.mirror",
-        text="Add Mirror",
-        icon="MOD_MIRROR",
-    )
+    """Show a focused editor and compact, contextual creation tools."""
 
     selected = part.get_feature(ui.active_feature_id)
     if selected is None:
+        layout.label(text="Select a Sketch or Feature in Model first.", icon="INFO")
+        return
+    layout.label(text=f"Editing {selected.name}", icon="RESTRICT_SELECT_OFF")
+    draw_selected_feature(layout, selected, ui, part)
+
+    if isinstance(selected, SketchFeature):
+        tools = (
+            ("EXTRUDE", "Create Extrude", "MOD_SOLIDIFY"),
+            ("REVOLVE", "Create Revolve", "MOD_SCREW"),
+        )
+    elif getattr(selected, "feature_type", None) in BODY_FEATURE_TYPES:
+        tools = (
+            ("TRANSFORM", "Create Transform", "OBJECT_ORIGIN"),
+            ("MIRROR", "Create Mirror", "MOD_MIRROR"),
+        )
+    else:
+        tools = ()
+    if tools:
         layout.separator()
-        layout.label(text="Select a feature in the Model tab to edit it.", icon="INFO")
-    elif ui.mode != "SKETCH_EDIT":
-        layout.separator()
-        layout.label(text="Selected Feature", icon="RESTRICT_SELECT_OFF")
-        draw_selected_feature(layout, selected, ui, part)
+        layout.label(text="Create Next Feature", icon="ADD")
+        for kind, title, icon in tools:
+            _create_feature_panel(layout, part, selected, ui, kind, title, icon)
 
 
 def _draw_output_section(layout, part, ui):

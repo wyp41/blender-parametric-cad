@@ -21,14 +21,21 @@ operators only when an existing UI workflow is specifically required.
 
 For manual editing in Blender, the CAD N-panel is organized with a compact
 left icon rail: Model, Sketch, Features, and Output. Only the selected section
-is expanded, and entering Sketch Edit selects the Sketch section automatically.
-Sketch Edit also adds CAD Select/Line/Rectangle/Circle/Arc and cleanup tools to
-Blender's native left 3D View toolbar; select a toolbar icon to arm its viewport
-action. Model exposes vertical Feature Actions for the selected history entry,
-so rename/delete/suppress and rollback do not require switching workspaces.
-The add-on registration path replaces stale or partially registered RNA classes
-left by an extension reload, including the transient panel state used by this
-icon rail.
+is expanded. Sketch Edit adds CAD Select/Line/Rectangle/Circle/Arc and cleanup
+tools to Blender's native left 3D View toolbar; select a toolbar icon to arm
+its viewport action. Finishing a Sketch returns to **Model**, where the
+selected Sketch exposes vertical **Create Extrude** and **Create Revolve**
+buttons. Selecting a body exposes **Create Transform** and **Create Mirror**.
+Those buttons open **Features** with one focused, collapsible editor (and
+Transform's Translation/Rotation subpanels), so unrelated operations never
+fill the panel. Model exposes vertical Feature Actions for the selected
+history entry, so rename/delete/suppress and rollback do not require switching
+workspaces. The add-on registration path replaces stale or partially registered
+RNA classes left by an extension reload, including the transient panel state
+used by this icon rail.
+After Sketch Edit ends, the native toolbar also offers contextual feature tools
+for the selected Sketch/body; the Model buttons are the direct entry point when
+no viewport click is desired.
 
 The complete callable surface, MCP schemas, field values, units, limitations,
 and copyable examples are in
@@ -79,8 +86,9 @@ close any such orphan Blender windows once after upgrading.
 In the CAD N-panel, use **Model → History** for rollback and roll-forward
 controls. The Model page also exposes vertical Feature Actions for the selected
 feature, so rename/delete/suppress does not require switching workspaces. The
-**Features** workspace keeps Body Features easy to scan by placing Transform
-and Mirror in separate top-level sections.
+**Features** workspace shows only the selected feature editor plus two
+collapsed-by-default contextual creation panels, keeping Transform, Mirror,
+Extrude, and Revolve easy to find.
 
 Use `--headless` or `BLENDER_CAD_HEADLESS=1` only on machines without a display
 or in CI. On macOS, headless mode selects Blender's OpenGL backend by default

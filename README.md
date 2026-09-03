@@ -1,15 +1,19 @@
 # Blender Parametric CAD
 
 An AI-first, history-based parametric CAD extension for Blender 5.1.2, designed
-for Codex, Claude, and other tool-using AI systems. Version 0.15.6 provides a
+for Codex, Claude, and other tool-using AI systems. Version 0.16.0 provides a
 real MCP interface and a Python API so an AI can create sketches, features,
 booleans, transforms, mirrors, and per-Part exports through normal CAD
 operations—not by spending tokens on mouse clicks or computer-use screenshots.
 This release also hardens Blender RNA class registration so extension reloads
 do not leave stale UI properties such as `panel_tab` behind. The CAD panel now
 keeps MCP service controls in a collapsible section, puts Body Feature tools in
-separate Transform and Mirror sections, and places rollback controls under
-Model → History.
+contextual Model/Features sections, and places rollback controls under
+Model → History. The operation UI is now staged instead of showing every
+feature form at once: Sketch tools are shown while a
+Sketch is being edited; after finishing, Model presents only the next legal
+Extrude/Revolve or Transform/Mirror actions, and Features opens one focused
+parameter editor at a time.
 
 The resulting model is still a native, editable Blender workflow: every AI
 operation is stored as persistent CAD history, and the same Sketches, feature
@@ -32,7 +36,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.15.6.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.16.0.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## AI/API skill
@@ -79,7 +83,7 @@ same Blender window.
 
 Warnings such as `Policy violation with top level module: blender_parametric_cad`
 come from Blender's extension namespace policy, not from another add-on and not
-from the MCP port. Version 0.15.6 loads the worker through Blender's qualified
+from the MCP port. Version 0.16.0 loads the worker through Blender's qualified
 `bl_ext.<repository>.blender_parametric_cad` namespace and keeps bundled modules
 out of the global Python namespace. After upgrading, restart Blender once (or
 disable/re-enable the extension) so modules imported by an older worker are
@@ -89,7 +93,7 @@ can be resolved by using that service or selecting a free port.
 
 Upgrade note: windows left behind by releases before 0.15.0 used a private
 per-client socket and cannot be rediscovered after their MCP parent exits. Close
-those orphan windows once, install 0.15.6, and use the in-window service toggle
+those orphan windows once, install 0.16.0, and use the in-window service toggle
 for the window you want to keep.
 
 If a machine has no display, or if a CI job needs a background worker, pass
@@ -147,11 +151,11 @@ In a 3D View, press `N` and open the **CAD** tab:
 
 The CAD panel now uses a compact icon rail on its left side. Choose **Model**
 for the Part Studio and history tree, **Sketch** for support and sketch
-editing, **Features** for the independent Transform and Mirror sections and
-feature parameters, or
-**Output** for validation and per-Part export. Only the selected workspace is
-expanded, so the controls no longer form one long column. Entering Sketch Edit
-opens the Sketch workspace automatically; finishing returns to Features.
+editing, **Features** for the selected feature's focused editor, or **Output**
+for validation and per-Part export. Only the selected workspace is expanded, so
+the controls no longer form one long column. Entering Sketch Edit opens the
+Sketch workspace automatically; finishing returns to Model, where the next
+operation is available without hunting through another page.
 
 1. Use **+** to create a Part Studio.
 2. Create a Sketch on XY, XZ, YZ, or a supported Extrude End Plane.
@@ -159,7 +163,10 @@ opens the Sketch workspace automatically; finishing returns to Features.
    Arc uses three clicks: center, start, and end.
    During Sketch Edit, the left Blender toolbar also contains CAD Sketch tools
    for Select, Line, Rectangle, Circle, Arc, Delete Region, and Delete Geometry;
-   choose one there to arm the matching viewport action.
+   choose one there to arm the matching viewport action. After finishing, the
+   same toolbar switches to contextual **Extrude**, **Revolve**, **Transform**,
+   and **Mirror** tools for the selected history item; the Model buttons remain
+   the direct, no-viewport-click entry point.
 4. To edit exact dimensions, click the Sketch row's pencil button (or
    double-click a generated result to enter its source history), then select a
    Rectangle, Circle, or Arc. The matching millimeter fields appear
@@ -173,17 +180,20 @@ opens the Sketch workspace automatically; finishing returns to Features.
    a region to omit it from subsequent Extrude/Revolve profiles; its unique
    outer contour is hidden in the sketch overlay.
 6. Finish the Sketch. **Show Sketches** keeps resolved Sketch references visible.
-7. Select the Sketch and use one **Extrude** command with **New**, **Add**, or
-   **Remove**, plus **Blind** or **Through All** where supported.
-8. Add a **Transform** after the current body to enter translation in mm and
-   rotation in degrees. Downstream datum/semantic Sketch planes follow its
-   transformed coordinate frame.
-9. Add a **Mirror**, choose an earlier additive Extrude or Revolve and a datum
-   or semantic plane (with optional offset). The mirrored tool is unioned with
-   the current body and must remain one connected solid.
-10. Select Features to edit, rename, delete with dependency confirmation,
-   or suppress/unsuppress. The same vertical **Feature Actions** are available
-   on the Model page, and **Model → History** sets rollback or roll-forward.
+7. With the finished Sketch selected in **Model**, click **Create Extrude** or
+   **Create Revolve**. The button opens a compact form in **Features**; choose
+   **New**, **Add**, or **Remove**, set the extent/axis, and press **Create**.
+8. Select a body feature in **Model** and click **Create Transform** to open
+   the focused Transform editor. Translation and rotation are grouped into
+   their own collapsible sections, and **Apply & Rebuild** updates the history.
+9. Select a body feature and click **Create Mirror**, then choose an earlier
+   additive Extrude or Revolve and a datum or semantic plane (with optional
+   offset). The mirrored tool is unioned with the current body and must remain
+   one connected solid.
+10. Select any feature to edit its one focused editor, rename, delete with
+   dependency confirmation, or suppress/unsuppress. The same vertical
+   **Feature Actions** are available on the Model page, and **Model → History**
+   sets rollback or roll-forward.
 
 To attach a Sketch to generated geometry, press **Select Face**, click a
 supported planar face of a simple New Extrude, then press **New Sketch**. The

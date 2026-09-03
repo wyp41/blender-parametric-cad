@@ -97,6 +97,7 @@ def _create_revolve(operator, context):
     )
     part.add_feature(revolve)
     ui.active_feature_id = revolve.id
+    ui.feature_create_kind = ""
     ui.active_sketch_id = ""
     ui.mode = "FEATURE_EDIT"
     save_document_to_scene(scene, document)

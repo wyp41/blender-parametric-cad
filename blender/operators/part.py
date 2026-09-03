@@ -32,6 +32,9 @@ def _next_part_studio_name(document: CadDocument) -> str:
 
 
 def _set_active_feature(ui, feature) -> None:
+    # Selecting a history row always closes any pending creation form.  The
+    # Features workspace then reflects only the selected source/feature.
+    ui.feature_create_kind = ""
     ui.active_feature_id = feature.id if feature else ""
     ui.active_sketch_id = feature.id if isinstance(feature, SketchFeature) else ""
     ui.active_sketch_entity_id = ""
@@ -97,6 +100,7 @@ class PARAMETRIC_CAD_OT_new_part(bpy.types.Operator):
         ui.mode = "IDLE"
         ui.active_part_id = part.id
         ui.active_feature_id = ""
+        ui.feature_create_kind = ""
         ui.active_sketch_id = ""
         ui.active_sketch_entity_id = ""
         ui.active_sketch_entity_ids = "[]"
@@ -167,6 +171,7 @@ class PARAMETRIC_CAD_OT_delete_part(bpy.types.Operator):
         ui = context.scene.parametric_cad_ui
         ui.mode = "IDLE"
         ui.active_feature_id = ""
+        ui.feature_create_kind = ""
         ui.active_sketch_id = ""
         ui.active_sketch_entity_id = ""
         ui.active_sketch_entity_ids = "[]"

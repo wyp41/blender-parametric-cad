@@ -71,6 +71,7 @@ def _create_extrude(operator, context, operation: str, depth_mode: str, legacy=F
     )
     part.add_feature(extrude)
     ui.active_feature_id = extrude.id
+    ui.feature_create_kind = ""
     ui.active_sketch_id = ""
     ui.mode = "FEATURE_EDIT"
     save_document_to_scene(scene, document)

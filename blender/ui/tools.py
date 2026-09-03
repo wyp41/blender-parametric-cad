@@ -5,6 +5,10 @@ from __future__ import annotations
 import bpy
 from bpy.types import WorkSpaceTool
 
+from ...core.part import BODY_FEATURE_TYPES
+from ...sketch.sketch import SketchFeature
+from ..adapter import CadDocumentError, load_document_from_scene
+
 
 class _CADSketchTool(WorkSpaceTool):
     """Base class for tools that arm one modal Sketch operator."""
@@ -13,6 +17,34 @@ class _CADSketchTool(WorkSpaceTool):
     bl_context_mode = "OBJECT"
     bl_widget = None
 
+    @classmethod
+    def poll(cls, context):
+        ui = getattr(getattr(context, "scene", None), "parametric_cad_ui", None)
+        return ui is not None and ui.mode == "SKETCH_EDIT"
+
+
+class _CADFeatureTool(WorkSpaceTool):
+    """Base class for contextual post-Sketch feature tools."""
+
+    bl_space_type = "VIEW_3D"
+    bl_context_mode = "OBJECT"
+    bl_widget = None
+    feature_kind = ""
+
+    @classmethod
+    def poll(cls, context):
+        ui = getattr(getattr(context, "scene", None), "parametric_cad_ui", None)
+        if ui is None or ui.mode == "SKETCH_EDIT":
+            return False
+        try:
+            document = load_document_from_scene(context.scene)
+        except (CadDocumentError, AttributeError, TypeError, ValueError):
+            return False
+        part = document.active_part
+        selected = part.get_feature(ui.active_feature_id) if part else None
+        if cls.feature_kind in {"EXTRUDE", "REVOLVE"}:
+            return isinstance(selected, SketchFeature)
+        return getattr(selected, "feature_type", None) in BODY_FEATURE_TYPES
 
 class PARAMETRIC_CAD_WST_select(_CADSketchTool):
     bl_idname = "parametric_cad.sketch_select"
@@ -84,6 +116,66 @@ class PARAMETRIC_CAD_WST_delete_geometry(_CADSketchTool):
     )
 
 
+class PARAMETRIC_CAD_WST_extrude(_CADFeatureTool):
+    bl_idname = "parametric_cad.feature_extrude"
+    bl_label = "CAD Extrude"
+    bl_description = "Open the Extrude editor for the selected Sketch"
+    bl_icon = "ops.mesh.extrude_region_move"
+    feature_kind = "EXTRUDE"
+    bl_keymap = (
+        (
+            "parametric_cad.open_feature_tools",
+            {"type": "LEFTMOUSE", "value": "PRESS"},
+            {"properties": [("feature_kind", "EXTRUDE")]},
+        ),
+    )
+
+
+class PARAMETRIC_CAD_WST_revolve(_CADFeatureTool):
+    bl_idname = "parametric_cad.feature_revolve"
+    bl_label = "CAD Revolve"
+    bl_description = "Open the Revolve editor for the selected Sketch"
+    bl_icon = "ops.mesh.spin"
+    feature_kind = "REVOLVE"
+    bl_keymap = (
+        (
+            "parametric_cad.open_feature_tools",
+            {"type": "LEFTMOUSE", "value": "PRESS"},
+            {"properties": [("feature_kind", "REVOLVE")]},
+        ),
+    )
+
+
+class PARAMETRIC_CAD_WST_transform(_CADFeatureTool):
+    bl_idname = "parametric_cad.feature_transform"
+    bl_label = "CAD Transform"
+    bl_description = "Open the Transform editor for the selected body feature"
+    bl_icon = "ops.transform.translate"
+    feature_kind = "TRANSFORM"
+    bl_keymap = (
+        (
+            "parametric_cad.open_feature_tools",
+            {"type": "LEFTMOUSE", "value": "PRESS"},
+            {"properties": [("feature_kind", "TRANSFORM")]},
+        ),
+    )
+
+
+class PARAMETRIC_CAD_WST_mirror(_CADFeatureTool):
+    bl_idname = "parametric_cad.feature_mirror"
+    bl_label = "CAD Mirror"
+    bl_description = "Open the Mirror editor for the selected body feature"
+    bl_icon = "ops.transform.mirror"
+    feature_kind = "MIRROR"
+    bl_keymap = (
+        (
+            "parametric_cad.open_feature_tools",
+            {"type": "LEFTMOUSE", "value": "PRESS"},
+            {"properties": [("feature_kind", "MIRROR")]},
+        ),
+    )
+
+
 TOOL_CLASSES = (
     PARAMETRIC_CAD_WST_select,
     PARAMETRIC_CAD_WST_line,
@@ -92,6 +184,17 @@ TOOL_CLASSES = (
     PARAMETRIC_CAD_WST_arc,
     PARAMETRIC_CAD_WST_delete_region,
     PARAMETRIC_CAD_WST_delete_geometry,
+    PARAMETRIC_CAD_WST_extrude,
+    PARAMETRIC_CAD_WST_revolve,
+    PARAMETRIC_CAD_WST_transform,
+    PARAMETRIC_CAD_WST_mirror,
+)
+
+FEATURE_TOOL_CLASSES = (
+    PARAMETRIC_CAD_WST_extrude,
+    PARAMETRIC_CAD_WST_revolve,
+    PARAMETRIC_CAD_WST_transform,
+    PARAMETRIC_CAD_WST_mirror,
 )
 
 _registered_tools = []
@@ -107,7 +210,7 @@ def register() -> None:
             bpy.utils.register_tool(
                 tool,
                 after={"builtin.primitive_cube_add"} if index == 0 else None,
-                separator=index == 0,
+                separator=index == 0 or tool in FEATURE_TOOL_CLASSES,
             )
         except Exception as exc:  # Blender version/reload may already own a tool.
             print(f"Parametric CAD toolbar tool {tool.bl_idname!r} unavailable: {exc}")

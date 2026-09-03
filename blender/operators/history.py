@@ -6,6 +6,7 @@ import bpy
 
 from ...features.extrude import ExtrudeFeature
 from ...features.revolve import RevolveFeature
+from ...core.part import previous_body_feature
 from ...sketch.sketch import SketchFeature
 from ..adapter import (
     CadDocumentError,
@@ -102,6 +103,53 @@ class PARAMETRIC_CAD_OT_validate_document(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class PARAMETRIC_CAD_OT_open_feature_tools(bpy.types.Operator):
+    """Open one contextual body-feature creation form from the Model page."""
+
+    bl_idname = "parametric_cad.open_feature_tools"
+    bl_label = "Open Feature Tools"
+    bl_description = "Open the selected Sketch or body feature's next operation"
+    bl_options = {"REGISTER"}
+
+    feature_kind: bpy.props.StringProperty(options={"HIDDEN"})
+
+    def execute(self, context):
+        scene = context.scene
+        ui = getattr(scene, "parametric_cad_ui", None)
+        if ui is None:
+            self.report({"ERROR"}, "Enable Blender Parametric CAD first.")
+            return {"CANCELLED"}
+        try:
+            document = load_document_from_scene(scene)
+        except CadDocumentError as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+        part = document.active_part
+        selected = part.get_feature(ui.active_feature_id) if part else None
+        kind = str(self.feature_kind or "").upper()
+        if kind not in {"EXTRUDE", "REVOLVE", "TRANSFORM", "MIRROR"}:
+            self.report({"ERROR"}, "Unknown body feature tool.")
+            return {"CANCELLED"}
+        if kind in {"EXTRUDE", "REVOLVE"} and not isinstance(
+            selected, SketchFeature
+        ):
+            self.report({"ERROR"}, "Select a Sketch feature first.")
+            return {"CANCELLED"}
+        if kind in {"TRANSFORM", "MIRROR"} and (
+            part is None or previous_body_feature(part) is None
+        ):
+            self.report(
+                {"ERROR"},
+                f"{kind.title()} requires an earlier body feature.",
+            )
+            return {"CANCELLED"}
+        ui.feature_create_kind = kind
+        ui.panel_tab = "FEATURES"
+        ui.mode = "FEATURE_EDIT"
+        tag_redraw()
+        return {"FINISHED"}
+
+
 def _draw_object_context_menu(self, context):
     obj = getattr(getattr(context, "view_layer", None), "objects", None)
     active = getattr(obj, "active", None)
@@ -149,4 +197,8 @@ def unregister_keymaps() -> None:
     _KEYMAP_ITEMS.clear()
 
 
-CLASSES = (PARAMETRIC_CAD_OT_edit_cad_history, PARAMETRIC_CAD_OT_validate_document)
+CLASSES = (
+    PARAMETRIC_CAD_OT_edit_cad_history,
+    PARAMETRIC_CAD_OT_open_feature_tools,
+    PARAMETRIC_CAD_OT_validate_document,
+)

@@ -1,7 +1,7 @@
 # Blender Parametric CAD API
 
 This reference describes the public API in the Blender Parametric CAD
-extension (current extension release 0.15.6). It covers both direct Python
+extension (current extension release 0.16.0). It covers both direct Python
 scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
 
 ## MCP bridge
@@ -87,11 +87,18 @@ The server exposes the same documentation through MCP resources
 
 The Blender add-on registration is reload-safe: stale or partially registered
 UI RNA classes are replaced before the current Scene properties are attached.
-In the N-panel, rollback controls live under **Model → History**, while the
-Model page also exposes vertical Feature Actions for the selected feature.
-Body Features expose independent top-level **Transform** and **Mirror** sections.
-During Sketch Edit, the native left 3D View toolbar includes CAD geometry and
-cleanup tools; choosing one arms the corresponding modal Sketch operator.
+The N-panel uses staged workspaces: while a Sketch is being edited, the native
+left 3D View toolbar exposes CAD geometry and cleanup tools; finishing the
+Sketch returns to **Model**. The selected Sketch then presents vertical
+**Create Extrude**/**Create Revolve** actions, while a selected body presents
+**Create Transform**/**Create Mirror**. Each button opens the **Features**
+workspace with one focused, collapsible parameter editor; Transform's
+translation/rotation are separate subpanels. Rollback and roll-forward remain
+under **Model → History**, and Model also exposes vertical Feature Actions for
+rename, delete, suppress, and Sketch edit.
+When Sketch Edit is not active, the native toolbar exposes the same contextual
+Extrude/Revolve/Transform/Mirror tools for the selected history item; use the
+Model buttons when you want an immediate action without a viewport click.
 
 A minimal MCP modeling sequence is:
 

@@ -103,6 +103,7 @@ def _active_part_changed(self, context):
     self.active_sketch_entity_id = ""
     self.active_sketch_entity_ids = "[]"
     self.selected_face_reference = ""
+    self.feature_create_kind = ""
 
 
 def _sketch_plane_items(_self, context):
@@ -253,6 +254,12 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
         default="IDLE",
     )
     active_feature_id: StringProperty(default="")
+    feature_create_kind: StringProperty(
+        name="Feature Tool",
+        description="Transient feature creation tool opened from the Model page",
+        default="",
+        options={"HIDDEN"},
+    )
     active_sketch_id: StringProperty(default="")
     active_sketch_entity_id: StringProperty(default="")
     active_sketch_entity_ids: StringProperty(

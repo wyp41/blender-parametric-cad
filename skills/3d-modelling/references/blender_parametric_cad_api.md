@@ -1,7 +1,7 @@
 # Blender Parametric CAD API
 
 This reference describes the public API in the Blender Parametric CAD
-extension (current extension release 0.16.2). It covers both direct Python
+extension (current extension release 0.16.3). It covers both direct Python
 scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
 
 ## MCP bridge
@@ -91,14 +91,18 @@ The N-panel uses staged workspaces: while a Sketch is being edited, the native
 left 3D View toolbar exposes CAD geometry and cleanup tools; finishing the
 Sketch returns to **Model**. The selected Sketch then presents vertical
 **Create Extrude**/**Create Revolve** actions, while a selected body presents
-**Create Transform**/**Create Mirror**. Each button opens the **Features**
-workspace with one focused, collapsible parameter editor; Transform's
+**Create Transform**/**Create Mirror**. Their compact parameter forms stay in
+the current context, and the matching left-toolbar icon shows the same fields
+beside the icon. The **Features** workspace remains available for history
+editing with one focused, collapsible parameter editor; Transform's
 translation/rotation are separate subpanels. Rollback and roll-forward remain
 under **Model → History**, and Model also exposes vertical Feature Actions for
 rename, delete, suppress, and Sketch edit.
 When Sketch Edit is not active, the native toolbar exposes the same contextual
-Extrude/Revolve/Transform/Mirror tools for the selected history item; use the
-Model buttons when you want an immediate action without a viewport click.
+Extrude/Revolve/Transform/Mirror tools for the selected history item, with the
+creation parameters rendered beside the active icon; use the Model buttons
+when you want an immediate action without a viewport click. Sketch drawing
+tools consume the first 3D View click as the first point.
 
 A minimal MCP modeling sequence is:
 
@@ -487,8 +491,9 @@ region IDs before detecting again.
 
 The Blender Sketch panel shows dimensions after selecting a Circle, Rectangle,
 or Arc (the Sketch row itself has a direct edit button). Numeric edits are
-marked dirty until **Apply & Rebuild** or **Finish Sketch** succeeds. Shift-
-selecting circles exposes an overall diameter group edit.
+marked dirty until **Apply & Rebuild** or **Finish Sketch** succeeds; repeating
+the current dimensions is treated as a no-op and leaves the Sketch clean.
+Shift-selecting circles exposes an overall diameter group edit.
 
 Supported profiles are circles, simple polygons, mixed line/arc loops, multiple
 closed loops, and split closed boundaries. Open, branching, self-intersecting,

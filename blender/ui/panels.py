@@ -264,7 +264,7 @@ def _draw_next_feature(layout, part, selected, ui):
     card = layout.box()
     card.label(text=title, icon="ADD")
     card.label(
-        text="Choose an operation to open its focused editor in Features.",
+        text="Choose an operation; its parameters stay with this context.",
         icon="INFO",
     )
     for kind, label, icon in (
@@ -281,6 +281,16 @@ def _draw_next_feature(layout, part, selected, ui):
             icon=icon,
         )
         button.feature_kind = kind
+        if ui.feature_create_kind == kind:
+            _create_feature_panel(
+                card,
+                part,
+                selected,
+                ui,
+                kind,
+                f"Configure {label}",
+                icon,
+            )
 
 
 def _create_feature_panel(layout, part, selected, ui, kind, title, icon):

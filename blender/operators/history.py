@@ -144,7 +144,8 @@ class PARAMETRIC_CAD_OT_open_feature_tools(bpy.types.Operator):
             )
             return {"CANCELLED"}
         ui.feature_create_kind = kind
-        ui.panel_tab = "FEATURES"
+        # Keep the current workspace.  Model buttons render the form inline,
+        # while a toolbar tool renders the same controls beside its icon.
         ui.mode = "FEATURE_EDIT"
         tag_redraw()
         return {"FINISHED"}

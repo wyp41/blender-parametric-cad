@@ -15,6 +15,7 @@ from ...sketch.profile import ProfileDetector
 from ...sketch.snapping import snap_point
 from ...sketch.sketch import SketchFeature, sketch_to_world
 from ..adapter import load_document_from_scene, save_document_to_scene
+from .sketch import mark_sketch_dirty
 from ..viewport.projection import screen_to_sketch
 from ..viewport.sketch_overlay import (
     clear_preview,
@@ -28,8 +29,11 @@ from ..viewport.sketch_overlay import (
 class _ModalSketchTool:
     first_point: tuple[float, float] | None = None
     snap_points = False
+    # Two-point drawing tools consume the activation click as their first
+    # point. One-click cleanup tools pass that click to their modal handler.
+    capture_initial_point = True
 
-    def invoke(self, context, _event):
+    def invoke(self, context, event):
         ui = context.scene.parametric_cad_ui
         if context.area.type != "VIEW_3D" or ui.mode != "SKETCH_EDIT":
             self.report({"ERROR"}, "Enter Sketch Edit in a 3D View first")
@@ -41,8 +45,25 @@ class _ModalSketchTool:
             return {"CANCELLED"}
         self.first_point = None
         clear_preview()
-        context.window_manager.modal_handler_add(self)
         context.area.header_text_set("CAD: click first point; Esc cancels tool")
+        in_viewport = getattr(getattr(context, "region", None), "type", None) == "WINDOW"
+        if (
+            in_viewport
+            and getattr(event, "type", None) == "LEFTMOUSE"
+            and getattr(event, "value", None) == "PRESS"
+        ):
+            if self.capture_initial_point:
+                point, sketch = self._point_and_sketch(context, event)
+                if point is not None and sketch is not None:
+                    self.first_point = point
+                    context.area.header_text_set(
+                        "CAD: click second point; Esc cancels tool"
+                    )
+            else:
+                result = self.modal(context, event)
+                if result != {"RUNNING_MODAL"}:
+                    return result
+        context.window_manager.modal_handler_add(self)
         return {"RUNNING_MODAL"}
 
     def modal(self, context, event):
@@ -57,7 +78,10 @@ class _ModalSketchTool:
             if self.first_point is not None and point is not None and sketch is not None:
                 self._update_preview(sketch, self.first_point, point)
             return {"RUNNING_MODAL"}
-        if event.type == "LEFTMOUSE" and event.value == "PRESS":
+        if (
+            getattr(event, "type", None) == "LEFTMOUSE"
+            and getattr(event, "value", None) == "PRESS"
+        ):
             point, sketch = self._point_and_sketch(context, event)
             if point is None or sketch is None:
                 return {"RUNNING_MODAL"}
@@ -69,12 +93,13 @@ class _ModalSketchTool:
             part = document.active_part
             stored = part.get_feature(sketch.id) if part else None
             if isinstance(stored, SketchFeature):
-                self._commit(stored, self.first_point, point)
-                ui = context.scene.parametric_cad_ui
-                ui.active_sketch_entity_id = ""
-                ui.active_sketch_entity_ids = "[]"
-                ui.sketch_dirty = True
-                save_document_to_scene(context.scene, document)
+                changed = bool(self._commit(stored, self.first_point, point))
+                if changed:
+                    ui = context.scene.parametric_cad_ui
+                    ui.active_sketch_entity_id = ""
+                    ui.active_sketch_entity_ids = "[]"
+                    mark_sketch_dirty(ui, stored)
+                    save_document_to_scene(context.scene, document)
             self._finish(context)
             return {"FINISHED"}
         return {"RUNNING_MODAL"}
@@ -135,6 +160,8 @@ class PARAMETRIC_CAD_OT_draw_line(_ModalSketchTool, bpy.types.Operator):
             sketch.entities.append(
                 SketchLine(x1=first[0], y1=first[1], x2=second[0], y2=second[1])
             )
+            return True
+        return False
 
 
 class PARAMETRIC_CAD_OT_draw_rectangle(_ModalSketchTool, bpy.types.Operator):
@@ -155,13 +182,14 @@ class PARAMETRIC_CAD_OT_draw_rectangle(_ModalSketchTool, bpy.types.Operator):
 
     def _commit(self, sketch, first, second):
         if first[0] == second[0] or first[1] == second[1]:
-            return
+            return False
         corners = self._corners(first, second)
         for index in range(4):
             start, end = corners[index], corners[(index + 1) % 4]
             sketch.entities.append(
                 SketchLine(x1=start[0], y1=start[1], x2=end[0], y2=end[1])
             )
+        return True
 
 
 class PARAMETRIC_CAD_OT_draw_circle(_ModalSketchTool, bpy.types.Operator):
@@ -186,6 +214,8 @@ class PARAMETRIC_CAD_OT_draw_circle(_ModalSketchTool, bpy.types.Operator):
         radius = hypot(second[0] - first[0], second[1] - first[1])
         if radius > 0.0:
             sketch.entities.append(SketchCircle(cx=first[0], cy=first[1], radius=radius))
+            return True
+        return False
 
 
 class PARAMETRIC_CAD_OT_draw_arc(_ModalSketchTool, bpy.types.Operator):
@@ -201,11 +231,16 @@ class PARAMETRIC_CAD_OT_draw_arc(_ModalSketchTool, bpy.types.Operator):
     start: tuple[float, float] | None = None
 
     def invoke(self, context, event):
+        self.center = None
+        self.start = None
         result = super().invoke(context, event)
         if result == {"RUNNING_MODAL"}:
-            self.center = None
-            self.start = None
-            context.area.header_text_set("CAD: click arc center; Esc cancels")
+            if self.first_point is not None:
+                self.center = self.first_point
+                self.first_point = None
+                context.area.header_text_set("CAD: click arc start point")
+            else:
+                context.area.header_text_set("CAD: click arc center; Esc cancels")
         return result
 
     def modal(self, context, event):
@@ -230,7 +265,10 @@ class PARAMETRIC_CAD_OT_draw_arc(_ModalSketchTool, bpy.types.Operator):
                 else:
                     self._set_arc_preview(sketch, point)
             return {"RUNNING_MODAL"}
-        if event.type == "LEFTMOUSE" and event.value == "PRESS":
+        if (
+            getattr(event, "type", None) == "LEFTMOUSE"
+            and getattr(event, "value", None) == "PRESS"
+        ):
             point, sketch = self._point_and_sketch(context, event)
             if point is None or sketch is None:
                 return {"RUNNING_MODAL"}
@@ -248,12 +286,13 @@ class PARAMETRIC_CAD_OT_draw_arc(_ModalSketchTool, bpy.types.Operator):
             part = document.active_part
             stored = part.get_feature(sketch.id) if part else None
             if isinstance(stored, SketchFeature):
-                self._commit(stored, self.center, self.start, point)
-                ui = context.scene.parametric_cad_ui
-                ui.active_sketch_entity_id = ""
-                ui.active_sketch_entity_ids = "[]"
-                ui.sketch_dirty = True
-                save_document_to_scene(context.scene, document)
+                changed = bool(self._commit(stored, self.center, self.start, point))
+                if changed:
+                    ui = context.scene.parametric_cad_ui
+                    ui.active_sketch_entity_id = ""
+                    ui.active_sketch_entity_ids = "[]"
+                    mark_sketch_dirty(ui, stored)
+                    save_document_to_scene(context.scene, document)
             self._finish(context)
             return {"FINISHED"}
         return {"RUNNING_MODAL"}
@@ -276,6 +315,8 @@ class PARAMETRIC_CAD_OT_draw_arc(_ModalSketchTool, bpy.types.Operator):
                     end_angle=start_angle + sweep,
                 )
             )
+            return True
+        return False
 
 
 class PARAMETRIC_CAD_OT_select_tool(bpy.types.Operator):
@@ -284,13 +325,22 @@ class PARAMETRIC_CAD_OT_select_tool(bpy.types.Operator):
     bl_description = "Select a rectangle, circle, arc, or individual geometry"
     bl_options = {"BLOCKING"}
 
-    def invoke(self, context, _event):
+    def invoke(self, context, event):
         ui = context.scene.parametric_cad_ui
         if context.area.type != "VIEW_3D" or ui.mode != "SKETCH_EDIT":
             return {"CANCELLED"}
         clear_preview()
-        context.window_manager.modal_handler_add(self)
         context.area.header_text_set("CAD: click a Rectangle, Circle, or Arc; Esc cancels")
+        in_viewport = getattr(getattr(context, "region", None), "type", None) == "WINDOW"
+        if (
+            in_viewport
+            and getattr(event, "type", None) == "LEFTMOUSE"
+            and getattr(event, "value", None) == "PRESS"
+        ):
+            result = self.modal(context, event)
+            if result != {"RUNNING_MODAL"}:
+                return result
+        context.window_manager.modal_handler_add(self)
         return {"RUNNING_MODAL"}
 
     def modal(self, context, event):
@@ -390,6 +440,7 @@ class PARAMETRIC_CAD_OT_delete_region(_ModalSketchTool, bpy.types.Operator):
     bl_label = "Delete Region"
     bl_description = "Delete one bounded sketch region; draw a Line across a boundary first"
     bl_options = {"REGISTER", "UNDO", "BLOCKING"}
+    capture_initial_point = False
 
     def invoke(self, context, event):
         result = super().invoke(context, event)
@@ -428,7 +479,7 @@ class PARAMETRIC_CAD_OT_delete_region(_ModalSketchTool, bpy.types.Operator):
         ui = context.scene.parametric_cad_ui
         ui.active_sketch_entity_id = ""
         ui.active_sketch_entity_ids = "[]"
-        ui.sketch_dirty = True
+        mark_sketch_dirty(ui, stored)
         save_document_to_scene(context.scene, document)
         self.report({"INFO"}, "Sketch region deleted from Extrude/Revolve profiles.")
         self._finish(context)
@@ -442,6 +493,7 @@ class PARAMETRIC_CAD_OT_delete_geometry(_ModalSketchTool, bpy.types.Operator):
     bl_label = "Delete Geometry"
     bl_description = "Delete the selected geometry or click one line, circle, or arc"
     bl_options = {"REGISTER", "UNDO", "BLOCKING"}
+    capture_initial_point = False
     selected_only: bpy.props.BoolProperty(
         name="Selected Only",
         default=False,
@@ -471,7 +523,7 @@ class PARAMETRIC_CAD_OT_delete_geometry(_ModalSketchTool, bpy.types.Operator):
             _remove_entity(stored, entity.id)
             ui.active_sketch_entity_id = ""
             ui.active_sketch_entity_ids = "[]"
-            ui.sketch_dirty = True
+            mark_sketch_dirty(ui, stored)
             save_document_to_scene(context.scene, document)
             self.report({"INFO"}, f"Deleted {entity.entity_type.title()} geometry.")
             clear_preview()
@@ -508,7 +560,7 @@ class PARAMETRIC_CAD_OT_delete_geometry(_ModalSketchTool, bpy.types.Operator):
         ui = context.scene.parametric_cad_ui
         ui.active_sketch_entity_id = ""
         ui.active_sketch_entity_ids = "[]"
-        ui.sketch_dirty = True
+        mark_sketch_dirty(ui, stored)
         save_document_to_scene(context.scene, document)
         self.report({"INFO"}, f"Deleted {entity.entity_type.title()} geometry.")
         self._finish(context)

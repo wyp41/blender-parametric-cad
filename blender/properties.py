@@ -104,6 +104,7 @@ def _active_part_changed(self, context):
     self.active_sketch_entity_ids = "[]"
     self.selected_face_reference = ""
     self.feature_create_kind = ""
+    self.sketch_applied_signature = ""
 
 
 def _sketch_plane_items(_self, context):
@@ -419,6 +420,12 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
     mouse_y_mm: FloatProperty(name="Y", default=0.0)
     sketch_session_new: BoolProperty(default=False)
     sketch_session_backup: StringProperty(default="")
+    sketch_applied_signature: StringProperty(
+        name="Applied Sketch State",
+        description="Internal snapshot used to detect effective Sketch changes",
+        default="",
+        options={"HIDDEN"},
+    )
 
 
 CLASSES = (PARAMETRIC_CAD_PG_ui_state,)

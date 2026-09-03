@@ -24,7 +24,7 @@ class _CADSketchTool(WorkSpaceTool):
 
     @staticmethod
     def draw_settings(_context, layout, _tool):
-        layout.label(text="Click in the 3D View to use this Sketch tool.")
+        layout.label(text="Click in the 3D View; the first click starts this tool.")
 
 
 class _CADFeatureTool(WorkSpaceTool):
@@ -53,6 +53,60 @@ class _CADFeatureTool(WorkSpaceTool):
     @staticmethod
     def draw_settings(_context, layout, _tool):
         layout.label(text="Click in the 3D View to open this feature editor.")
+
+
+def _draw_feature_settings(context, layout, kind: str) -> None:
+    """Render a feature's creation parameters in Blender's tool settings.
+
+    Unlike a normal N-panel section, this layout is owned by the active
+    toolbar icon.  It therefore stays next to the icon and is available as
+    soon as the tool is selected.
+    """
+
+    ui = getattr(getattr(context, "scene", None), "parametric_cad_ui", None)
+    if ui is None:
+        layout.label(text="Enable Blender Parametric CAD first.", icon="ERROR")
+        return
+    try:
+        document = load_document_from_scene(context.scene)
+    except (CadDocumentError, AttributeError, TypeError, ValueError) as exc:
+        layout.label(text=str(exc), icon="ERROR")
+        return
+    part = document.active_part
+    selected = part.get_feature(ui.active_feature_id) if part else None
+    if selected is None:
+        layout.label(text="Select a CAD Sketch or body feature first.", icon="INFO")
+        return
+    layout.label(text=f"Source: {selected.name}", icon="LINKED")
+    if kind == "EXTRUDE":
+        layout.prop(ui, "extrude_operation", text="Operation")
+        layout.prop(ui, "extrude_depth_mode", text="Extent")
+        if ui.extrude_depth_mode == "BLIND":
+            layout.prop(ui, "extrude_distance_mm", text="Distance (mm)")
+        layout.operator("parametric_cad.extrude", text="Create Extrude", icon="MOD_SOLIDIFY")
+    elif kind == "REVOLVE":
+        layout.prop(ui, "revolve_operation", text="Operation")
+        layout.prop(ui, "revolve_axis_type", text="Axis")
+        if ui.revolve_axis_type == "DATUM_AXIS":
+            layout.prop(ui, "revolve_axis", text="Datum Axis")
+        else:
+            layout.prop(ui, "revolve_axis_line_id", text="Sketch Line")
+        layout.prop(ui, "revolve_axis_reverse", text="Reverse Axis")
+        layout.prop(ui, "revolve_angle_deg", text="Angle (deg)")
+        layout.operator("parametric_cad.revolve", text="Create Revolve", icon="MOD_SCREW")
+    elif kind == "TRANSFORM":
+        layout.prop(ui, "transform_translate_x_mm", text="Translate X (mm)")
+        layout.prop(ui, "transform_translate_y_mm", text="Translate Y (mm)")
+        layout.prop(ui, "transform_translate_z_mm", text="Translate Z (mm)")
+        layout.prop(ui, "transform_rotate_x_deg", text="Rotate X (deg)")
+        layout.prop(ui, "transform_rotate_y_deg", text="Rotate Y (deg)")
+        layout.prop(ui, "transform_rotate_z_deg", text="Rotate Z (deg)")
+        layout.operator("parametric_cad.transform", text="Create Transform", icon="OBJECT_ORIGIN")
+    elif kind == "MIRROR":
+        layout.prop(ui, "mirror_source_feature_id", text="Source Feature")
+        layout.prop(ui, "mirror_plane_reference", text="Mirror Plane")
+        layout.prop(ui, "mirror_plane_offset_mm", text="Plane Offset (mm)")
+        layout.operator("parametric_cad.mirror", text="Create Mirror", icon="MOD_MIRROR")
 
 
 class PARAMETRIC_CAD_WST_select(_CADSketchTool):
@@ -131,6 +185,10 @@ class PARAMETRIC_CAD_WST_extrude(_CADFeatureTool):
     bl_description = "Open the Extrude editor for the selected Sketch"
     bl_icon = "ops.mesh.extrude_region_move"
     feature_kind = "EXTRUDE"
+
+    @staticmethod
+    def draw_settings(context, layout, _tool):
+        _draw_feature_settings(context, layout, "EXTRUDE")
     bl_keymap = (
         (
             "parametric_cad.open_feature_tools",
@@ -146,6 +204,10 @@ class PARAMETRIC_CAD_WST_revolve(_CADFeatureTool):
     bl_description = "Open the Revolve editor for the selected Sketch"
     bl_icon = "ops.mesh.spin"
     feature_kind = "REVOLVE"
+
+    @staticmethod
+    def draw_settings(context, layout, _tool):
+        _draw_feature_settings(context, layout, "REVOLVE")
     bl_keymap = (
         (
             "parametric_cad.open_feature_tools",
@@ -161,6 +223,10 @@ class PARAMETRIC_CAD_WST_transform(_CADFeatureTool):
     bl_description = "Open the Transform editor for the selected body feature"
     bl_icon = "ops.transform.translate"
     feature_kind = "TRANSFORM"
+
+    @staticmethod
+    def draw_settings(context, layout, _tool):
+        _draw_feature_settings(context, layout, "TRANSFORM")
     bl_keymap = (
         (
             "parametric_cad.open_feature_tools",
@@ -176,6 +242,10 @@ class PARAMETRIC_CAD_WST_mirror(_CADFeatureTool):
     bl_description = "Open the Mirror editor for the selected body feature"
     bl_icon = "ops.transform.transform"
     feature_kind = "MIRROR"
+
+    @staticmethod
+    def draw_settings(context, layout, _tool):
+        _draw_feature_settings(context, layout, "MIRROR")
     bl_keymap = (
         (
             "parametric_cad.open_feature_tools",

@@ -182,6 +182,7 @@ def sync_active_part_from_object(scene: bpy.types.Scene, obj) -> str | None:
             ui.active_sketch_entity_ids = "[]"
             ui.feature_create_kind = ""
             ui.sketch_dirty = False
+            ui.sketch_applied_signature = ""
             ui.mode = "FEATURE_EDIT"
     return part_id
 

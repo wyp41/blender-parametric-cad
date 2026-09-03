@@ -1,7 +1,7 @@
 # Blender Parametric CAD
 
 An AI-first, history-based parametric CAD extension for Blender 5.1.2, designed
-for Codex, Claude, and other tool-using AI systems. Version 0.16.2 provides a
+for Codex, Claude, and other tool-using AI systems. Version 0.16.3 provides a
 real MCP interface and a Python API so an AI can create sketches, features,
 booleans, transforms, mirrors, and per-Part exports through normal CAD
 operations—not by spending tokens on mouse clicks or computer-use screenshots.
@@ -36,7 +36,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.16.2.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.16.3.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## AI/API skill
@@ -83,7 +83,7 @@ same Blender window.
 
 Warnings such as `Policy violation with top level module: blender_parametric_cad`
 come from Blender's extension namespace policy, not from another add-on and not
-from the MCP port. Version 0.16.2 loads the worker through Blender's qualified
+from the MCP port. Version 0.16.3 loads the worker through Blender's qualified
 `bl_ext.<repository>.blender_parametric_cad` namespace and keeps bundled modules
 out of the global Python namespace. After upgrading, restart Blender once (or
 disable/re-enable the extension) so modules imported by an older worker are
@@ -93,7 +93,7 @@ can be resolved by using that service or selecting a free port.
 
 Upgrade note: windows left behind by releases before 0.15.0 used a private
 per-client socket and cannot be rediscovered after their MCP parent exits. Close
-those orphan windows once, install 0.16.2, and use the in-window service toggle
+those orphan windows once, install 0.16.3, and use the in-window service toggle
 for the window you want to keep.
 
 If a machine has no display, or if a CI job needs a background worker, pass
@@ -163,7 +163,9 @@ operation is available without hunting through another page.
    Arc uses three clicks: center, start, and end.
    During Sketch Edit, the left Blender toolbar also contains CAD Sketch tools
    for Select, Line, Rectangle, Circle, Arc, Delete Region, and Delete Geometry;
-   choose one there to arm the matching viewport action. After finishing, the
+   choose one there to arm the matching viewport action; the first click in the
+   3D View is consumed as the first point, so no extra arming click is needed.
+   After finishing, the
    same toolbar switches to contextual **Extrude**, **Revolve**, **Transform**,
    and **Mirror** tools for the selected history item; the Model buttons remain
    the direct, no-viewport-click entry point.
@@ -171,6 +173,8 @@ operation is available without hunting through another page.
    double-click a generated result to enter its source history), then select a
    Rectangle, Circle, or Arc. The matching millimeter fields appear
    automatically. Use **Apply & Rebuild** for an immediate result update;
+   only an effective geometry/plane change marks the Sketch as pending—repeating
+   the same dimensions leaves the result clean;
    individual lines can be removed with **Delete Selected**. Shift-select
    circles to edit their shared diameter. A green cross shows the active snap
    target while drawing.
@@ -181,11 +185,13 @@ operation is available without hunting through another page.
    outer contour is hidden in the sketch overlay.
 6. Finish the Sketch. **Show Sketches** keeps resolved Sketch references visible.
 7. With the finished Sketch selected in **Model**, click **Create Extrude** or
-   **Create Revolve**. The button opens a compact form in **Features**; choose
+   **Create Revolve**. The compact form stays in the current context; choose
    **New**, **Add**, or **Remove**, set the extent/axis, and press **Create**.
-8. Select a body feature in **Model** and click **Create Transform** to open
-   the focused Transform editor. Translation and rotation are grouped into
-   their own collapsible sections, and **Apply & Rebuild** updates the history.
+   The matching left-toolbar icon exposes the same parameters beside the icon.
+8. Select a body feature in **Model** and click **Create Transform**. Its
+   compact form stays beside the contextual action (or beside the left-toolbar
+   icon); translation and rotation are grouped, and **Apply & Rebuild** updates
+   the history.
 9. Select a body feature and click **Create Mirror**, then choose an earlier
    additive Extrude or Revolve and a datum or semantic plane (with optional
    offset). The mirrored tool is unioned with the current body and must remain
@@ -253,7 +259,9 @@ part_id, filepath, file_format)`. Supported formats are `STL`, `OBJ`, and
 - The active Part Studio can be exported independently as STL, OBJ, or PLY;
   other Part Studio result objects are never included in that export.
 
-Numeric edits update the existing Sketch entities and preserve entity UUIDs.
+Numeric edits update the existing Sketch entities and preserve entity UUIDs;
+repeating the current dimensions is detected as a no-op and does not mark the
+Sketch dirty.
 Closed loop winding is normalized before mesh generation so clockwise and
 counter-clockwise Rectangles, arcs, and simple polygons use the same Add/Remove
 path. Multiple active loops are emitted as one composite tool.

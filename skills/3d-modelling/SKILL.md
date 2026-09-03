@@ -23,10 +23,13 @@ For manual editing in Blender, the CAD N-panel is organized with a compact
 left icon rail: Model, Sketch, Features, and Output. Only the selected section
 is expanded. Sketch Edit adds CAD Select/Line/Rectangle/Circle/Arc and cleanup
 tools to Blender's native left 3D View toolbar; select a toolbar icon to arm
-its viewport action. Finishing a Sketch returns to **Model**, where the
+its viewport action, and the first 3D View click is used as the first point.
+Finishing a Sketch returns to **Model**, where the
 selected Sketch exposes vertical **Create Extrude** and **Create Revolve**
 buttons. Selecting a body exposes **Create Transform** and **Create Mirror**.
-Those buttons open **Features** with one focused, collapsible editor (and
+Their compact parameter forms stay in the current context, and the matching
+left-toolbar icon shows the same fields beside the icon; the **Features** page
+remains available for editing history with one focused, collapsible editor (and
 Transform's Translation/Rotation subpanels), so unrelated operations never
 fill the panel. Model exposes vertical Feature Actions for the selected
 history entry, so rename/delete/suppress and rollback do not require switching
@@ -147,7 +150,8 @@ Important invariants:
   last valid result mesh and marks the failed feature `ERROR` and downstream
   features `BLOCKED`.
 - Numeric Sketch edits set a dirty flag until `Apply & Rebuild` or `Finish
-  Sketch` succeeds.  MCP geometry updates rebuild immediately and return the
+  Sketch` succeeds. Repeating the current dimensions is a no-op and leaves
+  the Sketch clean; MCP geometry updates rebuild immediately and return the
   rebuild payload.
 - Run `cad_validate_document` (or `validate_cad_document(scene)`) before
   handing a generated model to another agent or exporting it.

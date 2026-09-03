@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from math import pi
+from math import isclose, pi
 
 import bpy
 
@@ -27,6 +27,39 @@ from ...sketch.sketch import SketchFeature
 from ..adapter import load_document_from_scene, rebuild_part, save_document_to_scene
 from ..viewport.projection import screen_to_sketch
 from ..viewport.sketch_overlay import clear_face_selection, clear_preview, tag_redraw
+
+
+def _same_parameters(before, after) -> bool:
+    """Compare displayed Sketch dimensions without depending on entity order."""
+
+    if before is None or after is None or len(before) != len(after):
+        return False
+    return all(
+        isclose(float(left), float(right), rel_tol=1e-9, abs_tol=1e-9)
+        for left, right in zip(before, after)
+    )
+
+
+def sketch_signature(sketch: SketchFeature) -> str:
+    """Serialize only the editable Sketch state for dirty tracking."""
+
+    data = feature_to_dict(sketch)
+    return json.dumps(
+        {
+            "plane_reference": data["plane_reference"],
+            "entities": data["entities"],
+            "deleted_regions": data["deleted_regions"],
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def mark_sketch_dirty(ui, sketch: SketchFeature) -> None:
+    """Mark only an effective change relative to the last valid rebuild."""
+
+    baseline = getattr(ui, "sketch_applied_signature", "")
+    ui.sketch_dirty = not baseline or sketch_signature(sketch) != baseline
 
 
 def _orient_to_plane(context, plane: ResolvedPlane) -> None:
@@ -68,6 +101,7 @@ def _begin_edit(context, part, sketch: SketchFeature, is_new: bool) -> None:
     ui.sketch_plane_offset_mm = sketch.plane_offset * 1000.0
     ui.sketch_session_new = is_new
     ui.sketch_session_backup = "" if is_new else json.dumps(feature_to_dict(sketch))
+    ui.sketch_applied_signature = sketch_signature(sketch)
     clear_preview()
     _orient_to_plane(context, plane)
     if context.area and context.area.type == "VIEW_3D":
@@ -224,6 +258,9 @@ class PARAMETRIC_CAD_OT_finish_sketch(bpy.types.Operator):
             ui.sketch_session_new = False
             ui.sketch_session_backup = ""
             ui.sketch_dirty = False
+            ui.sketch_applied_signature = (
+                sketch_signature(sketch) if isinstance(sketch, SketchFeature) else ""
+            )
         else:
             # Keep the edit session alive so the user can repair the Sketch;
             # rebuild_part has already preserved the last valid result mesh.
@@ -248,7 +285,17 @@ class PARAMETRIC_CAD_OT_apply_sketch(bpy.types.Operator):
         if not isinstance(sketch, SketchFeature):
             self.report({"ERROR"}, "The active Sketch is unavailable")
             return {"CANCELLED"}
-        sketch.set_plane_offset(ui.sketch_plane_offset_mm / 1000.0)
+        new_offset = ui.sketch_plane_offset_mm / 1000.0
+        signature = sketch_signature(sketch)
+        baseline = getattr(ui, "sketch_applied_signature", "")
+        if (
+            not ui.sketch_dirty
+            and signature == baseline
+            and isclose(sketch.plane_offset, new_offset, rel_tol=1e-9, abs_tol=1e-9)
+        ):
+            self.report({"INFO"}, "Sketch is already up to date.")
+            return {"FINISHED"}
+        sketch.set_plane_offset(new_offset)
         save_document_to_scene(scene, document)
         result = rebuild_part(scene, part.id)
         if not result.success:
@@ -257,6 +304,7 @@ class PARAMETRIC_CAD_OT_apply_sketch(bpy.types.Operator):
             self.report({"ERROR"}, message)
             return {"CANCELLED"}
         ui.sketch_dirty = False
+        ui.sketch_applied_signature = sketch_signature(sketch)
         self.report({"INFO"}, "Sketch applied and Part Studio rebuilt.")
         tag_redraw()
         return {"FINISHED"}
@@ -287,6 +335,7 @@ class PARAMETRIC_CAD_OT_cancel_sketch(bpy.types.Operator):
         ui.sketch_session_new = False
         ui.sketch_session_backup = ""
         ui.sketch_dirty = False
+        ui.sketch_applied_signature = ""
         clear_preview()
         tag_redraw()
         return {"FINISHED"}
@@ -305,13 +354,16 @@ class PARAMETRIC_CAD_OT_clear_sketch(bpy.types.Operator):
         sketch = part.get_feature(ui.active_sketch_id) if part else None
         if not isinstance(sketch, SketchFeature):
             return {"CANCELLED"}
+        changed = bool(sketch.entities or sketch.deleted_regions)
+        if not changed:
+            self.report({"INFO"}, "Sketch already has no geometry.")
+            return {"FINISHED"}
         sketch.entities.clear()
         sketch.deleted_regions.clear()
         ui.active_sketch_entity_id = ""
         ui.active_sketch_entity_ids = "[]"
-        ui.sketch_dirty = True
         save_document_to_scene(context.scene, document)
-        ui.sketch_dirty = True
+        mark_sketch_dirty(ui, sketch)
         tag_redraw()
         return {"FINISHED"}
 
@@ -328,6 +380,8 @@ class PARAMETRIC_CAD_OT_numeric_rectangle(bpy.types.Operator):
         sketch = part.get_feature(ui.active_sketch_id) if part else None
         if not isinstance(sketch, SketchFeature):
             return {"CANCELLED"}
+        entity_id = ui.active_sketch_entity_id or None
+        before = rectangle_parameters(sketch, entity_id)
         try:
             set_rectangle(
                 sketch,
@@ -335,13 +389,16 @@ class PARAMETRIC_CAD_OT_numeric_rectangle(bpy.types.Operator):
                 ui.rectangle_y_mm / 1000.0,
                 ui.rectangle_width_mm / 1000.0,
                 ui.rectangle_height_mm / 1000.0,
-                ui.active_sketch_entity_id or None,
+                entity_id,
             )
         except ValueError as exc:
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
+        if _same_parameters(before, rectangle_parameters(sketch, entity_id)):
+            self.report({"INFO"}, "Rectangle dimensions are unchanged.")
+            return {"FINISHED"}
         save_document_to_scene(context.scene, document)
-        ui.sketch_dirty = True
+        mark_sketch_dirty(ui, sketch)
         tag_redraw()
         return {"FINISHED"}
 
@@ -358,19 +415,24 @@ class PARAMETRIC_CAD_OT_numeric_circle(bpy.types.Operator):
         sketch = part.get_feature(ui.active_sketch_id) if part else None
         if not isinstance(sketch, SketchFeature):
             return {"CANCELLED"}
+        entity_id = ui.active_sketch_entity_id or None
+        before = circle_parameters(sketch, entity_id)
         try:
             set_circle(
                 sketch,
                 ui.circle_x_mm / 1000.0,
                 ui.circle_y_mm / 1000.0,
                 ui.circle_diameter_mm / 1000.0,
-                ui.active_sketch_entity_id or None,
+                entity_id,
             )
         except ValueError as exc:
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
+        if _same_parameters(before, circle_parameters(sketch, entity_id)):
+            self.report({"INFO"}, "Circle dimensions are unchanged.")
+            return {"FINISHED"}
         save_document_to_scene(context.scene, document)
-        ui.sketch_dirty = True
+        mark_sketch_dirty(ui, sketch)
         tag_redraw()
         return {"FINISHED"}
 
@@ -405,15 +467,26 @@ class PARAMETRIC_CAD_OT_numeric_circle_group(bpy.types.Operator):
         if diameter <= 0.0:
             self.report({"ERROR"}, "Circle Diameter must be greater than zero.")
             return {"CANCELLED"}
+        changed = any(
+            not isclose(
+                circle.radius, diameter / 2.0, rel_tol=1e-9, abs_tol=1e-9
+            )
+            for circle in circles
+        )
+        if not changed:
+            self.report({"INFO"}, "Circle group dimensions are unchanged.")
+            return {"FINISHED"}
         for circle in circles:
             circle.radius = diameter / 2.0
         save_document_to_scene(scene, document)
+        mark_sketch_dirty(ui, sketch)
         result = rebuild_part(scene, part.id)
         if not result.success:
             ui.sketch_dirty = True
             self.report({"ERROR"}, result.errors[0].message if result.errors else "Part rebuild failed")
             return {"CANCELLED"}
         ui.sketch_dirty = False
+        ui.sketch_applied_signature = sketch_signature(sketch)
         self.report({"INFO"}, f"Updated {len(circles)} circles and rebuilt the Part Studio.")
         tag_redraw()
         return {"FINISHED"}
@@ -431,7 +504,9 @@ class PARAMETRIC_CAD_OT_numeric_arc(bpy.types.Operator):
         sketch = part.get_feature(ui.active_sketch_id) if part else None
         if not isinstance(sketch, SketchFeature):
             return {"CANCELLED"}
-        if arc_parameters(sketch, ui.active_sketch_entity_id or None) is None:
+        entity_id = ui.active_sketch_entity_id or None
+        before = arc_parameters(sketch, entity_id)
+        if before is None:
             self.report({"ERROR"}, "Select an existing Arc to edit its dimensions.")
             return {"CANCELLED"}
         try:
@@ -442,13 +517,16 @@ class PARAMETRIC_CAD_OT_numeric_arc(bpy.types.Operator):
                 ui.arc_radius_mm / 1000.0,
                 ui.arc_start_deg * pi / 180.0,
                 ui.arc_end_deg * pi / 180.0,
-                ui.active_sketch_entity_id or None,
+                entity_id,
             )
         except ValueError as exc:
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
+        if _same_parameters(before, arc_parameters(sketch, entity_id)):
+            self.report({"INFO"}, "Arc dimensions are unchanged.")
+            return {"FINISHED"}
         save_document_to_scene(context.scene, document)
-        ui.sketch_dirty = True
+        mark_sketch_dirty(ui, sketch)
         tag_redraw()
         return {"FINISHED"}
 

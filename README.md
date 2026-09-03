@@ -1,7 +1,7 @@
 # Blender Parametric CAD
 
 An AI-first, history-based parametric CAD extension for Blender 5.1.2, designed
-for Codex, Claude, and other tool-using AI systems. Version 0.15.2 provides a
+for Codex, Claude, and other tool-using AI systems. Version 0.15.3 provides a
 real MCP interface and a Python API so an AI can create sketches, features,
 booleans, transforms, mirrors, and per-Part exports through normal CAD
 operations—not by spending tokens on mouse clicks or computer-use screenshots.
@@ -29,7 +29,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.15.2.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.15.3.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## AI/API skill
@@ -60,6 +60,11 @@ MCP client once. The bridge reads the published endpoint and does not call
 `Popen(Blender)` while that service is reachable. If the service is not
 enabled, the fallback starts at most one worker for the configured endpoint;
 the lock prevents duplicate fallback windows from concurrent MCP clients.
+If **Start Service in This Window** reports that the port is already in use,
+the add-on identifies a reachable CAD service and tells you to use that
+existing Blender window; it never silently starts a second service. For an
+unrelated process occupying the port, stop that process or choose another port
+in the CAD panel while keeping the same endpoint file in the MCP configuration.
 The AI therefore calls semantic CAD actions in one normal modeling session
 instead of repeatedly starting Blender, driving the UI, or describing
 screenshots. This substantially reduces token consumption while preserving a
@@ -68,7 +73,7 @@ same Blender window.
 
 Upgrade note: windows left behind by releases before 0.15.0 used a private
 per-client socket and cannot be rediscovered after their MCP parent exits. Close
-those orphan windows once, install 0.15.2, and use the in-window service toggle
+those orphan windows once, install 0.15.3, and use the in-window service toggle
 for the window you want to keep.
 
 If a machine has no display, or if a CI job needs a background worker, pass

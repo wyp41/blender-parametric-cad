@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import errno
+
 import bpy
 
 from ...mcp.blender_worker import (
@@ -22,7 +24,15 @@ class PARAMETRIC_CAD_OT_start_mcp_service(bpy.types.Operator):
         try:
             info = start_embedded_service(port=port)
         except (OSError, RuntimeError, ValueError) as exc:
-            self.report({"ERROR"}, f"Could not start CAD MCP Service: {exc}")
+            if isinstance(exc, OSError) and exc.errno == errno.EADDRINUSE:
+                message = (
+                    f"Port {port} is already in use. Stop the existing CAD MCP "
+                    "service or choose another port; no new Blender window was "
+                    "started."
+                )
+            else:
+                message = str(exc)
+            self.report({"ERROR"}, f"Could not start CAD MCP Service: {message}")
             return {"CANCELLED"}
         context.scene["parametric_cad_mcp_service"] = True
         context.scene["parametric_cad_mcp_endpoint"] = info["endpoint_file"]

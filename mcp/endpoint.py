@@ -6,6 +6,7 @@ from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
+import socket
 import tempfile
 from typing import Any
 
@@ -72,6 +73,53 @@ def read_endpoint(value: str | os.PathLike[str] | None = None) -> dict[str, Any]
         "token": token,
         "pid": payload.get("pid"),
     }
+
+
+def endpoint_is_reachable(
+    endpoint: dict[str, Any] | None, *, timeout: float = 0.25
+) -> bool:
+    """Return whether an endpoint accepts its published authentication token."""
+
+    if not isinstance(endpoint, dict):
+        return False
+    host = str(endpoint.get("host") or "127.0.0.1")
+    if host in {"0.0.0.0", "::"}:
+        host = "127.0.0.1"
+    try:
+        port = int(endpoint["port"])
+        token = str(endpoint["token"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    if not host or not token or not 1 <= port <= 65535:
+        return False
+    connection: socket.socket | None = None
+    reader = None
+    try:
+        connection = socket.create_connection((host, port), timeout=timeout)
+        connection.settimeout(timeout)
+        reader = connection.makefile("rb")
+        line = reader.readline()
+        if not line:
+            return False
+        hello = json.loads(line.decode("utf-8"))
+        return (
+            isinstance(hello, dict)
+            and hello.get("type") == "hello"
+            and hello.get("token") == token
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError, TypeError):
+        return False
+    finally:
+        if reader is not None:
+            try:
+                reader.close()
+            except OSError:
+                pass
+        if connection is not None:
+            try:
+                connection.close()
+            except OSError:
+                pass
 
 
 def write_endpoint(

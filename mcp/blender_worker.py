@@ -12,6 +12,7 @@ output is discarded by the parent bridge.
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 from math import isfinite, pi, radians
 import os
@@ -22,11 +23,20 @@ import sys
 from typing import Any
 
 try:
-    from .endpoint import endpoint_lock, endpoint_path, remove_endpoint, write_endpoint
-except ImportError:  # Running as a Blender --python script.
-    from endpoint import (  # type: ignore[no-redef]
+    from .endpoint import (
+        endpoint_is_reachable,
         endpoint_lock,
         endpoint_path,
+        read_endpoint,
+        remove_endpoint,
+        write_endpoint,
+    )
+except ImportError:  # Running as a Blender --python script.
+    from endpoint import (  # type: ignore[no-redef]
+        endpoint_is_reachable,
+        endpoint_lock,
+        endpoint_path,
+        read_endpoint,
         remove_endpoint,
         write_endpoint,
     )
@@ -42,6 +52,13 @@ def _package_parent() -> Path:
 
 PACKAGE_ROOT = _package_parent()
 _EMBEDDED_SERVICE = None
+
+
+def _endpoint_is_current_process(endpoint: dict[str, Any] | None) -> bool:
+    try:
+        return int(endpoint.get("pid")) == os.getpid() if endpoint else False
+    except (TypeError, ValueError):
+        return False
 
 
 class WorkerError(RuntimeError):
@@ -1313,19 +1330,58 @@ def start_embedded_service(
     global _EMBEDDED_SERVICE
     if _EMBEDDED_SERVICE is not None and not _EMBEDDED_SERVICE._closed:
         return _EMBEDDED_SERVICE.info
-    worker = BlenderCadWorker()
-    service = _VisibleSocketServer(
-        worker,
-        host,
-        int(port),
-        token or secrets.token_urlsafe(32),
-        endpoint_file,
-    )
+    resolved_port = int(port)
+    resolved_endpoint = endpoint_path(endpoint_file)
+    service = None
     try:
-        with endpoint_lock(endpoint_file):
+        with endpoint_lock(resolved_endpoint):
+            existing = read_endpoint(resolved_endpoint)
+            if existing and (
+                _endpoint_is_current_process(existing)
+                or endpoint_is_reachable(existing)
+            ):
+                raise RuntimeError(
+                    "A CAD MCP Service is already running at "
+                    f"{existing['host']}:{existing['port']}. Use the Blender "
+                    "window that owns it, or stop that service before binding "
+                    "this window; no second service was started."
+                )
+            if existing:
+                # Only remove a stale endpoint after authentication data has
+                # been validated by read_endpoint().
+                remove_endpoint(resolved_endpoint, token=existing.get("token"))
+            worker = BlenderCadWorker()
+            service = _VisibleSocketServer(
+                worker,
+                host,
+                resolved_port,
+                token or secrets.token_urlsafe(32),
+                str(resolved_endpoint),
+            )
             info = service.start()
+    except OSError as exc:
+        if service is not None:
+            service.close()
+        if exc.errno == errno.EADDRINUSE:
+            existing = read_endpoint(resolved_endpoint)
+            if existing and (
+                _endpoint_is_current_process(existing)
+                or endpoint_is_reachable(existing)
+            ):
+                raise RuntimeError(
+                    "A CAD MCP Service is already running at "
+                    f"{existing['host']}:{existing['port']}. Use that Blender "
+                    "window or stop it before starting this window; no second "
+                    "service was started."
+                ) from exc
+            raise RuntimeError(
+                f"Port {host}:{resolved_port} is already in use by another "
+                "application. Choose a free port, and keep the same endpoint "
+                "file for the MCP client."
+            ) from exc
     except Exception:
-        service.close()
+        if service is not None:
+            service.close()
         raise
     _EMBEDDED_SERVICE = service
     return info

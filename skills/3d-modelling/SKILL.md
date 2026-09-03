@@ -55,6 +55,9 @@ the MCP client and the Blender service. A reachable endpoint is authoritative:
 the bridge does not launch another Blender window. If an endpoint's process is
 still alive but not accepting connections, the bridge fails with a reconnect
 message instead of spawning a duplicate.
+The in-Blender start button follows the same rule: a reachable existing CAD
+endpoint is reported instead of binding a second listener, while an unrelated
+port collision is reported as a port choice error.
 Set `BLENDER_CAD_AUTOSTART=0` (or pass `--no-autostart`) to enforce an
 existing-window-only policy; the client then fails instead of opening a worker
 when no service is available.

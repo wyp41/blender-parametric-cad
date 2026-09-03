@@ -1,7 +1,7 @@
 # Blender Parametric CAD API
 
 This reference describes the public API in the Blender Parametric CAD
-extension (current extension release 0.15.2). It covers both direct Python
+extension (current extension release 0.15.3). It covers both direct Python
 scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
 
 ## MCP bridge
@@ -57,6 +57,11 @@ also expose the CAD panel and interactive sketch tools. The panel's **CAD MCP
 Service** box is the explicit binding point for the current window; the
 extension's semantic `cad_*` protocol is not automatically provided by a
 generic third-party Blender MCP add-on.
+Starting the service from that box probes the shared endpoint before binding.
+If a reachable CAD service already owns the port, startup is refused with its
+host and port so the existing Blender window can remain authoritative; if an
+unrelated process owns the port, choose a different port and keep the endpoint
+file unchanged for MCP discovery.
 Workers from releases before 0.15.0 used a private per-client socket and are
 not reconnectable after their MCP parent exits; close those old orphan windows
 once after upgrading.

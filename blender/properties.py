@@ -7,6 +7,8 @@ from bpy.props import BoolProperty, EnumProperty, FloatProperty, PointerProperty
 
 _PART_STUDIO_ITEMS = []
 _MIRROR_SOURCE_ITEMS = []
+_SKETCH_PLANE_ITEMS = []
+_REVOLVE_AXIS_ITEMS = []
 
 
 def _part_studio_items(_self, context):
@@ -64,13 +66,15 @@ def _active_part_changed(self, context):
 
 
 def _sketch_plane_items(_self, context):
+    global _SKETCH_PLANE_ITEMS
     items = [
         ("DATUM|XY", "XY Plane", "Sketch on the XY datum plane"),
         ("DATUM|XZ", "XZ Plane", "Sketch on the XZ datum plane"),
         ("DATUM|YZ", "YZ Plane", "Sketch on the YZ datum plane"),
     ]
     if context is None:
-        return items
+        _SKETCH_PLANE_ITEMS = items
+        return _SKETCH_PLANE_ITEMS
     try:
         from ..features.extrude import ExtrudeFeature
         from .adapter import load_document_from_scene
@@ -90,10 +94,14 @@ def _sketch_plane_items(_self, context):
             )
     except (AttributeError, TypeError, ValueError):
         pass
-    return items
+    # Blender keeps references to strings returned by dynamic EnumProperty
+    # callbacks. Retain the list at module scope so those strings remain valid.
+    _SKETCH_PLANE_ITEMS = items
+    return _SKETCH_PLANE_ITEMS
 
 
 def _revolve_axis_line_items(_self, context):
+    global _REVOLVE_AXIS_ITEMS
     if context is not None:
         try:
             from ..sketch.entities import SketchLine
@@ -117,10 +125,14 @@ def _revolve_axis_line_items(_self, context):
                     if isinstance(entity, SketchLine)
                 ]
                 if items:
-                    return items
+                    _REVOLVE_AXIS_ITEMS = items
+                    return _REVOLVE_AXIS_ITEMS
         except (AttributeError, TypeError, ValueError):
             pass
-    return [("NONE", "No SketchLines", "Create a SketchLine axis first")]
+    _REVOLVE_AXIS_ITEMS = [
+        ("NONE", "No SketchLines", "Create a SketchLine axis first")
+    ]
+    return _REVOLVE_AXIS_ITEMS
 
 
 def _mirror_source_items(_self, context):
@@ -325,7 +337,6 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
     mirror_plane_reference: EnumProperty(
         name="Mirror Plane",
         items=_mirror_plane_items,
-        default="DATUM|YZ",
     )
     mirror_plane_offset_mm: FloatProperty(
         name="Plane Offset",

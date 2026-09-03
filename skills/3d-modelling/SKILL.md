@@ -7,12 +7,14 @@ description: "Use the Blender Parametric CAD Python API and MCP tools for direct
 
 Use this skill when an AI needs to build or edit a model in the Blender 5.1.2
 Parametric CAD extension without mouse-driven computer use. Prefer the MCP
-tools below when an MCP client is available: the checked-out server starts one
-persistent, visible Blender worker automatically and reuses it for the whole
-session. Requests are serviced by a Blender timer, so the normal Blender UI
-stays open and each operation is visible as it completes. Visible mode keeps
-Blender's normal startup/preferences, making the enabled CAD panel and workspace
-available for human edits.
+tools below when an MCP client is available: the checked-out server first
+connects to an existing Blender **CAD MCP Service** and only starts one
+persistent, visible worker when no service endpoint is available. A shared
+endpoint file and startup lock make MCP process restarts/concurrency reuse the
+same Blender window. Requests are serviced by a Blender timer, so the normal
+Blender UI stays open and each operation is visible as it completes. Visible
+mode keeps Blender's normal startup/preferences, making the enabled CAD panel
+and workspace available for human edits.
 When writing a Blender Python script directly, construct the persistent
 `CadDocument`/`Part`/`Feature` graph, then call `rebuild_part` once. Use Blender
 operators only when an existing UI workflow is specifically required.
@@ -31,13 +33,31 @@ with `_`; those are implementation details.
 
 Configure an MCP client to run `mcp/server.py` with Python. Set
 `BLENDER_CAD_EXECUTABLE` to the Blender 5.1.2 executable and optionally set
-`BLENDER_CAD_FILE` to the `.blend` file to open. The bridge starts Blender on
-the first `tools/call`, keeps the visible window open after the MCP client
-disconnects, and never starts/stops Blender per operation. Mutating calls can
-autosave to `BLENDER_CAD_AUTOSAVE` (or to `BLENDER_CAD_FILE` when that variable
-is omitted). The worker loads the CAD scene properties itself, so enabling the
-UI add-on is not required for MCP-only sessions; enable the add-on in Blender
-when you want the CAD panel and interactive sketch tools in the visible window.
+`BLENDER_CAD_FILE` to the `.blend` file to open. To bind to a specific already
+open window, enable the extension there, open the CAD tab, click **Start
+Service in This Window**, and then start/restart the MCP client once. The
+bridge reads `BLENDER_CAD_ENDPOINT_FILE` (default: a file in the system temp
+directory) and connects to that service before considering a new worker. If no
+service is available, the endpoint lock allows at most one fallback worker for
+the selected port/path. Mutating calls can autosave to
+`BLENDER_CAD_AUTOSAVE` (or to `BLENDER_CAD_FILE` when that variable is omitted).
+The worker loads the CAD scene properties itself, so enabling the UI add-on is
+not required for a fallback MCP-only session; enable the add-on when you want
+the CAD panel and interactive sketch tools in the chosen visible window.
+When an endpoint is already available, the bridge ignores `BLENDER_CAD_FILE` so
+the selected open Blender window remains authoritative.
+
+Use the same `BLENDER_CAD_PORT` (default `9876`) and optional endpoint path in
+the MCP client and the Blender service. A reachable endpoint is authoritative:
+the bridge does not launch another Blender window. If an endpoint's process is
+still alive but not accepting connections, the bridge fails with a reconnect
+message instead of spawning a duplicate.
+Set `BLENDER_CAD_AUTOSTART=0` (or pass `--no-autostart`) to enforce an
+existing-window-only policy; the client then fails instead of opening a worker
+when no service is available.
+
+Workers from releases before 0.15.0 did not publish a reconnectable endpoint;
+close any such orphan Blender windows once after upgrading.
 
 Use `--headless` or `BLENDER_CAD_HEADLESS=1` only on machines without a display
 or in CI. On macOS, headless mode selects Blender's OpenGL backend by default

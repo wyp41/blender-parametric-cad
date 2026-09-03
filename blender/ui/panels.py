@@ -54,16 +54,18 @@ class PARAMETRIC_CAD_PT_main(bpy.types.Panel):
         layout.use_property_split = True
         layout.use_property_decorate = False
         scene = context.scene
+        ui = getattr(scene, "parametric_cad_ui", None)
+        if ui is None:
+            layout.label(text="Blender Parametric CAD is not enabled", icon="ERROR")
+            layout.label(text="Enable the extension, then reopen this file.")
+            return
+
+        _draw_mcp_service(layout, scene, ui)
         try:
             document = load_document_from_scene(scene)
         except CadDocumentError as exc:
             layout.label(text="CAD document could not be loaded", icon="ERROR")
             layout.label(text=str(exc))
-            return
-        ui = getattr(scene, "parametric_cad_ui", None)
-        if ui is None:
-            layout.label(text="Blender Parametric CAD is not enabled", icon="ERROR")
-            layout.label(text="Enable the extension, then reopen this file.")
             return
 
         studio = layout.box()
@@ -100,6 +102,47 @@ class PARAMETRIC_CAD_PT_main(bpy.types.Panel):
             _draw_output_section(content, part, ui)
         else:
             _draw_model_section(content, part, ui)
+
+
+def _draw_mcp_service(layout, scene, ui):
+    """Expose the one-window service toggle in the same Blender UI being edited."""
+
+    service = layout.box()
+    service.label(text="CAD MCP Service", icon="LINKED")
+    try:
+        from ...mcp.blender_worker import embedded_service_info
+
+        info = embedded_service_info()
+    except (ImportError, RuntimeError):
+        info = None
+    if info:
+        service.label(
+            text=f"Running on {info['host']}:{info['port']}",
+            icon="CHECKMARK",
+        )
+        service.operator(
+            "parametric_cad.stop_mcp_service",
+            text="Stop Service",
+            icon="PAUSE",
+        )
+        return
+
+    service.prop(ui, "mcp_service_port", text="Port")
+    service.operator(
+        "parametric_cad.start_mcp_service",
+        text="Start Service in This Window",
+        icon="PLAY",
+    )
+    if scene.get("parametric_cad_mcp_service"):
+        service.label(
+            text="Service state was restored; click Start to reconnect.",
+            icon="INFO",
+        )
+    else:
+        service.label(
+            text="MCP will reuse this window after the service starts.",
+            icon="INFO",
+        )
 
 
 def _draw_model_section(layout, part, ui):

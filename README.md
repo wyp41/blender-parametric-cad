@@ -1,7 +1,7 @@
 # Blender Parametric CAD
 
 An AI-first, history-based parametric CAD extension for Blender 5.1.2, designed
-for Codex, Claude, and other tool-using AI systems. Version 0.14.0 provides a
+for Codex, Claude, and other tool-using AI systems. Version 0.15.0 provides a
 real MCP interface and a Python API so an AI can create sketches, features,
 booleans, transforms, mirrors, and per-Part exports through normal CAD
 operations—not by spending tokens on mouse clicks or computer-use screenshots.
@@ -27,7 +27,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.14.0.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.15.0.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## AI/API skill
@@ -41,18 +41,33 @@ from AI-generated instructions or scripts.
 ## MCP server
 
 The repository includes a dependency-free MCP server for Codex, Claude, and
-other MCP clients. By default it starts one persistent, **visible Blender 5.1.2
-window** on the first tool call and keeps that same window open after the MCP
-client disconnects. Requests are serviced through Blender's timer API instead
-of blocking Blender's UI thread, so each sketch, feature, Boolean, rebuild, and
-export is reflected in the open viewport as the AI works. The AI therefore
-calls semantic CAD actions in one normal modeling session instead of repeatedly
-starting Blender, driving the UI, or describing screenshots. This substantially
-reduces token consumption while preserving a complete, inspectable feature
-history that a person can continue editing in the same Blender window. Visible
-mode uses Blender's normal startup/preferences, so an enabled CAD extension and
-your usual workspace are available; `BLENDER_CAD_FILE` can then open a specific
-model into that window.
+other MCP clients. It first discovers and connects to an already-running
+**CAD MCP Service** in Blender. If no live service is published, it starts one
+persistent, **visible Blender 5.1.2 window** on the first tool call. A shared
+endpoint file plus a startup lock makes concurrent/restarted MCP processes
+reuse that same service instead of opening another window. The service remains
+listening when the stdio MCP process exits, so a later MCP process can reconnect
+to the same Blender window. Requests are serviced through Blender's timer API
+instead of blocking Blender's UI thread, so each sketch, feature, Boolean,
+rebuild, and export is reflected in the open viewport as the AI works.
+
+For the strongest “edit this exact window” workflow, enable the extension in
+the Blender window you want to keep, open the CAD tab, and click **Start
+Service in This Window** in the **CAD MCP Service** box. Then start/restart the
+MCP client once. The bridge reads the published endpoint and does not call
+`Popen(Blender)` while that service is reachable. If the service is not
+enabled, the fallback starts at most one worker for the configured endpoint;
+the lock prevents duplicate fallback windows from concurrent MCP clients.
+The AI therefore calls semantic CAD actions in one normal modeling session
+instead of repeatedly starting Blender, driving the UI, or describing
+screenshots. This substantially reduces token consumption while preserving a
+complete, inspectable feature history that a person can continue editing in the
+same Blender window.
+
+Upgrade note: windows left behind by releases before 0.15.0 used a private
+per-client socket and cannot be rediscovered after their MCP parent exits. Close
+those orphan windows once, install 0.15.0, and use the in-window service toggle
+for the window you want to keep.
 
 If a machine has no display, or if a CI job needs a background worker, pass
 `--headless` or set `BLENDER_CAD_HEADLESS=1`. On macOS, headless mode selects
@@ -72,6 +87,9 @@ Configure the MCP client with the checked-out server file:
       "args": ["/absolute/path/to/blender_parametric_cad/mcp/server.py"],
       "env": {
         "BLENDER_CAD_EXECUTABLE": "/Applications/Blender.app/Contents/MacOS/Blender",
+        "BLENDER_CAD_PORT": "9876",
+        "BLENDER_CAD_ENDPOINT_FILE": "/tmp/blender_parametric_cad_mcp.json",
+        "BLENDER_CAD_AUTOSTART": "1",
         "BLENDER_CAD_FILE": "/absolute/path/to/model.blend",
         "BLENDER_CAD_AUTOSAVE": "/absolute/path/to/model.blend"
       }
@@ -83,14 +101,22 @@ Configure the MCP client with the checked-out server file:
 `BLENDER_CAD_FILE` is optional. When set, the worker opens that file at startup;
 `BLENDER_CAD_AUTOSAVE` makes every mutating call save it (when omitted, the
 worker autosaves to `BLENDER_CAD_FILE`). Otherwise use the `cad_save_scene`
-tool. The MCP tools use millimeters and degrees for human-friendly inputs,
+tool. `BLENDER_CAD_PORT` defaults to `9876`; `BLENDER_CAD_ENDPOINT_FILE` is an
+optional shared discovery path (the system temporary directory is used when it
+is omitted). Set `BLENDER_CAD_AUTOSTART` to `0` when the MCP client must never
+launch Blender and may only use an already-running service. Keep the same port
+and endpoint path in the Blender service and
+the MCP client. The MCP tools use millimeters and degrees for human-friendly inputs,
 while the direct Python API keeps its documented meter/radian units. Tool
 discovery also exposes the skill and API reference as MCP resources. Because
-the visible worker is the same live Blender session, there is no separate
+the visible service is the same live Blender session, there is no separate
 AI-only copy to reopen: the person can inspect or edit the CAD history while
 the MCP session is running, and later calls rebuild from that shared document.
-Enable the extension in Blender Preferences to show its CAD panel and
-interactive sketch tools in the visible worker window.
+When an existing service is found, `BLENDER_CAD_FILE` is deliberately ignored:
+the already-open window is the source of truth.
+The built-in CAD service speaks this extension's semantic `cad_*` protocol. A
+generic third-party Blender MCP add-on may expose a different protocol and is
+not automatically interchangeable with this server.
 
 ## Part Studio workflow
 

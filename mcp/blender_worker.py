@@ -14,10 +14,22 @@ from __future__ import annotations
 import argparse
 import json
 from math import isfinite, pi, radians
+import os
 from pathlib import Path
+import secrets
 import socket
 import sys
 from typing import Any
+
+try:
+    from .endpoint import endpoint_lock, endpoint_path, remove_endpoint, write_endpoint
+except ImportError:  # Running as a Blender --python script.
+    from endpoint import (  # type: ignore[no-redef]
+        endpoint_lock,
+        endpoint_path,
+        remove_endpoint,
+        write_endpoint,
+    )
 
 
 def _package_parent() -> Path:
@@ -29,6 +41,7 @@ def _package_parent() -> Path:
 
 
 PACKAGE_ROOT = _package_parent()
+_EMBEDDED_SERVICE = None
 
 
 class WorkerError(RuntimeError):
@@ -1064,6 +1077,7 @@ def _parser():
     parser.add_argument("--host", required=True)
     parser.add_argument("--port", required=True, type=int)
     parser.add_argument("--token", required=True)
+    parser.add_argument("--endpoint-file")
     parser.add_argument("--blend-file")
     parser.add_argument("--autosave")
     return parser
@@ -1089,11 +1103,12 @@ class _VisibleSocketSession:
         self._shutdown_requested = False
         self._closed = False
 
-    def start(self) -> None:
+    def start(self, register_timer: bool = True) -> None:
         self.connection.setblocking(True)
         self.connection.sendall(_message_bytes({"type": "hello", "token": self.token}))
         self.connection.setblocking(False)
-        self.worker._bpy.app.timers.register(self.poll, first_interval=0.0)
+        if register_timer:
+            self.worker._bpy.app.timers.register(self.poll, first_interval=0.0)
 
     def poll(self):
         if self._closed:
@@ -1187,57 +1202,255 @@ class _VisibleSocketSession:
             pass
 
 
+class _VisibleSocketServer:
+    """Keep one Blender window listening while MCP client processes reconnect."""
+
+    interval = 0.01
+
+    def __init__(
+        self,
+        worker: BlenderCadWorker,
+        host: str,
+        port: int,
+        token: str,
+        endpoint_file: str | None = None,
+    ):
+        self.worker = worker
+        self.host = host
+        self.port = port
+        self.token = token
+        self.endpoint_file = endpoint_path(endpoint_file)
+        self.listener: socket.socket | None = None
+        self.sessions: list[_VisibleSocketSession] = []
+        self._closed = False
+
+    @property
+    def info(self) -> dict[str, Any]:
+        return {
+            "host": self.host,
+            "port": self.port,
+            "token": self.token,
+            "endpoint_file": str(self.endpoint_file),
+            "pid": os.getpid(),
+        }
+
+    def start(self) -> dict[str, Any]:
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            listener.bind((self.host, self.port))
+            listener.listen(8)
+            listener.setblocking(False)
+        except OSError:
+            listener.close()
+            raise
+        self.listener = listener
+        self.host, self.port = listener.getsockname()[:2]
+        write_endpoint(
+            {
+                "host": self.host,
+                "port": self.port,
+                "token": self.token,
+                "pid": os.getpid(),
+            },
+            self.endpoint_file,
+        )
+        self.worker._bpy.app.timers.register(self.poll, first_interval=0.0)
+        return self.info
+
+    def poll(self):
+        if self._closed:
+            return None
+        self._accept_pending()
+        for session in tuple(self.sessions):
+            if session.poll() is None:
+                self.sessions.remove(session)
+        return self.interval
+
+    def _accept_pending(self) -> None:
+        if self.listener is None:
+            return
+        while True:
+            try:
+                connection, _address = self.listener.accept()
+            except BlockingIOError:
+                return
+            except OSError:
+                self.close()
+                return
+            session = _VisibleSocketSession(self.worker, connection, self.token)
+            try:
+                session.start(register_timer=False)
+            except OSError:
+                session.close()
+                continue
+            self.sessions.append(session)
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        if self.listener is not None:
+            try:
+                self.listener.close()
+            except OSError:
+                pass
+            self.listener = None
+        for session in self.sessions:
+            session.close()
+        self.sessions.clear()
+        remove_endpoint(self.endpoint_file, token=self.token)
+
+
+def start_embedded_service(
+    host: str = "127.0.0.1",
+    port: int = 9876,
+    token: str | None = None,
+    endpoint_file: str | None = None,
+) -> dict[str, Any]:
+    """Start the CAD MCP service inside the currently open Blender window."""
+
+    global _EMBEDDED_SERVICE
+    if _EMBEDDED_SERVICE is not None and not _EMBEDDED_SERVICE._closed:
+        return _EMBEDDED_SERVICE.info
+    worker = BlenderCadWorker()
+    service = _VisibleSocketServer(
+        worker,
+        host,
+        int(port),
+        token or secrets.token_urlsafe(32),
+        endpoint_file,
+    )
+    try:
+        with endpoint_lock(endpoint_file):
+            info = service.start()
+    except Exception:
+        service.close()
+        raise
+    _EMBEDDED_SERVICE = service
+    return info
+
+
+def embedded_service_info() -> dict[str, Any] | None:
+    """Return the current in-process service endpoint, if one is running."""
+
+    if _EMBEDDED_SERVICE is None or _EMBEDDED_SERVICE._closed:
+        return None
+    return _EMBEDDED_SERVICE.info
+
+
+def stop_embedded_service() -> None:
+    """Stop the service hosted by this Blender process."""
+
+    global _EMBEDDED_SERVICE
+    if _EMBEDDED_SERVICE is not None:
+        _EMBEDDED_SERVICE.close()
+    _EMBEDDED_SERVICE = None
+
+
 def _message_bytes(message: dict[str, Any]) -> bytes:
     return json.dumps(message, ensure_ascii=False).encode("utf-8") + b"\n"
 
 
-def _run_blocking_session(worker: BlenderCadWorker, args) -> int:
-    with socket.create_connection((args.host, args.port), timeout=30.0) as connection:
-        connection.settimeout(None)
-        reader = connection.makefile("rb")
-        writer = connection.makefile("wb")
-        _send(writer, {"type": "hello", "token": args.token})
-        for line in reader:
-            if not line.strip():
-                continue
-            request = None
+def _listen(host: str, port: int) -> socket.socket:
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        listener.bind((host, port))
+        listener.listen(8)
+    except OSError:
+        listener.close()
+        raise
+    return listener
+
+
+def _run_blocking_service(worker: BlenderCadWorker, args) -> int:
+    listener = _listen(args.host, args.port)
+    endpoint_file = endpoint_path(args.endpoint_file)
+    write_endpoint(
+        {
+            "host": args.host,
+            "port": listener.getsockname()[1],
+            "token": args.token,
+            "pid": os.getpid(),
+        },
+        endpoint_file,
+    )
+    should_stop = False
+    try:
+        while not should_stop:
+            connection, _address = listener.accept()
+            reader = None
+            writer = None
             try:
-                request = json.loads(line.decode("utf-8"))
-                if not isinstance(request, dict):
-                    raise WorkerError("Worker message must be a JSON object.")
-                if request.get("token") != args.token:
-                    raise WorkerError("Authentication failed.")
-                method = request.get("method")
-                if method == "shutdown":
-                    _send(writer, {"id": request.get("id"), "ok": True, "result": {}})
-                    break
-                if method != "tool":
-                    raise WorkerError(f"Unknown worker method: {method}")
-                result = worker.handle(request.get("name"), request.get("arguments") or {})
-                _send(writer, {"id": request.get("id"), "ok": True, "result": result})
-            except Exception as exc:
-                _send(
-                    writer,
-                    {
-                        "id": request.get("id") if isinstance(request, dict) else None,
-                        "ok": False,
-                        "error": str(exc),
-                    },
-                )
+                connection.settimeout(None)
+                reader = connection.makefile("rb")
+                writer = connection.makefile("wb")
+                _send(writer, {"type": "hello", "token": args.token})
+                for line in reader:
+                    if not line.strip():
+                        continue
+                    request = None
+                    try:
+                        request = json.loads(line.decode("utf-8"))
+                        if not isinstance(request, dict):
+                            raise WorkerError("Worker message must be a JSON object.")
+                        if request.get("token") != args.token:
+                            raise WorkerError("Authentication failed.")
+                        method = request.get("method")
+                        if method == "shutdown":
+                            _send(
+                                writer,
+                                {"id": request.get("id"), "ok": True, "result": {}},
+                            )
+                            should_stop = True
+                            break
+                        if method != "tool":
+                            raise WorkerError(f"Unknown worker method: {method}")
+                        result = worker.handle(
+                            request.get("name"), request.get("arguments") or {}
+                        )
+                        _send(
+                            writer,
+                            {"id": request.get("id"), "ok": True, "result": result},
+                        )
+                    except Exception as exc:
+                        _send(
+                            writer,
+                            {
+                                "id": request.get("id") if isinstance(request, dict) else None,
+                                "ok": False,
+                                "error": str(exc),
+                            },
+                        )
+            finally:
+                for stream in (reader, writer):
+                    if stream is not None:
+                        stream.close()
+                connection.close()
+    finally:
+        listener.close()
+        remove_endpoint(endpoint_file, token=args.token)
     return 0
 
 
-def _run_visible_session(worker: BlenderCadWorker, args) -> int:
-    connection = socket.create_connection((args.host, args.port), timeout=30.0)
-    session = _VisibleSocketSession(worker, connection, args.token)
+def _run_visible_service(worker: BlenderCadWorker, args) -> int:
+    global _EMBEDDED_SERVICE
+    service = _VisibleSocketServer(
+        worker,
+        args.host,
+        args.port,
+        args.token,
+        args.endpoint_file,
+    )
     try:
-        session.start()
+        service.start()
     except Exception:
-        session.close()
+        service.close()
         raise
-    # The timer owns ``session`` after this function returns. Blender's normal
-    # event loop remains active and the visible window stays open after MCP
-    # sends shutdown or disconnects.
+    _EMBEDDED_SERVICE = service
+    # The timer owns ``service`` after this function returns. Blender's normal
+    # event loop remains active and the visible window can accept reconnects.
     return 0
 
 
@@ -1245,8 +1458,8 @@ def main() -> int:
     args = _parser().parse_args(_script_arguments())
     worker = BlenderCadWorker(args.blend_file, args.autosave)
     if worker._bpy.app.background:
-        return _run_blocking_session(worker, args)
-    return _run_visible_session(worker, args)
+        return _run_blocking_service(worker, args)
+    return _run_visible_service(worker, args)
 
 
 if __name__ == "__main__":

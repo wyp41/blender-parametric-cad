@@ -18,6 +18,7 @@ def register() -> None:
         sketch_tools,
         history,
         transform,
+        mcp_service,
     )
     from .blender.ui import panels
     from .blender.viewport import sketch_overlay
@@ -33,6 +34,7 @@ def register() -> None:
         revolve.CLASSES,
         transform.CLASSES,
         history.CLASSES,
+        mcp_service.CLASSES,
         panels.CLASSES,
     ):
         for cls in group:
@@ -58,11 +60,13 @@ def unregister() -> None:
         sketch_tools,
         history,
         transform,
+        mcp_service,
     )
     from .blender.ui import panels
     from .blender.viewport import sketch_overlay
 
     adapter.unregister_handlers()
+    mcp_service.stop_embedded_service()
     history.unregister_keymaps()
     sketch_overlay.stop()
     groups = (
@@ -75,6 +79,7 @@ def unregister() -> None:
         revolve.CLASSES,
         transform.CLASSES,
         history.CLASSES,
+        mcp_service.CLASSES,
         panels.CLASSES,
     )
     for group in reversed(groups):

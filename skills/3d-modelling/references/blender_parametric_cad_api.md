@@ -1,20 +1,20 @@
 # Blender Parametric CAD API
 
 This reference describes the public API in the Blender Parametric CAD
-extension (current extension release 0.14.0). It covers both direct Python
+extension (current extension release 0.15.0). It covers both direct Python
 scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
 
 ## MCP bridge
 
-Run `mcp/server.py` with Python as an MCP stdio server. The bridge starts one
-visible Blender 5.1.2 worker on the first tool call, proxies all subsequent
-calls over a private localhost connection, and keeps that same Blender window
-open after the MCP client disconnects. The worker polls the socket through
-`bpy.app.timers`, leaving Blender's normal event loop available for viewport
-redraws and human edits. Visible mode uses Blender's normal startup/preferences
-so an enabled CAD extension and the usual workspace are available. Blender is
-launched once per MCP session rather than once per operation, and its own
-stdout is isolated from the MCP stream.
+Run `mcp/server.py` with Python as an MCP stdio server. The bridge first reads
+the shared CAD service endpoint and connects to an already-open Blender 5.1.2
+window. If no live endpoint is available, it starts one visible worker and
+publishes the endpoint for future MCP processes. An endpoint lock prevents
+concurrent/restarted MCP clients from opening duplicate Blender windows; an
+unresponsive live process is reported as an error instead of being bypassed.
+The worker polls the socket through `bpy.app.timers`, leaving Blender's normal
+event loop available for viewport redraws and human edits. The same window
+remains listening after the stdio MCP client disconnects.
 
 Example client entry:
 
@@ -26,6 +26,9 @@ Example client entry:
       "args": ["/absolute/path/to/blender_parametric_cad/mcp/server.py"],
       "env": {
         "BLENDER_CAD_EXECUTABLE": "/Applications/Blender.app/Contents/MacOS/Blender",
+        "BLENDER_CAD_PORT": "9876",
+        "BLENDER_CAD_ENDPOINT_FILE": "/tmp/blender_parametric_cad_mcp.json",
+        "BLENDER_CAD_AUTOSTART": "1",
         "BLENDER_CAD_FILE": "/absolute/path/to/model.blend"
       }
     }
@@ -36,13 +39,27 @@ Example client entry:
 `BLENDER_CAD_EXECUTABLE` may be omitted when `blender` is on `PATH`.
 `BLENDER_CAD_FILE` is optional; when set it is opened at worker startup and
 mutations are autosaved to the same path. `BLENDER_CAD_AUTOSAVE` can set a
-separate autosave target. Without either path, call `cad_save_scene`. Use
+separate autosave target. Without either path, call `cad_save_scene`. When an
+existing endpoint is found, `BLENDER_CAD_FILE` is ignored so the already-open
+Blender window remains authoritative. The endpoint path defaults to the system
+temporary directory when
+`BLENDER_CAD_ENDPOINT_FILE` is omitted. For the exact-window workflow, enable
+the extension in the desired open Blender window, click **Start Service in This
+Window** in the CAD panel, and start/restart the MCP client once. Use
+`BLENDER_CAD_AUTOSTART=0` (or `--no-autostart`) to require that exact-window
+service and prohibit fallback Blender startup. Use
 `--headless` or `BLENDER_CAD_HEADLESS=1` for a worker without a window. On
 macOS headless mode defaults to `--gpu-backend opengl` to avoid Blender 5.1.2
 Metal initialization crashes; `--gpu-backend` and
 `BLENDER_CAD_GPU_BACKEND` accept `opengl`, `metal`, or `vulkan`.
 Enable the extension in Blender Preferences when the visible worker should
-also expose the CAD panel and interactive sketch tools.
+also expose the CAD panel and interactive sketch tools. The panel's **CAD MCP
+Service** box is the explicit binding point for the current window; the
+extension's semantic `cad_*` protocol is not automatically provided by a
+generic third-party Blender MCP add-on.
+Workers from releases before 0.15.0 used a private per-client socket and are
+not reconnectable after their MCP parent exits; close those old orphan windows
+once after upgrading.
 MCP tool inputs use millimeters and degrees; the direct Python API below uses
 meters and radians as documented in [Units and identifiers](#units-and-identifiers).
 

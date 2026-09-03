@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 import bpy
-from bpy.props import BoolProperty, EnumProperty, FloatProperty, PointerProperty, StringProperty
+from bpy.props import (
+    BoolProperty,
+    EnumProperty,
+    FloatProperty,
+    IntProperty,
+    PointerProperty,
+    StringProperty,
+)
 
 _PART_STUDIO_ITEMS = []
 _MIRROR_SOURCE_ITEMS = []
@@ -212,6 +219,13 @@ def _mirror_plane_items(_self, context):
 
 
 class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
+    mcp_service_port: IntProperty(
+        name="MCP Service Port",
+        description="Local TCP port used by the CAD MCP service",
+        default=9876,
+        min=1,
+        max=65535,
+    )
     panel_tab: EnumProperty(
         name="CAD Section",
         description="Choose a focused CAD workspace",

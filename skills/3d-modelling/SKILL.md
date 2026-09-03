@@ -62,6 +62,12 @@ Set `BLENDER_CAD_AUTOSTART=0` (or pass `--no-autostart`) to enforce an
 existing-window-only policy; the client then fails instead of opening a worker
 when no service is available.
 
+The worker imports the extension through Blender's qualified
+`bl_ext.<repository>.blender_parametric_cad` namespace. This avoids the Blender
+Preferences warning `Policy violation with top level module` that appears when
+worker modules are loaded as a bare package. That warning is unrelated to the
+MCP port and is cleared by restarting Blender once after upgrading.
+
 Workers from releases before 0.15.0 did not publish a reconnectable endpoint;
 close any such orphan Blender windows once after upgrading.
 

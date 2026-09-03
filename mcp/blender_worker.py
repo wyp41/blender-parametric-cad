@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import errno
+import importlib
 import json
 from math import isfinite, pi, radians
 import os
@@ -22,35 +23,115 @@ import socket
 import sys
 from typing import Any
 
-try:
-    from .endpoint import (
-        endpoint_is_reachable,
-        endpoint_lock,
-        endpoint_path,
-        read_endpoint,
-        remove_endpoint,
-        write_endpoint,
-    )
-except ImportError:  # Running as a Blender --python script.
-    from endpoint import (  # type: ignore[no-redef]
-        endpoint_is_reachable,
-        endpoint_lock,
-        endpoint_path,
-        read_endpoint,
-        remove_endpoint,
-        write_endpoint,
-    )
+
+def _extension_package_name(package_root: Path) -> str:
+    """Resolve the package name Blender assigned to this extension.
+
+    Blender loads extensions through a junction package such as
+    ``bl_ext.user_default.blender_parametric_cad``.  A worker launched with
+    ``blender --python`` is still a script, so it must opt into that qualified
+    name before importing any CAD modules.  Importing the same files as a
+    bare ``blender_parametric_cad`` package pollutes Blender's global module
+    namespace and triggers the Extensions policy warnings shown in
+    Preferences.
+    """
+
+    package_id = package_root.name
+    current_package = globals().get("__package__")
+    if current_package:
+        candidate = str(current_package).rsplit(".", 1)[0]
+        if candidate.rsplit(".", 1)[-1] == package_id:
+            return candidate
+
+    # A worker can be launched before this extension itself is enabled.  The
+    # junction repository modules may not be in ``sys.modules`` yet, but
+    # Blender's preferences still identify the repository that contains this
+    # package (including symlinked checkouts).
+    try:
+        import bpy
+
+        repositories = getattr(
+            getattr(getattr(bpy, "context", None), "preferences", None),
+            "extensions",
+            None,
+        )
+        for repository in getattr(repositories, "repos", ()):
+            repository_path = str(getattr(repository, "directory", "")).strip()
+            if not repository_path:
+                continue
+            repository_dir = Path(repository_path).expanduser()
+            try:
+                if (repository_dir / package_id).resolve() == package_root.resolve():
+                    repository_id = str(getattr(repository, "module", "")).strip()
+                    if repository_id:
+                        return f"bl_ext.{repository_id}.{package_id}"
+            except (OSError, RuntimeError):
+                continue
+    except (ImportError, AttributeError, ReferenceError, RuntimeError, TypeError):
+        pass
+
+    # Installed extensions live at ``.../extensions/<repository>/<package>``.
+    # Deriving the repository ID from the path keeps this compatible with
+    # Blender's default and user-created repositories.
+    parts = package_root.parts
+    for index in range(len(parts) - 3, -1, -1):
+        if parts[index] == "extensions" and parts[index + 2] == package_id:
+            return f"bl_ext.{parts[index + 1]}.{package_id}"
+    return package_id
 
 
-def _package_parent() -> Path:
+def _has_package_context(package_root: Path) -> bool:
+    current_package = globals().get("__package__")
+    if not current_package:
+        return False
+    candidate = str(current_package).rsplit(".", 1)[0]
+    return candidate.rsplit(".", 1)[-1] == package_root.name
+
+
+def _prepare_package() -> tuple[Path, str]:
     package_root = Path(__file__).resolve().parent.parent
-    parent = package_root.parent
-    if str(parent) not in sys.path:
-        sys.path.insert(0, str(parent))
-    return package_root
+    package_name = _extension_package_name(package_root)
+    if _has_package_context(package_root):
+        return package_root, package_name
+
+    if package_name.startswith("bl_ext."):
+        # The Blender startup sequence registers the ``bl_ext`` junction
+        # package before executing --python scripts.  Importing through it
+        # keeps every bundled module inside the extension namespace.
+        try:
+            importlib.import_module(package_name)
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                f"Could not import Blender extension package {package_name!r}."
+            ) from exc
+    else:
+        # Direct source-checkout execution is useful for development and
+        # tests.  The checkout is outside an Extensions repository, so this
+        # fallback does not affect Blender's extension namespace policy.
+        parent = package_root.parent
+        if str(parent) not in sys.path:
+            sys.path.insert(0, str(parent))
+        importlib.import_module(package_name)
+    return package_root, package_name
 
 
-PACKAGE_ROOT = _package_parent()
+PACKAGE_ROOT, PACKAGE_NAME = _prepare_package()
+if not _has_package_context(PACKAGE_ROOT):
+    # Relative imports below now resolve to the qualified extension package
+    # even though this file was launched as ``__main__``.
+    __package__ = f"{PACKAGE_NAME}.mcp"
+
+
+from .endpoint import (  # noqa: E402  (package bootstrap must run first)
+    endpoint_is_reachable,
+    endpoint_lock,
+    endpoint_path,
+    read_endpoint,
+    remove_endpoint,
+    write_endpoint,
+)
+
+
 _EMBEDDED_SERVICE = None
 
 
@@ -80,7 +161,7 @@ class BlenderCadWorker:
                     raise WorkerError(f"Could not open Blender file: {path}")
         # Rehydrate generated results and validate the restored document even
         # in MCP-only sessions where the interactive add-on UI is not loaded.
-        from blender_parametric_cad.blender import adapter
+        from ..blender import adapter
 
         adapter.register_handlers()
 
@@ -93,7 +174,7 @@ class BlenderCadWorker:
         return bpy
 
     def _ensure_scene_properties(self) -> bool:
-        from blender_parametric_cad.blender import properties
+        from ..blender import properties
 
         if hasattr(self._bpy.types.Scene, "parametric_cad_document"):
             return False
@@ -159,12 +240,12 @@ class BlenderCadWorker:
                     area.tag_redraw()
 
     def _document(self):
-        from blender_parametric_cad.blender.adapter import load_document_from_scene
+        from ..blender.adapter import load_document_from_scene
 
         return load_document_from_scene(self.scene)
 
     def _save_document(self, document) -> None:
-        from blender_parametric_cad.blender.adapter import save_document_to_scene
+        from ..blender.adapter import save_document_to_scene
 
         save_document_to_scene(self.scene, document)
         self._autosave()
@@ -196,7 +277,7 @@ class BlenderCadWorker:
 
     @staticmethod
     def _sketch_location(document, sketch_id: str):
-        from blender_parametric_cad.sketch.sketch import SketchFeature
+        from ..sketch.sketch import SketchFeature
 
         part, feature = BlenderCadWorker._feature_location(document, sketch_id)
         if not isinstance(feature, SketchFeature):
@@ -204,7 +285,7 @@ class BlenderCadWorker:
         return part, feature
 
     def _status(self, _arguments: dict[str, Any]) -> dict[str, Any]:
-        from blender_parametric_cad.core.serialization import document_to_dict
+        from ..core.serialization import document_to_dict
 
         document = self._document()
         objects = []
@@ -229,8 +310,8 @@ class BlenderCadWorker:
         }
 
     def _create_part(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from blender_parametric_cad.core.part import Part
-        from blender_parametric_cad.core.serialization import document_to_dict
+        from ..core.part import Part
+        from ..core.serialization import document_to_dict
 
         document = self._document()
         name = str(arguments.get("name") or "").strip()
@@ -246,7 +327,7 @@ class BlenderCadWorker:
         return {"part": {"id": part.id, "name": part.name}, "document": document_to_dict(document)}
 
     def _set_active_part(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from blender_parametric_cad.core.serialization import document_to_dict
+        from ..core.serialization import document_to_dict
 
         document = self._document()
         part_id = str(arguments.get("part_id") or "")
@@ -255,8 +336,8 @@ class BlenderCadWorker:
         return {"active_part_id": document.active_part_id, "document": document_to_dict(document)}
 
     def _delete_part(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from blender_parametric_cad.blender.adapter import remove_part_geometry
-        from blender_parametric_cad.core.serialization import document_to_dict
+        from ..blender.adapter import remove_part_geometry
+        from ..core.serialization import document_to_dict
 
         document = self._document()
         part_id = str(arguments.get("part_id") or "")
@@ -268,9 +349,9 @@ class BlenderCadWorker:
         return {"deleted_part_id": part_id, "document": document_to_dict(document)}
 
     def _create_sketch(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from blender_parametric_cad.core.references import TopoReference
-        from blender_parametric_cad.core.serialization import feature_to_dict
-        from blender_parametric_cad.sketch.sketch import SketchFeature
+        from ..core.references import TopoReference
+        from ..core.serialization import feature_to_dict
+        from ..sketch.sketch import SketchFeature
 
         document = self._document()
         part = self._part(document, arguments)
@@ -349,8 +430,8 @@ class BlenderCadWorker:
         return result  # type: ignore[return-value]
 
     def _add_geometry(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from blender_parametric_cad.core.serialization import entity_to_dict
-        from blender_parametric_cad.sketch.entities import SketchArc, SketchCircle, SketchLine
+        from ..core.serialization import entity_to_dict
+        from ..sketch.entities import SketchArc, SketchCircle, SketchLine
 
         document = self._document()
         _part, sketch = self._sketch_location(document, str(arguments.get("sketch_id") or ""))
@@ -428,9 +509,9 @@ class BlenderCadWorker:
         }
 
     def _update_geometry(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from blender_parametric_cad.core.serialization import entity_to_dict
-        from blender_parametric_cad.sketch.entities import SketchArc, SketchCircle, SketchLine
-        from blender_parametric_cad.sketch.numeric import set_arc, set_circle, set_rectangle
+        from ..core.serialization import entity_to_dict
+        from ..sketch.entities import SketchArc, SketchCircle, SketchLine
+        from ..sketch.numeric import set_arc, set_circle, set_rectangle
 
         document = self._document()
         _part, sketch = self._sketch_location(document, str(arguments.get("sketch_id") or ""))
@@ -482,7 +563,7 @@ class BlenderCadWorker:
         }
 
     def _delete_geometry(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from blender_parametric_cad.core.serialization import entity_to_dict
+        from ..core.serialization import entity_to_dict
 
         document = self._document()
         _part, sketch = self._sketch_location(document, str(arguments.get("sketch_id") or ""))
@@ -517,7 +598,7 @@ class BlenderCadWorker:
         }
 
     def _profile(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from blender_parametric_cad.sketch.profile import ProfileDetector
+        from ..sketch.profile import ProfileDetector
 
         document = self._document()
         _part, sketch = self._sketch_location(document, str(arguments.get("sketch_id") or ""))
@@ -547,7 +628,7 @@ class BlenderCadWorker:
         }
 
     def _region_id(self, sketch, arguments: dict[str, Any]) -> str:
-        from blender_parametric_cad.sketch.profile import ProfileDetector
+        from ..sketch.profile import ProfileDetector
 
         detector = ProfileDetector()
         regions = detector.detect_regions(sketch)
@@ -622,7 +703,7 @@ class BlenderCadWorker:
         return operation
 
     def _rebuild_payload(self, part_id: str) -> dict[str, Any]:
-        from blender_parametric_cad.blender.adapter import rebuild_part
+        from ..blender.adapter import rebuild_part
 
         result = rebuild_part(self.scene, part_id)
         self._autosave()
@@ -652,10 +733,10 @@ class BlenderCadWorker:
         }
 
     def _create_extrude(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from blender_parametric_cad.core.serialization import feature_to_dict
-        from blender_parametric_cad.features.extrude import ExtrudeFeature
-        from blender_parametric_cad.sketch.profile import ProfileDetector
-        from blender_parametric_cad.sketch.sketch import SketchFeature
+        from ..core.serialization import feature_to_dict
+        from ..features.extrude import ExtrudeFeature
+        from ..sketch.profile import ProfileDetector
+        from ..sketch.sketch import SketchFeature
 
         document = self._document()
         part, sketch = self._sketch_location(document, str(arguments.get("sketch_id") or ""))
@@ -697,9 +778,9 @@ class BlenderCadWorker:
         return {"part_id": part.id, "feature": feature_to_dict(feature), "rebuild": self._rebuild_payload(part.id)}
 
     def _axis_reference(self, axis_data: Any, part, sketch, axis_reverse: bool):
-        from blender_parametric_cad.core.references import AxisReference
-        from blender_parametric_cad.sketch.entities import SketchLine
-        from blender_parametric_cad.sketch.sketch import SketchFeature
+        from ..core.references import AxisReference
+        from ..sketch.entities import SketchLine
+        from ..sketch.sketch import SketchFeature
 
         direction = -1 if axis_reverse else 1
         if isinstance(axis_data, str):
@@ -733,9 +814,9 @@ class BlenderCadWorker:
         )
 
     def _create_revolve(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from blender_parametric_cad.core.serialization import feature_to_dict
-        from blender_parametric_cad.features.revolve import RevolveFeature
-        from blender_parametric_cad.sketch.profile import ProfileDetector
+        from ..core.serialization import feature_to_dict
+        from ..features.revolve import RevolveFeature
+        from ..sketch.profile import ProfileDetector
 
         document = self._document()
         part, sketch = self._sketch_location(document, str(arguments.get("sketch_id") or ""))
@@ -778,7 +859,7 @@ class BlenderCadWorker:
 
     @staticmethod
     def _mirror_plane_reference(value: Any):
-        from blender_parametric_cad.sketch.plane import SketchPlaneReference
+        from ..sketch.plane import SketchPlaneReference
 
         if isinstance(value, str):
             plane = value.upper()
@@ -830,8 +911,8 @@ class BlenderCadWorker:
         raise WorkerError("mirror_plane type must be DATUM, FEATURE_PLANE, or FACE.")
 
     def _create_transform(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from blender_parametric_cad.core.serialization import feature_to_dict
-        from blender_parametric_cad.features.transform import TransformFeature
+        from ..core.serialization import feature_to_dict
+        from ..features.transform import TransformFeature
 
         document = self._document()
         part = self._part(document, arguments)
@@ -856,10 +937,10 @@ class BlenderCadWorker:
         }
 
     def _create_mirror(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from blender_parametric_cad.core.serialization import feature_to_dict
-        from blender_parametric_cad.features.extrude import ExtrudeFeature
-        from blender_parametric_cad.features.mirror import MirrorFeature
-        from blender_parametric_cad.features.revolve import RevolveFeature
+        from ..core.serialization import feature_to_dict
+        from ..features.extrude import ExtrudeFeature
+        from ..features.mirror import MirrorFeature
+        from ..features.revolve import RevolveFeature
 
         document = self._document()
         part = self._part(document, arguments)
@@ -892,12 +973,12 @@ class BlenderCadWorker:
         }
 
     def _update_feature(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from blender_parametric_cad.core.serialization import feature_to_dict
-        from blender_parametric_cad.features.extrude import ExtrudeFeature
-        from blender_parametric_cad.features.mirror import MirrorFeature
-        from blender_parametric_cad.features.revolve import RevolveFeature
-        from blender_parametric_cad.features.transform import TransformFeature
-        from blender_parametric_cad.sketch.sketch import SketchFeature
+        from ..core.serialization import feature_to_dict
+        from ..features.extrude import ExtrudeFeature
+        from ..features.mirror import MirrorFeature
+        from ..features.revolve import RevolveFeature
+        from ..features.transform import TransformFeature
+        from ..sketch.sketch import SketchFeature
 
         document = self._document()
         feature_id = str(arguments.get("feature_id") or "")
@@ -1012,8 +1093,8 @@ class BlenderCadWorker:
         return {"part_id": part.id, "feature": feature_to_dict(feature), "rebuild": self._rebuild_payload(part.id)}
 
     def _delete_feature(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from blender_parametric_cad.core.part import delete_feature
-        from blender_parametric_cad.core.serialization import feature_to_dict
+        from ..core.part import delete_feature
+        from ..core.serialization import feature_to_dict
 
         document = self._document()
         part, _feature = self._feature_location(document, str(arguments.get("feature_id") or ""))
@@ -1051,13 +1132,13 @@ class BlenderCadWorker:
         return self._rebuild_payload(part.id)
 
     def _validate_document(self, _arguments: dict[str, Any]) -> dict[str, Any]:
-        from blender_parametric_cad.blender.adapter import validate_cad_document
+        from ..blender.adapter import validate_cad_document
 
         diagnostics = validate_cad_document(self.scene)
         return {"valid": not diagnostics, "diagnostics": diagnostics}
 
     def _export_part(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        from blender_parametric_cad.blender.adapter import export_part
+        from ..blender.adapter import export_part
 
         document = self._document()
         part = self._part(document, arguments)

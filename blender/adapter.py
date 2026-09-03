@@ -145,7 +145,7 @@ def set_runtime_error(scene: bpy.types.Scene, message: str | None) -> None:
 
 
 def sync_active_part_from_object(scene: bpy.types.Scene, obj) -> str | None:
-    """Make a selected generated object select its owning Part Studio."""
+    """Make a selected generated object select its owning Part Studio/Feature."""
 
     if obj is None:
         return None
@@ -167,6 +167,22 @@ def sync_active_part_from_object(scene: bpy.types.Scene, obj) -> str | None:
         # This is an explicit selection transition, never a panel draw side
         # effect.  The property callback is therefore safe to run here.
         ui.active_part_id = part_id
+    if ui is not None:
+        feature_id = obj.get("cad_feature_id")
+        feature = document.get_part(part_id).get_feature(feature_id) if feature_id else None
+        if feature is not None and ui.active_feature_id != feature.id:
+            # Result objects carry the terminal CAD feature UUID.  Selecting
+            # one therefore gives the left toolbar and Model page a useful
+            # context without making generated meshes editable.
+            ui.active_feature_id = feature.id
+            ui.active_sketch_id = (
+                feature.id if getattr(feature, "feature_type", None) == "SKETCH" else ""
+            )
+            ui.active_sketch_entity_id = ""
+            ui.active_sketch_entity_ids = "[]"
+            ui.feature_create_kind = ""
+            ui.sketch_dirty = False
+            ui.mode = "FEATURE_EDIT"
     return part_id
 
 

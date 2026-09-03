@@ -60,7 +60,7 @@ class PARAMETRIC_CAD_WST_line(_CADSketchTool):
     bl_idname = "parametric_cad.sketch_line"
     bl_label = "CAD Sketch Line"
     bl_description = "Draw a Sketch line or split a boundary"
-    bl_icon = "ops.mesh.primitive_plane_add"
+    bl_icon = "ops.gpencil.draw.line"
     bl_keymap = (
         ("parametric_cad.draw_line", {"type": "LEFTMOUSE", "value": "PRESS"}, None),
     )
@@ -70,7 +70,7 @@ class PARAMETRIC_CAD_WST_rectangle(_CADSketchTool):
     bl_idname = "parametric_cad.sketch_rectangle"
     bl_label = "CAD Sketch Rectangle"
     bl_description = "Draw a parametric Sketch rectangle"
-    bl_icon = "ops.mesh.primitive_plane_add"
+    bl_icon = "ops.gpencil.primitive_box"
     bl_keymap = (
         ("parametric_cad.draw_rectangle", {"type": "LEFTMOUSE", "value": "PRESS"}, None),
     )
@@ -80,7 +80,7 @@ class PARAMETRIC_CAD_WST_circle(_CADSketchTool):
     bl_idname = "parametric_cad.sketch_circle"
     bl_label = "CAD Sketch Circle"
     bl_description = "Draw a parametric Sketch circle"
-    bl_icon = "ops.mesh.primitive_circle_add"
+    bl_icon = "ops.gpencil.primitive_circle"
     bl_keymap = (
         ("parametric_cad.draw_circle", {"type": "LEFTMOUSE", "value": "PRESS"}, None),
     )
@@ -90,7 +90,7 @@ class PARAMETRIC_CAD_WST_arc(_CADSketchTool):
     bl_idname = "parametric_cad.sketch_arc"
     bl_label = "CAD Sketch Arc"
     bl_description = "Draw a three-click center/start/end Sketch arc"
-    bl_icon = "ops.curve.primitive_bezier_curve_add"
+    bl_icon = "ops.gpencil.primitive_arc"
     bl_keymap = (
         ("parametric_cad.draw_arc", {"type": "LEFTMOUSE", "value": "PRESS"}, None),
     )
@@ -100,7 +100,7 @@ class PARAMETRIC_CAD_WST_delete_region(_CADSketchTool):
     bl_idname = "parametric_cad.sketch_delete_region"
     bl_label = "CAD Delete Region"
     bl_description = "Select a bounded Sketch region to remove from profiles"
-    bl_icon = "ops.mesh.delete"
+    bl_icon = "ops.gpencil.stroke_trim"
     bl_keymap = (
         ("parametric_cad.delete_region", {"type": "LEFTMOUSE", "value": "PRESS"}, None),
     )
@@ -110,7 +110,7 @@ class PARAMETRIC_CAD_WST_delete_geometry(_CADSketchTool):
     bl_idname = "parametric_cad.sketch_delete_geometry"
     bl_label = "CAD Delete Geometry"
     bl_description = "Click one Sketch line, circle, or arc to delete it"
-    bl_icon = "ops.mesh.delete"
+    bl_icon = "ops.gpencil.draw.eraser"
     bl_keymap = (
         ("parametric_cad.delete_geometry", {"type": "LEFTMOUSE", "value": "PRESS"}, None),
     )
@@ -165,7 +165,7 @@ class PARAMETRIC_CAD_WST_mirror(_CADFeatureTool):
     bl_idname = "parametric_cad.feature_mirror"
     bl_label = "CAD Mirror"
     bl_description = "Open the Mirror editor for the selected body feature"
-    bl_icon = "ops.transform.mirror"
+    bl_icon = "ops.transform.transform"
     feature_kind = "MIRROR"
     bl_keymap = (
         (

@@ -39,7 +39,7 @@ def register() -> None:
         transform,
         mcp_service,
     )
-    from .blender.ui import panels
+    from .blender.ui import panels, tools
     from .blender.viewport import sketch_overlay
 
     properties.register()
@@ -57,6 +57,7 @@ def register() -> None:
         panels.CLASSES,
     ):
         _register_class_group(bpy, group)
+    tools.register()
     sketch_overlay.start()
     history.register_keymaps()
     adapter.register_handlers()
@@ -79,10 +80,11 @@ def unregister() -> None:
         transform,
         mcp_service,
     )
-    from .blender.ui import panels
+    from .blender.ui import panels, tools
     from .blender.viewport import sketch_overlay
 
     adapter.unregister_handlers()
+    tools.unregister()
     mcp_service.stop_embedded_service()
     history.unregister_keymaps()
     sketch_overlay.stop()

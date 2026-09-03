@@ -57,6 +57,28 @@ def draw_feature_tree(layout, part, active_feature_id: str) -> None:
             row.label(text="", icon="PAUSE")
 
 
+def draw_feature_actions(layout, feature) -> None:
+    """Draw full-width actions for the currently selected history feature."""
+
+    commands = layout.box()
+    commands.label(text=f"Feature Actions — {feature.name}", icon="TOOL_SETTINGS")
+    commands.operator(
+        "parametric_cad.rename_feature",
+        text="Rename Feature",
+        icon="GREASEPENCIL",
+    )
+    commands.operator(
+        "parametric_cad.delete_feature",
+        text="Delete Feature",
+        icon="TRASH",
+    )
+    commands.operator(
+        "parametric_cad.toggle_suppression",
+        text="Unsuppress Feature" if feature.suppressed else "Suppress Feature",
+        icon="HIDE_OFF" if feature.suppressed else "HIDE_ON",
+    )
+
+
 def draw_selected_feature(layout, feature, ui, part) -> None:
     if isinstance(feature, SketchFeature):
         box = layout.box()
@@ -145,16 +167,7 @@ def draw_selected_feature(layout, feature, ui, part) -> None:
             error.alert = True
             error.label(text=feature.error_message, icon="ERROR")
 
-    commands = layout.box()
-    commands.label(text="Feature Actions")
-    row = commands.row(align=True)
-    row.operator("parametric_cad.rename_feature", text="Rename", icon="GREASEPENCIL")
-    row.operator("parametric_cad.delete_feature", text="Delete", icon="TRASH")
-    commands.operator(
-        "parametric_cad.toggle_suppression",
-        text="Unsuppress Feature" if feature.suppressed else "Suppress Feature",
-        icon="HIDE_OFF" if feature.suppressed else "HIDE_ON",
-    )
+    draw_feature_actions(layout, feature)
 
 
 def _draw_revolve_controls(box, ui, action_label: str) -> None:

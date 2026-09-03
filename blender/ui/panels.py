@@ -10,7 +10,7 @@ from ...core.references import TopoReference
 from ...sketch.sketch import SketchFeature
 from ...sketch.numeric import arc_parameters, circle_parameters, rectangle_parameters
 from ..adapter import CadDocumentError, load_document_from_scene
-from .feature_tree import draw_feature_tree, draw_selected_feature
+from .feature_tree import draw_feature_actions, draw_feature_tree, draw_selected_feature
 
 
 _PANEL_TITLES = {
@@ -199,6 +199,12 @@ def _draw_model_section(layout, part, ui):
             text="Roll Forward to End",
             icon="TRACKING_FORWARDS_SINGLE",
         )
+    if selected is None:
+        actions = layout.box()
+        actions.label(text="Feature Actions", icon="TOOL_SETTINGS")
+        actions.label(text="Select a feature above to edit or remove it.", icon="INFO")
+    else:
+        draw_feature_actions(layout, selected)
 
 
 def _draw_sketch_section(layout, context, part, ui):

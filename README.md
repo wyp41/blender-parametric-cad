@@ -1,7 +1,7 @@
 # Blender Parametric CAD
 
 An AI-first, history-based parametric CAD extension for Blender 5.1.2, designed
-for Codex, Claude, and other tool-using AI systems. Version 0.15.5 provides a
+for Codex, Claude, and other tool-using AI systems. Version 0.15.6 provides a
 real MCP interface and a Python API so an AI can create sketches, features,
 booleans, transforms, mirrors, and per-Part exports through normal CAD
 operations—not by spending tokens on mouse clicks or computer-use screenshots.
@@ -32,7 +32,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.15.5.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.15.6.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## AI/API skill
@@ -79,7 +79,7 @@ same Blender window.
 
 Warnings such as `Policy violation with top level module: blender_parametric_cad`
 come from Blender's extension namespace policy, not from another add-on and not
-from the MCP port. Version 0.15.5 loads the worker through Blender's qualified
+from the MCP port. Version 0.15.6 loads the worker through Blender's qualified
 `bl_ext.<repository>.blender_parametric_cad` namespace and keeps bundled modules
 out of the global Python namespace. After upgrading, restart Blender once (or
 disable/re-enable the extension) so modules imported by an older worker are
@@ -89,7 +89,7 @@ can be resolved by using that service or selecting a free port.
 
 Upgrade note: windows left behind by releases before 0.15.0 used a private
 per-client socket and cannot be rediscovered after their MCP parent exits. Close
-those orphan windows once, install 0.15.5, and use the in-window service toggle
+those orphan windows once, install 0.15.6, and use the in-window service toggle
 for the window you want to keep.
 
 If a machine has no display, or if a CI job needs a background worker, pass
@@ -157,6 +157,9 @@ opens the Sketch workspace automatically; finishing returns to Features.
 2. Create a Sketch on XY, XZ, YZ, or a supported Extrude End Plane.
 3. Draw a Rectangle, Circle, Arc, or connected line/arc loop with the mouse.
    Arc uses three clicks: center, start, and end.
+   During Sketch Edit, the left Blender toolbar also contains CAD Sketch tools
+   for Select, Line, Rectangle, Circle, Arc, Delete Region, and Delete Geometry;
+   choose one there to arm the matching viewport action.
 4. To edit exact dimensions, click the Sketch row's pencil button (or
    double-click a generated result to enter its source history), then select a
    Rectangle, Circle, or Arc. The matching millimeter fields appear
@@ -179,8 +182,8 @@ opens the Sketch workspace automatically; finishing returns to Features.
    or semantic plane (with optional offset). The mirrored tool is unioned with
    the current body and must remain one connected solid.
 10. Select Features to edit, rename, delete with dependency confirmation,
-   or suppress/unsuppress. Use **Model → History** to set a rollback point or
-   roll forward to the end of the feature tree.
+   or suppress/unsuppress. The same vertical **Feature Actions** are available
+   on the Model page, and **Model → History** sets rollback or roll-forward.
 
 To attach a Sketch to generated geometry, press **Select Face**, click a
 supported planar face of a simple New Extrude, then press **New Sketch**. The

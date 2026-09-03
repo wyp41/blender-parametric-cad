@@ -22,6 +22,10 @@ operators only when an existing UI workflow is specifically required.
 For manual editing in Blender, the CAD N-panel is organized with a compact
 left icon rail: Model, Sketch, Features, and Output. Only the selected section
 is expanded, and entering Sketch Edit selects the Sketch section automatically.
+Sketch Edit also adds CAD Select/Line/Rectangle/Circle/Arc and cleanup tools to
+Blender's native left 3D View toolbar; select a toolbar icon to arm its viewport
+action. Model exposes vertical Feature Actions for the selected history entry,
+so rename/delete/suppress and rollback do not require switching workspaces.
 The add-on registration path replaces stale or partially registered RNA classes
 left by an extension reload, including the transient panel state used by this
 icon rail.
@@ -73,8 +77,10 @@ Workers from releases before 0.15.0 did not publish a reconnectable endpoint;
 close any such orphan Blender windows once after upgrading.
 
 In the CAD N-panel, use **Model → History** for rollback and roll-forward
-controls. The **Features** workspace keeps Body Features easy to scan by
-placing Transform and Mirror in separate top-level sections.
+controls. The Model page also exposes vertical Feature Actions for the selected
+feature, so rename/delete/suppress does not require switching workspaces. The
+**Features** workspace keeps Body Features easy to scan by placing Transform
+and Mirror in separate top-level sections.
 
 Use `--headless` or `BLENDER_CAD_HEADLESS=1` only on machines without a display
 or in CI. On macOS, headless mode selects Blender's OpenGL backend by default

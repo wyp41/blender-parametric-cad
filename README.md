@@ -1,8 +1,21 @@
 # Blender Parametric CAD
 
-History-based parametric modeling extension for Blender 5.1.2. Version 0.12.0
-implements the M3.5–M3.6 Part Studio, precise Sketch and unified Extrude
-workflows, the M4 semantic face-selection/Revolve milestone, and M5
+An AI-first, history-based parametric CAD extension for Blender 5.1.2, designed
+for Codex, Claude, and other tool-using AI systems. Version 0.12.0 provides a
+real MCP interface and a Python API so an AI can create sketches, features,
+booleans, transforms, mirrors, and per-Part exports through normal CAD
+operations—not by spending tokens on mouse clicks or computer-use screenshots.
+
+The resulting model is still a native, editable Blender workflow: every AI
+operation is stored as persistent CAD history, and the same Sketches, feature
+parameters, dimensions, references, and generated result can be inspected and
+modified directly in Blender. This makes human–AI co-design practical: the AI
+can handle precise, repeatable construction while a person reviews, adjusts,
+or continues the design interactively, reducing both the token cost and the
+technical barrier of 3D modeling.
+
+The extension implements the M3.5–M3.6 Part Studio, precise Sketch and unified
+Extrude workflows, the M4 semantic face-selection/Revolve milestone, and M5
 parametric Transform, Sketch-plane offset, and Mirror features. Arc-based
 composite sketch regions, interactive sketch cleanup/snapping, and robust
 Boolean connectivity checks remain enabled.
@@ -21,15 +34,19 @@ Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
 
 The repository includes the reusable [`3d-modelling` skill](skills/3d-modelling/SKILL.md)
 and its complete [Blender Parametric CAD API reference](skills/3d-modelling/references/blender_parametric_cad_api.md)
-for direct, non-UI modeling from AI-generated Python scripts.
+for Codex/Claude workflows. It documents the callable MCP tools, direct Python
+API, stable UUID references, units, and examples for direct, non-UI modeling
+from AI-generated instructions or scripts.
 
 ## MCP server
 
-The repository also includes a dependency-free MCP server. It starts one
-persistent Blender 5.1.2 background worker on the first tool call, keeps it
-alive for the MCP session, and closes it when the client disconnects. This
-avoids starting/stopping Blender for every modeling operation and does not
-require mouse-driven computer use.
+The repository includes a dependency-free MCP server for Codex, Claude, and
+other MCP clients. It starts one persistent Blender 5.1.2 background worker on
+the first tool call, keeps it alive for the MCP session, and closes it when the
+client disconnects. The AI therefore calls semantic CAD actions in one normal
+modeling session instead of repeatedly starting Blender, driving the UI, or
+describing screenshots. This substantially reduces token consumption while
+preserving a complete, inspectable feature history in the `.blend` file.
 
 Configure the MCP client with the checked-out server file:
 
@@ -52,7 +69,10 @@ Configure the MCP client with the checked-out server file:
 autosaves mutations to it; otherwise use the `cad_save_scene` tool. The MCP
 tools use millimeters and degrees for human-friendly inputs, while the direct
 Python API keeps its documented meter/radian units. Tool discovery also
-exposes the skill and API reference as MCP resources.
+exposes the skill and API reference as MCP resources. After an AI call, open
+the same `.blend` in Blender to review or directly edit the corresponding CAD
+history; later MCP calls rebuild from those human edits rather than from a
+separate AI-only copy.
 
 ## Part Studio workflow
 

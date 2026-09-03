@@ -186,12 +186,10 @@ def _draw_mirror_form(body, ui, operator_id: str, action_label: str) -> None:
 
 
 def draw_selected_feature(layout, feature, ui, part) -> None:
-    """Draw only the editor for the selected history feature.
+    """Draw the legacy N-panel editor for API/backward compatibility.
 
-    Creation forms are intentionally kept in the Model page's contextual
-    ``Next Feature`` card.  This prevents all Transform/Mirror/Revolve fields
-    from occupying the panel when the user is only inspecting a Sketch or a
-    different feature.
+    The main panel now renders feature parameters in the matching native
+    toolbar tool; callers that still use this helper retain the old editor.
     """
 
     if isinstance(feature, SketchFeature):

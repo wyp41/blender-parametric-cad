@@ -1,19 +1,19 @@
 # Blender Parametric CAD
 
 An AI-first, history-based parametric CAD extension for Blender 5.1.2, designed
-for Codex, Claude, and other tool-using AI systems. Version 0.16.3 provides a
+for Codex, Claude, and other tool-using AI systems. Version 0.16.4 provides a
 real MCP interface and a Python API so an AI can create sketches, features,
 booleans, transforms, mirrors, and per-Part exports through normal CAD
 operations—not by spending tokens on mouse clicks or computer-use screenshots.
 This release also hardens Blender RNA class registration so extension reloads
 do not leave stale UI properties such as `panel_tab` behind. The CAD panel now
-keeps MCP service controls in a collapsible section, puts Body Feature tools in
-contextual Model/Features sections, and places rollback controls under
-Model → History. The operation UI is now staged instead of showing every
-feature form at once: Sketch tools are shown while a
-Sketch is being edited; after finishing, Model presents only the next legal
-Extrude/Revolve or Transform/Mirror actions, and Features opens one focused
-parameter editor at a time.
+keeps MCP service controls in a collapsible section and places rollback plus
+history actions under Model → History. The N-panel is limited to Model, Sketch,
+and Output; feature parameters are kept beside the matching native left-toolbar
+icon. After a Sketch is finished, Model presents only the next legal
+Extrude/Revolve or Transform/Mirror actions. Selecting a feature tool shows its
+source or selected history item, parameters, Name and Rename, and Apply &
+Rebuild in one place, so there is no separate Features page to hunt through.
 
 The resulting model is still a native, editable Blender workflow: every AI
 operation is stored as persistent CAD history, and the same Sketches, feature
@@ -36,7 +36,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.16.3.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.16.4.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## AI/API skill
@@ -83,7 +83,7 @@ same Blender window.
 
 Warnings such as `Policy violation with top level module: blender_parametric_cad`
 come from Blender's extension namespace policy, not from another add-on and not
-from the MCP port. Version 0.16.3 loads the worker through Blender's qualified
+from the MCP port. Version 0.16.4 loads the worker through Blender's qualified
 `bl_ext.<repository>.blender_parametric_cad` namespace and keeps bundled modules
 out of the global Python namespace. After upgrading, restart Blender once (or
 disable/re-enable the extension) so modules imported by an older worker are
@@ -93,7 +93,7 @@ can be resolved by using that service or selecting a free port.
 
 Upgrade note: windows left behind by releases before 0.15.0 used a private
 per-client socket and cannot be rediscovered after their MCP parent exits. Close
-those orphan windows once, install 0.16.3, and use the in-window service toggle
+those orphan windows once, install 0.16.4, and use the in-window service toggle
 for the window you want to keep.
 
 If a machine has no display, or if a CI job needs a background worker, pass
@@ -151,11 +151,12 @@ In a 3D View, press `N` and open the **CAD** tab:
 
 The CAD panel now uses a compact icon rail on its left side. Choose **Model**
 for the Part Studio and history tree, **Sketch** for support and sketch
-editing, **Features** for the selected feature's focused editor, or **Output**
-for validation and per-Part export. Only the selected workspace is expanded, so
-the controls no longer form one long column. Entering Sketch Edit opens the
-Sketch workspace automatically; finishing returns to Model, where the next
-operation is available without hunting through another page.
+editing, or **Output** for validation and per-Part export. Feature parameters
+are not duplicated in a long N-panel page: the matching native left-toolbar
+icon is the single create/edit surface for Extrude, Revolve, Transform, and
+Mirror. Entering Sketch Edit opens the Sketch workspace automatically;
+finishing returns to Model, where the next operation is available without
+hunting through another page.
 
 1. Use **+** to create a Part Studio.
 2. Create a Sketch on XY, XZ, YZ, or a supported Extrude End Plane.
@@ -185,31 +186,32 @@ operation is available without hunting through another page.
    outer contour is hidden in the sketch overlay.
 6. Finish the Sketch. **Show Sketches** keeps resolved Sketch references visible.
 7. With the finished Sketch selected in **Model**, click **Create Extrude** or
-   **Create Revolve**. The compact form stays in the current context; choose
-   **New**, **Add**, or **Remove**, set the extent/axis, and press **Create**.
-   The matching left-toolbar icon exposes the same parameters beside the icon.
+   **Create Revolve**. The matching left-toolbar tool is selected and its
+   settings appear beside the icon; choose **New**, **Add**, or **Remove**, set
+   the extent/axis, and press **Create**.
 8. Select a body feature in **Model** and click **Create Transform**. Its
-   compact form stays beside the contextual action (or beside the left-toolbar
-   icon); translation and rotation are grouped, and **Apply & Rebuild** updates
-   the history.
+   matching toolbar tool exposes translation and rotation in the same place;
+   **Apply & Rebuild** updates the history.
 9. Select a body feature and click **Create Mirror**, then choose an earlier
    additive Extrude or Revolve and a datum or semantic plane (with optional
    offset). The mirrored tool is unioned with the current body and must remain
    one connected solid.
-10. Select any feature to edit its one focused editor, rename, delete with
-   dependency confirmation, or suppress/unsuppress. The same vertical
-   **Feature Actions** are available on the Model page, and **Model → History**
-   sets rollback or roll-forward.
+10. Select any feature in the Model history and click its matching toolbar
+   icon. The toolbar shows the editable parameters, **Name**, **Rename**, and
+   **Apply & Rebuild** together. Model keeps the vertical **Feature Actions**
+   for Sketch edit, delete with dependency confirmation, and
+   suppress/unsuppress; **Model → History** sets rollback or roll-forward.
 
 To attach a Sketch to generated geometry, press **Select Face**, click a
 supported planar face of a simple New Extrude, then press **New Sketch**. The
 support is stored as `START_FACE`, `END_FACE`, or `SIDE_FACE(source line UUID)`;
 the temporary Blender polygon hit is never part of the CAD history.
 
-To create a Revolve, select a Sketch and use its **Revolve** section. Choose a
-datum X/Y/Z axis or a visible SketchLine, set **New**, **Add**, or **Remove**,
-toggle **Reverse Axis** when the sweep should run in the opposite direction,
-and enter an angle in degrees (360° by default).
+To create or edit a Revolve, select the Sketch or Revolve history item and use
+the **Revolve** icon in the left toolbar. Choose a datum X/Y/Z axis or a
+visible SketchLine, set **New**, **Add**, or **Remove**, toggle **Reverse Axis**
+when the sweep should run in the opposite direction, and enter an angle in
+degrees (360° by default).
 
 The Part Studio selector switches between independent single-body histories.
 Part Studios can be renamed or deleted without relying on Blender object names.

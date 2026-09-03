@@ -94,6 +94,7 @@ def _begin_edit(context, part, sketch: SketchFeature, is_new: bool) -> None:
     ui.panel_tab = "SKETCH"
     ui.feature_create_kind = ""
     ui.active_feature_id = sketch.id
+    ui.feature_name = sketch.name
     ui.active_sketch_id = sketch.id
     ui.active_sketch_entity_id = ""
     ui.active_sketch_entity_ids = "[]"
@@ -250,7 +251,7 @@ class PARAMETRIC_CAD_OT_finish_sketch(bpy.types.Operator):
             ui.mode = "FEATURE_EDIT"
             # A finished Sketch is the source for the next body operation.
             # Return to Model so the contextual Extrude/Revolve actions are
-            # immediately visible without exposing the long feature editor.
+            # immediately visible without exposing a long N-panel feature form.
             ui.panel_tab = "MODEL"
             ui.feature_create_kind = ""
             ui.active_sketch_entity_id = ""
@@ -330,6 +331,7 @@ class PARAMETRIC_CAD_OT_cancel_sketch(bpy.types.Operator):
         ui.mode = "IDLE"
         ui.panel_tab = "MODEL"
         ui.active_sketch_id = ""
+        ui.feature_name = ""
         ui.active_sketch_entity_id = ""
         ui.active_sketch_entity_ids = "[]"
         ui.sketch_session_new = False

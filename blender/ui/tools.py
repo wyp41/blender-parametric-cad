@@ -46,9 +46,10 @@ class _CADFeatureTool(WorkSpaceTool):
             return False
         part = document.active_part
         selected = part.get_feature(ui.active_feature_id) if part else None
+        selected_type = getattr(selected, "feature_type", None)
         if cls.feature_kind in {"EXTRUDE", "REVOLVE"}:
-            return isinstance(selected, SketchFeature)
-        return getattr(selected, "feature_type", None) in BODY_FEATURE_TYPES
+            return isinstance(selected, SketchFeature) or selected_type == cls.feature_kind
+        return selected_type in BODY_FEATURE_TYPES
 
     @staticmethod
     def draw_settings(_context, layout, _tool):
@@ -56,13 +57,15 @@ class _CADFeatureTool(WorkSpaceTool):
 
 
 def _draw_feature_settings(context, layout, kind: str) -> None:
-    """Render a feature's creation parameters in Blender's tool settings.
+    """Render a feature's create/edit parameters in Blender's tool settings.
 
     Unlike a normal N-panel section, this layout is owned by the active
-    toolbar icon.  It therefore stays next to the icon and is available as
-    soon as the tool is selected.
+    toolbar icon.  It therefore stays beside the icon for both new features
+    and edits to an existing selected history item.
     """
 
+    layout.use_property_split = True
+    layout.use_property_decorate = False
     ui = getattr(getattr(context, "scene", None), "parametric_cad_ui", None)
     if ui is None:
         layout.label(text="Enable Blender Parametric CAD first.", icon="ERROR")
@@ -77,13 +80,35 @@ def _draw_feature_settings(context, layout, kind: str) -> None:
     if selected is None:
         layout.label(text="Select a CAD Sketch or body feature first.", icon="INFO")
         return
-    layout.label(text=f"Source: {selected.name}", icon="LINKED")
+    editing = getattr(selected, "feature_type", None) == kind
+    if editing:
+        header = layout.box()
+        header.label(text=f"Editing {selected.name}", icon="TOOL_SETTINGS")
+        identity = header.row(align=True)
+        identity.prop(ui, "feature_name", text="Name")
+        rename = identity.operator(
+            "parametric_cad.rename_feature",
+            text="Rename",
+            icon="GREASEPENCIL",
+        )
+        rename.feature_id = selected.id
+        rename.name = ui.feature_name or selected.name
+        if selected.status in {"ERROR", "BLOCKED"} and selected.error_message:
+            error = header.box()
+            error.alert = True
+            error.label(text=selected.error_message, icon="ERROR")
+    else:
+        layout.label(text=f"Source: {selected.name}", icon="LINKED")
     if kind == "EXTRUDE":
         layout.prop(ui, "extrude_operation", text="Operation")
         layout.prop(ui, "extrude_depth_mode", text="Extent")
         if ui.extrude_depth_mode == "BLIND":
             layout.prop(ui, "extrude_distance_mm", text="Distance (mm)")
-        layout.operator("parametric_cad.extrude", text="Create Extrude", icon="MOD_SOLIDIFY")
+        layout.operator(
+            "parametric_cad.apply_extrude" if editing else "parametric_cad.extrude",
+            text="Apply & Rebuild" if editing else "Create Extrude",
+            icon="FILE_REFRESH" if editing else "MOD_SOLIDIFY",
+        )
     elif kind == "REVOLVE":
         layout.prop(ui, "revolve_operation", text="Operation")
         layout.prop(ui, "revolve_axis_type", text="Axis")
@@ -93,7 +118,11 @@ def _draw_feature_settings(context, layout, kind: str) -> None:
             layout.prop(ui, "revolve_axis_line_id", text="Sketch Line")
         layout.prop(ui, "revolve_axis_reverse", text="Reverse Axis")
         layout.prop(ui, "revolve_angle_deg", text="Angle (deg)")
-        layout.operator("parametric_cad.revolve", text="Create Revolve", icon="MOD_SCREW")
+        layout.operator(
+            "parametric_cad.apply_revolve" if editing else "parametric_cad.revolve",
+            text="Apply & Rebuild" if editing else "Create Revolve",
+            icon="FILE_REFRESH" if editing else "MOD_SCREW",
+        )
     elif kind == "TRANSFORM":
         layout.prop(ui, "transform_translate_x_mm", text="Translate X (mm)")
         layout.prop(ui, "transform_translate_y_mm", text="Translate Y (mm)")
@@ -101,12 +130,20 @@ def _draw_feature_settings(context, layout, kind: str) -> None:
         layout.prop(ui, "transform_rotate_x_deg", text="Rotate X (deg)")
         layout.prop(ui, "transform_rotate_y_deg", text="Rotate Y (deg)")
         layout.prop(ui, "transform_rotate_z_deg", text="Rotate Z (deg)")
-        layout.operator("parametric_cad.transform", text="Create Transform", icon="OBJECT_ORIGIN")
+        layout.operator(
+            "parametric_cad.apply_transform" if editing else "parametric_cad.transform",
+            text="Apply & Rebuild" if editing else "Create Transform",
+            icon="FILE_REFRESH" if editing else "OBJECT_ORIGIN",
+        )
     elif kind == "MIRROR":
         layout.prop(ui, "mirror_source_feature_id", text="Source Feature")
         layout.prop(ui, "mirror_plane_reference", text="Mirror Plane")
         layout.prop(ui, "mirror_plane_offset_mm", text="Plane Offset (mm)")
-        layout.operator("parametric_cad.mirror", text="Create Mirror", icon="MOD_MIRROR")
+        layout.operator(
+            "parametric_cad.apply_mirror" if editing else "parametric_cad.mirror",
+            text="Apply & Rebuild" if editing else "Create Mirror",
+            icon="FILE_REFRESH" if editing else "MOD_MIRROR",
+        )
 
 
 class PARAMETRIC_CAD_WST_select(_CADSketchTool):

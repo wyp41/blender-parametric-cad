@@ -1,7 +1,7 @@
 # Blender Parametric CAD API
 
 This reference describes the public API in the Blender Parametric CAD
-extension (current extension release 0.16.3). It covers both direct Python
+extension (current extension release 0.16.4). It covers both direct Python
 scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
 
 ## MCP bridge
@@ -91,18 +91,18 @@ The N-panel uses staged workspaces: while a Sketch is being edited, the native
 left 3D View toolbar exposes CAD geometry and cleanup tools; finishing the
 Sketch returns to **Model**. The selected Sketch then presents vertical
 **Create Extrude**/**Create Revolve** actions, while a selected body presents
-**Create Transform**/**Create Mirror**. Their compact parameter forms stay in
-the current context, and the matching left-toolbar icon shows the same fields
-beside the icon. The **Features** workspace remains available for history
-editing with one focused, collapsible parameter editor; Transform's
-translation/rotation are separate subpanels. Rollback and roll-forward remain
-under **Model → History**, and Model also exposes vertical Feature Actions for
-rename, delete, suppress, and Sketch edit.
+**Create Transform**/**Create Mirror**. The matching left-toolbar feature icon
+is the single parameter editor: it shows the source or selected history item,
+all operation fields, **Name**, **Rename**, and **Apply & Rebuild** beside the
+icon. Rollback and roll-forward remain under **Model → History**, and Model
+also exposes vertical Feature Actions for delete, suppress, and Sketch edit;
+there is no separate Features workspace.
 When Sketch Edit is not active, the native toolbar exposes the same contextual
 Extrude/Revolve/Transform/Mirror tools for the selected history item, with the
-creation parameters rendered beside the active icon; use the Model buttons
-when you want an immediate action without a viewport click. Sketch drawing
-tools consume the first 3D View click as the first point.
+create or edit parameters rendered beside the active icon. Model buttons select
+the matching tool automatically when you want an immediate create action
+without a viewport click. Sketch drawing tools consume the first 3D View click
+as the first point.
 
 A minimal MCP modeling sequence is:
 

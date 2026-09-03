@@ -14,20 +14,17 @@ from ..adapter import CadDocumentError, load_document_from_scene
 from .feature_tree import (
     draw_feature_actions,
     draw_feature_tree,
-    draw_selected_feature,
 )
 
 
 _PANEL_TITLES = {
     "MODEL": "Model",
     "SKETCH": "Sketch",
-    "FEATURES": "Features",
     "OUTPUT": "Output",
 }
 _PANEL_ICONS = {
     "MODEL": "MESH_CUBE",
     "SKETCH": "GREASEPENCIL",
-    "FEATURES": "MOD_SOLIDIFY",
     "OUTPUT": "EXPORT",
 }
 
@@ -100,8 +97,6 @@ class PARAMETRIC_CAD_PT_main(bpy.types.Panel):
         content = _draw_section_navigation(layout, ui)
         if ui.panel_tab == "SKETCH":
             _draw_sketch_section(content, context, part, ui)
-        elif ui.panel_tab == "FEATURES":
-            _draw_features_section(content, part, ui)
         elif ui.panel_tab == "OUTPUT":
             _draw_output_section(content, part, ui)
         else:
@@ -210,7 +205,7 @@ def _draw_model_section(layout, part, ui):
         actions.label(text="Select a feature above to edit or remove it.", icon="INFO")
     else:
         draw_feature_actions(layout, selected)
-        _draw_next_feature(layout, part, selected, ui)
+        _draw_next_feature(layout, selected)
 
 
 def _draw_sketch_section(layout, context, part, ui):
@@ -249,8 +244,8 @@ def _draw_sketch_section(layout, context, part, ui):
     create.operator("parametric_cad.new_sketch", icon="OUTLINER_OB_CURVE")
 
 
-def _draw_next_feature(layout, part, selected, ui):
-    """Show the next legal modeling tools for the selected history item."""
+def _draw_next_feature(layout, selected):
+    """Show legal modeling tools whose parameters live in the toolbar."""
 
     if isinstance(selected, SketchFeature):
         title = "Next Feature — from Sketch"
@@ -264,7 +259,7 @@ def _draw_next_feature(layout, part, selected, ui):
     card = layout.box()
     card.label(text=title, icon="ADD")
     card.label(
-        text="Choose an operation; its parameters stay with this context.",
+        text="Choose an operation; edit its parameters beside the toolbar icon.",
         icon="INFO",
     )
     for kind, label, icon in (
@@ -281,104 +276,6 @@ def _draw_next_feature(layout, part, selected, ui):
             icon=icon,
         )
         button.feature_kind = kind
-        if ui.feature_create_kind == kind:
-            _create_feature_panel(
-                card,
-                part,
-                selected,
-                ui,
-                kind,
-                f"Configure {label}",
-                icon,
-            )
-
-
-def _create_feature_panel(layout, part, selected, ui, kind, title, icon):
-    """Draw one collapsed-by-default creation form for a selected source."""
-
-    expanded = ui.feature_create_kind == kind
-    header, body = layout.panel(
-        f"cad_create_{part.id}_{selected.id}_{kind.lower()}",
-        default_closed=not expanded,
-    )
-    header.label(text=title, icon=icon)
-    if body is None:
-        return
-    body.label(text=f"Source: {selected.name}", icon="LINKED")
-    if kind == "EXTRUDE":
-        body.prop(ui, "extrude_operation", text="Operation")
-        body.prop(ui, "extrude_depth_mode", text="Extent")
-        if ui.extrude_depth_mode == "BLIND":
-            body.prop(ui, "extrude_distance_mm", text="Distance (mm)")
-        body.operator(
-            "parametric_cad.extrude",
-            text="Create Extrude",
-            icon="MOD_SOLIDIFY",
-        )
-    elif kind == "REVOLVE":
-        body.prop(ui, "revolve_operation", text="Operation")
-        body.prop(ui, "revolve_axis_type", text="Axis")
-        if ui.revolve_axis_type == "DATUM_AXIS":
-            body.prop(ui, "revolve_axis", text="Datum Axis")
-        else:
-            body.prop(ui, "revolve_axis_line_id", text="Sketch Line")
-        body.prop(ui, "revolve_axis_reverse", text="Reverse Axis")
-        body.prop(ui, "revolve_angle_deg", text="Angle (deg)")
-        body.operator(
-            "parametric_cad.revolve",
-            text="Create Revolve",
-            icon="MOD_SCREW",
-        )
-    elif kind == "TRANSFORM":
-        body.prop(ui, "transform_translate_x_mm", text="Translate X (mm)")
-        body.prop(ui, "transform_translate_y_mm", text="Translate Y (mm)")
-        body.prop(ui, "transform_translate_z_mm", text="Translate Z (mm)")
-        body.prop(ui, "transform_rotate_x_deg", text="Rotate X (deg)")
-        body.prop(ui, "transform_rotate_y_deg", text="Rotate Y (deg)")
-        body.prop(ui, "transform_rotate_z_deg", text="Rotate Z (deg)")
-        body.operator(
-            "parametric_cad.transform",
-            text="Create Transform",
-            icon="OBJECT_ORIGIN",
-        )
-    elif kind == "MIRROR":
-        body.prop(ui, "mirror_source_feature_id", text="Source Feature")
-        body.prop(ui, "mirror_plane_reference", text="Mirror Plane")
-        body.prop(ui, "mirror_plane_offset_mm", text="Plane Offset (mm)")
-        body.operator(
-            "parametric_cad.mirror",
-            text="Create Mirror",
-            icon="MOD_MIRROR",
-        )
-
-
-def _draw_features_section(layout, part, ui):
-    """Show a focused editor and compact, contextual creation tools."""
-
-    selected = part.get_feature(ui.active_feature_id)
-    if selected is None:
-        layout.label(text="Select a Sketch or Feature in Model first.", icon="INFO")
-        return
-    layout.label(text=f"Editing {selected.name}", icon="RESTRICT_SELECT_OFF")
-    draw_selected_feature(layout, selected, ui, part)
-
-    if isinstance(selected, SketchFeature):
-        tools = (
-            ("EXTRUDE", "Create Extrude", "MOD_SOLIDIFY"),
-            ("REVOLVE", "Create Revolve", "MOD_SCREW"),
-        )
-    elif getattr(selected, "feature_type", None) in BODY_FEATURE_TYPES:
-        tools = (
-            ("TRANSFORM", "Create Transform", "OBJECT_ORIGIN"),
-            ("MIRROR", "Create Mirror", "MOD_MIRROR"),
-        )
-    else:
-        tools = ()
-    if tools:
-        layout.separator()
-        layout.label(text="Create Next Feature", icon="ADD")
-        for kind, title, icon in tools:
-            _create_feature_panel(layout, part, selected, ui, kind, title, icon)
 
 
 def _draw_output_section(layout, part, ui):

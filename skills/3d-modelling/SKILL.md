@@ -20,22 +20,20 @@ When writing a Blender Python script directly, construct the persistent
 operators only when an existing UI workflow is specifically required.
 
 For manual editing in Blender, the CAD N-panel is organized with a compact
-left icon rail: Model, Sketch, Features, and Output. Only the selected section
-is expanded. Sketch Edit adds CAD Select/Line/Rectangle/Circle/Arc and cleanup
+left icon rail: Model, Sketch, and Output. Only the selected section is
+expanded. Sketch Edit adds CAD Select/Line/Rectangle/Circle/Arc and cleanup
 tools to Blender's native left 3D View toolbar; select a toolbar icon to arm
 its viewport action, and the first 3D View click is used as the first point.
-Finishing a Sketch returns to **Model**, where the
-selected Sketch exposes vertical **Create Extrude** and **Create Revolve**
-buttons. Selecting a body exposes **Create Transform** and **Create Mirror**.
-Their compact parameter forms stay in the current context, and the matching
-left-toolbar icon shows the same fields beside the icon; the **Features** page
-remains available for editing history with one focused, collapsible editor (and
-Transform's Translation/Rotation subpanels), so unrelated operations never
-fill the panel. Model exposes vertical Feature Actions for the selected
-history entry, so rename/delete/suppress and rollback do not require switching
-workspaces. The add-on registration path replaces stale or partially registered
-RNA classes left by an extension reload, including the transient panel state
-used by this icon rail.
+Finishing a Sketch returns to **Model**, where the selected Sketch exposes
+vertical **Create Extrude** and **Create Revolve** buttons. Selecting a body
+exposes **Create Transform** and **Create Mirror**. The matching feature icon
+is the single parameter surface: it shows the source or selected history item,
+all operation fields, **Name**, **Rename**, and **Apply & Rebuild** beside the
+icon. Model keeps the history tree, rollback/roll-forward, and vertical
+Feature Actions for Sketch edit, delete, and suppress/unsuppress; there is no
+separate Features page. The add-on registration path replaces stale or
+partially registered RNA classes left by an extension reload, including the
+transient panel state used by this icon rail.
 After Sketch Edit ends, the native toolbar also offers contextual feature tools
 for the selected Sketch/body; the Model buttons are the direct entry point when
 no viewport click is desired.
@@ -88,10 +86,9 @@ close any such orphan Blender windows once after upgrading.
 
 In the CAD N-panel, use **Model → History** for rollback and roll-forward
 controls. The Model page also exposes vertical Feature Actions for the selected
-feature, so rename/delete/suppress does not require switching workspaces. The
-**Features** workspace shows only the selected feature editor plus two
-collapsed-by-default contextual creation panels, keeping Transform, Mirror,
-Extrude, and Revolve easy to find.
+feature, while the matching left-toolbar feature icon owns its parameters,
+rename, and Apply & Rebuild controls. This keeps Transform, Mirror, Extrude,
+and Revolve easy to find without switching to another workspace.
 
 Use `--headless` or `BLENDER_CAD_HEADLESS=1` only on machines without a display
 or in CI. On macOS, headless mode selects Blender's OpenGL backend by default

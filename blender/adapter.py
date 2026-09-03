@@ -175,6 +175,7 @@ def sync_active_part_from_object(scene: bpy.types.Scene, obj) -> str | None:
             # one therefore gives the left toolbar and Model page a useful
             # context without making generated meshes editable.
             ui.active_feature_id = feature.id
+            ui.feature_name = feature.name
             ui.active_sketch_id = (
                 feature.id if getattr(feature, "feature_type", None) == "SKETCH" else ""
             )
@@ -184,6 +185,8 @@ def sync_active_part_from_object(scene: bpy.types.Scene, obj) -> str | None:
             ui.sketch_dirty = False
             ui.sketch_applied_signature = ""
             ui.mode = "FEATURE_EDIT"
+        elif feature is not None:
+            ui.feature_name = feature.name
     return part_id
 
 

@@ -35,13 +35,6 @@ _CAD_PANEL_ITEMS = (
         2,
     ),
     (
-        "FEATURES",
-        "Features",
-        "Create and edit body features",
-        "MOD_SOLIDIFY",
-        3,
-    ),
-    (
         "OUTPUT",
         "Output",
         "Validate and export the active Part Studio",
@@ -99,6 +92,7 @@ def _active_part_changed(self, context):
         save_document_to_scene(context.scene, document)
     self.mode = "IDLE"
     self.active_feature_id = ""
+    self.feature_name = ""
     self.active_sketch_id = ""
     self.active_sketch_entity_id = ""
     self.active_sketch_entity_ids = "[]"
@@ -255,6 +249,11 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
         default="IDLE",
     )
     active_feature_id: StringProperty(default="")
+    feature_name: StringProperty(
+        name="Feature Name",
+        description="Name used by the toolbar Rename action for the selected Feature",
+        default="",
+    )
     feature_create_kind: StringProperty(
         name="Feature Tool",
         description="Transient feature creation tool opened from the Model page",

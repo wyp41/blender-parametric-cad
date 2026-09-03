@@ -29,7 +29,9 @@ vertical **Create Extrude** and **Create Revolve** buttons. Selecting a body
 exposes **Create Transform** and **Create Mirror**. The matching feature icon
 is the single parameter surface: it shows the source or selected history item,
 all operation fields, **Name**, **Rename**, and **Apply & Rebuild** beside the
-icon. Model keeps the history tree, rollback/roll-forward, and vertical
+icon. Transform keeps its Translation and Rotation groups collapsed by default
+so the complete viewport remains visible; expand only the group being edited.
+Model keeps the history tree, rollback/roll-forward, and vertical
 Feature Actions for Sketch edit, delete, and suppress/unsuppress; there is no
 separate Features page. The add-on registration path replaces stale or
 partially registered RNA classes left by an extension reload, including the

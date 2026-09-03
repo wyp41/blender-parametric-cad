@@ -124,12 +124,24 @@ def _draw_feature_settings(context, layout, kind: str) -> None:
             icon="FILE_REFRESH" if editing else "MOD_SCREW",
         )
     elif kind == "TRANSFORM":
-        layout.prop(ui, "transform_translate_x_mm", text="Translate X (mm)")
-        layout.prop(ui, "transform_translate_y_mm", text="Translate Y (mm)")
-        layout.prop(ui, "transform_translate_z_mm", text="Translate Z (mm)")
-        layout.prop(ui, "transform_rotate_x_deg", text="Rotate X (deg)")
-        layout.prop(ui, "transform_rotate_y_deg", text="Rotate Y (deg)")
-        layout.prop(ui, "transform_rotate_z_deg", text="Rotate Z (deg)")
+        translation_header, translation = layout.panel(
+            "cad_toolbar_transform_translation",
+            default_closed=True,
+        )
+        translation_header.label(text="Translation", icon="ARROW_LEFTRIGHT")
+        if translation is not None:
+            translation.prop(ui, "transform_translate_x_mm", text="X (mm)")
+            translation.prop(ui, "transform_translate_y_mm", text="Y (mm)")
+            translation.prop(ui, "transform_translate_z_mm", text="Z (mm)")
+        rotation_header, rotation = layout.panel(
+            "cad_toolbar_transform_rotation",
+            default_closed=True,
+        )
+        rotation_header.label(text="Rotation", icon="DRIVER_ROTATIONAL_DIFFERENCE")
+        if rotation is not None:
+            rotation.prop(ui, "transform_rotate_x_deg", text="X (deg)")
+            rotation.prop(ui, "transform_rotate_y_deg", text="Y (deg)")
+            rotation.prop(ui, "transform_rotate_z_deg", text="Z (deg)")
         layout.operator(
             "parametric_cad.apply_transform" if editing else "parametric_cad.transform",
             text="Apply & Rebuild" if editing else "Create Transform",

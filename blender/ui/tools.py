@@ -22,6 +22,10 @@ class _CADSketchTool(WorkSpaceTool):
         ui = getattr(getattr(context, "scene", None), "parametric_cad_ui", None)
         return ui is not None and ui.mode == "SKETCH_EDIT"
 
+    @staticmethod
+    def draw_settings(_context, layout, _tool):
+        layout.label(text="Click in the 3D View to use this Sketch tool.")
+
 
 class _CADFeatureTool(WorkSpaceTool):
     """Base class for contextual post-Sketch feature tools."""
@@ -45,6 +49,11 @@ class _CADFeatureTool(WorkSpaceTool):
         if cls.feature_kind in {"EXTRUDE", "REVOLVE"}:
             return isinstance(selected, SketchFeature)
         return getattr(selected, "feature_type", None) in BODY_FEATURE_TYPES
+
+    @staticmethod
+    def draw_settings(_context, layout, _tool):
+        layout.label(text="Click in the 3D View to open this feature editor.")
+
 
 class PARAMETRIC_CAD_WST_select(_CADSketchTool):
     bl_idname = "parametric_cad.sketch_select"

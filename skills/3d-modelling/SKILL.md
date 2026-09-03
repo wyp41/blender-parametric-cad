@@ -22,6 +22,9 @@ operators only when an existing UI workflow is specifically required.
 For manual editing in Blender, the CAD N-panel is organized with a compact
 left icon rail: Model, Sketch, Features, and Output. Only the selected section
 is expanded, and entering Sketch Edit selects the Sketch section automatically.
+The add-on registration path replaces stale or partially registered RNA classes
+left by an extension reload, including the transient panel state used by this
+icon rail.
 
 The complete callable surface, MCP schemas, field values, units, limitations,
 and copyable examples are in

@@ -1,10 +1,12 @@
 # Blender Parametric CAD
 
 An AI-first, history-based parametric CAD extension for Blender 5.1.2, designed
-for Codex, Claude, and other tool-using AI systems. Version 0.15.0 provides a
+for Codex, Claude, and other tool-using AI systems. Version 0.15.1 provides a
 real MCP interface and a Python API so an AI can create sketches, features,
 booleans, transforms, mirrors, and per-Part exports through normal CAD
 operations—not by spending tokens on mouse clicks or computer-use screenshots.
+This release also hardens Blender RNA class registration so extension reloads
+do not leave stale UI properties such as `panel_tab` behind.
 
 The resulting model is still a native, editable Blender workflow: every AI
 operation is stored as persistent CAD history, and the same Sketches, feature
@@ -27,7 +29,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.15.0.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.15.1.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## AI/API skill
@@ -66,7 +68,7 @@ same Blender window.
 
 Upgrade note: windows left behind by releases before 0.15.0 used a private
 per-client socket and cannot be rediscovered after their MCP parent exits. Close
-those orphan windows once, install 0.15.0, and use the in-window service toggle
+those orphan windows once, install 0.15.1, and use the in-window service toggle
 for the window you want to keep.
 
 If a machine has no display, or if a CI job needs a background worker, pass

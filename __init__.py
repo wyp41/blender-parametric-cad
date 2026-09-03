@@ -3,6 +3,25 @@
 from __future__ import annotations
 
 
+def _register_class_group(bpy, group) -> None:
+    """Register current classes, replacing stale classes left by a reload."""
+
+    for cls in group:
+        registered = getattr(bpy.types, cls.__name__, None)
+        if registered is cls:
+            continue
+        if registered is not None:
+            try:
+                bpy.utils.unregister_class(registered)
+            except (RuntimeError, TypeError) as exc:
+                raise RuntimeError(
+                    f"Blender has a stale Parametric CAD class "
+                    f"{cls.__name__!r}; restart Blender once and enable "
+                    "the extension again."
+                ) from exc
+        bpy.utils.register_class(cls)
+
+
 def register() -> None:
     import bpy
 
@@ -37,9 +56,7 @@ def register() -> None:
         mcp_service.CLASSES,
         panels.CLASSES,
     ):
-        for cls in group:
-            if getattr(bpy.types, cls.__name__, None) is None:
-                bpy.utils.register_class(cls)
+        _register_class_group(bpy, group)
     sketch_overlay.start()
     history.register_keymaps()
     adapter.register_handlers()

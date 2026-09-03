@@ -1,7 +1,7 @@
 # Blender Parametric CAD API
 
 This reference describes the public API in the Blender Parametric CAD
-extension (current extension release 0.15.0). It covers both direct Python
+extension (current extension release 0.15.1). It covers both direct Python
 scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
 
 ## MCP bridge
@@ -74,6 +74,9 @@ The MCP tools are:
 
 The server exposes the same documentation through MCP resources
 `cad://skill/3d-modelling` and `cad://api-reference`.
+
+The Blender add-on registration is reload-safe: stale or partially registered
+UI RNA classes are replaced before the current Scene properties are attached.
 
 A minimal MCP modeling sequence is:
 

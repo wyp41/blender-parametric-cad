@@ -17,7 +17,7 @@ _MIRROR_SOURCE_ITEMS = []
 _SKETCH_PLANE_ITEMS = []
 _REVOLVE_AXIS_ITEMS = []
 
-_CAD_PANEL_ITEMS = [
+_CAD_PANEL_ITEMS = (
     (
         "MODEL",
         "Model",
@@ -42,7 +42,7 @@ _CAD_PANEL_ITEMS = [
         "Validate and export the active Part Studio",
         "EXPORT",
     ),
-]
+)
 
 
 def _part_studio_items(_self, context):
@@ -420,10 +420,68 @@ def _registered_class(cls):
         return None
 
 
+def _class_has_rna_property(cls, property_name: str) -> bool:
+    """Return whether a registered RNA class exposes ``property_name``.
+
+    Blender can leave a class visible in ``bpy.types`` after an interrupted
+    add-on reload.  Checking the RNA properties lets registration distinguish
+    a complete class from one that was only partially registered.
+    """
+
+    try:
+        return cls.bl_rna.properties.get(property_name) is not None
+    except (AttributeError, RuntimeError, TypeError):
+        return False
+
+
+def _remove_ui_pointer() -> None:
+    """Remove the transient Scene pointer before replacing its PropertyGroup."""
+
+    try:
+        if hasattr(bpy.types.Scene, "parametric_cad_ui"):
+            del bpy.types.Scene.parametric_cad_ui
+    except (AttributeError, RuntimeError):
+        # Let the subsequent class registration report the real Blender error
+        # if an unusable partial RNA definition cannot be removed in place.
+        pass
+
+
+def _ensure_ui_state_registered() -> None:
+    """Register the current UI state class, replacing stale reload remnants."""
+
+    cls = PARAMETRIC_CAD_PG_ui_state
+    registered = _registered_class(cls)
+    is_current_and_complete = (
+        registered is cls and _class_has_rna_property(registered, "panel_tab")
+    )
+    if is_current_and_complete:
+        return
+
+    # A pointer to an older class keeps Blender from unregistering that class.
+    # Remove it before replacing a stale or partially registered definition.
+    if registered is not None or hasattr(bpy.types.Scene, "parametric_cad_ui"):
+        _remove_ui_pointer()
+    if registered is not None:
+        try:
+            bpy.utils.unregister_class(registered)
+        except (RuntimeError, TypeError) as exc:
+            raise RuntimeError(
+                "Blender has a stale Parametric CAD UI class that cannot be "
+                "reloaded in this session. Restart Blender once, then enable "
+                "the extension again."
+            ) from exc
+    try:
+        bpy.utils.register_class(cls)
+    except (RuntimeError, TypeError, ValueError) as exc:
+        raise RuntimeError(
+            "Could not register Parametric CAD UI state (panel_tab). If this "
+            "is an add-on reload, restart Blender once to clear the previous "
+            "partial registration."
+        ) from exc
+
+
 def register() -> None:
-    for cls in CLASSES:
-        if _registered_class(cls) is None:
-            bpy.utils.register_class(cls)
+    _ensure_ui_state_registered()
     if not hasattr(bpy.types.Scene, "parametric_cad_document"):
         bpy.types.Scene.parametric_cad_document = StringProperty(
             name="Parametric CAD Document",

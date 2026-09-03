@@ -10,6 +10,33 @@ _MIRROR_SOURCE_ITEMS = []
 _SKETCH_PLANE_ITEMS = []
 _REVOLVE_AXIS_ITEMS = []
 
+_CAD_PANEL_ITEMS = [
+    (
+        "MODEL",
+        "Model",
+        "Part Studio and feature history",
+        "MESH_CUBE",
+    ),
+    (
+        "SKETCH",
+        "Sketch",
+        "Create and edit Sketch geometry",
+        "GREASEPENCIL",
+    ),
+    (
+        "FEATURES",
+        "Features",
+        "Create and edit body features",
+        "MOD_SOLIDIFY",
+    ),
+    (
+        "OUTPUT",
+        "Output",
+        "Validate and export the active Part Studio",
+        "EXPORT",
+    ),
+]
+
 
 def _part_studio_items(_self, context):
     global _PART_STUDIO_ITEMS
@@ -185,6 +212,12 @@ def _mirror_plane_items(_self, context):
 
 
 class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
+    panel_tab: EnumProperty(
+        name="CAD Section",
+        description="Choose a focused CAD workspace",
+        items=_CAD_PANEL_ITEMS,
+        default="MODEL",
+    )
     active_part_id: EnumProperty(
         name="Active Part Studio",
         items=_part_studio_items,

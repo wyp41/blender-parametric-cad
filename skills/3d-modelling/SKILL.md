@@ -17,6 +17,10 @@ When writing a Blender Python script directly, construct the persistent
 `CadDocument`/`Part`/`Feature` graph, then call `rebuild_part` once. Use Blender
 operators only when an existing UI workflow is specifically required.
 
+For manual editing in Blender, the CAD N-panel is organized with a compact
+left icon rail: Model, Sketch, Features, and Output. Only the selected section
+is expanded, and entering Sketch Edit selects the Sketch section automatically.
+
 The complete callable surface, MCP schemas, field values, units, limitations,
 and copyable examples are in
 [references/blender_parametric_cad_api.md](references/blender_parametric_cad_api.md).

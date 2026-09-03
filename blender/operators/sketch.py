@@ -58,6 +58,7 @@ def _begin_edit(context, part, sketch: SketchFeature, is_new: bool) -> None:
     sketch.apply_resolved_plane(plane)
     ui = context.scene.parametric_cad_ui
     ui.mode = "SKETCH_EDIT"
+    ui.panel_tab = "SKETCH"
     ui.active_feature_id = sketch.id
     ui.active_sketch_id = sketch.id
     ui.active_sketch_entity_id = ""
@@ -212,6 +213,7 @@ class PARAMETRIC_CAD_OT_finish_sketch(bpy.types.Operator):
                 self.report({"WARNING"}, result.errors[0].message)
         if result is None or result.success:
             ui.mode = "FEATURE_EDIT"
+            ui.panel_tab = "FEATURES"
             ui.active_sketch_entity_id = ""
             ui.active_sketch_entity_ids = "[]"
             ui.sketch_session_new = False
@@ -273,6 +275,7 @@ class PARAMETRIC_CAD_OT_cancel_sketch(bpy.types.Operator):
                 part.features[index] = feature_from_dict(json.loads(ui.sketch_session_backup))
             save_document_to_scene(context.scene, document)
         ui.mode = "IDLE"
+        ui.panel_tab = "MODEL"
         ui.active_sketch_id = ""
         ui.active_sketch_entity_id = ""
         ui.active_sketch_entity_ids = "[]"

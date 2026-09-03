@@ -1,7 +1,7 @@
 # Blender Parametric CAD
 
 An AI-first, history-based parametric CAD extension for Blender 5.1.2, designed
-for Codex, Claude, and other tool-using AI systems. Version 0.13.2 provides a
+for Codex, Claude, and other tool-using AI systems. Version 0.14.0 provides a
 real MCP interface and a Python API so an AI can create sketches, features,
 booleans, transforms, mirrors, and per-Part exports through normal CAD
 operations—not by spending tokens on mouse clicks or computer-use screenshots.
@@ -27,7 +27,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.13.2.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.14.0.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## AI/API skill
@@ -95,6 +95,13 @@ interactive sketch tools in the visible worker window.
 ## Part Studio workflow
 
 In a 3D View, press `N` and open the **CAD** tab:
+
+The CAD panel now uses a compact icon rail on its left side. Choose **Model**
+for the Part Studio and history tree, **Sketch** for support and sketch
+editing, **Features** for Transform/Mirror and feature parameters, or
+**Output** for validation and per-Part export. Only the selected workspace is
+expanded, so the controls no longer form one long column. Entering Sketch Edit
+opens the Sketch workspace automatically; finishing returns to Features.
 
 1. Use **+** to create a Part Studio.
 2. Create a Sketch on XY, XZ, YZ, or a supported Extrude End Plane.

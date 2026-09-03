@@ -18,7 +18,7 @@ from typing import Any
 PROTOCOL_VERSION = "2025-06-18"
 SUPPORTED_PROTOCOL_VERSIONS = {"2024-11-05", "2025-03-26", PROTOCOL_VERSION}
 SERVER_NAME = "blender-parametric-cad"
-SERVER_VERSION = "0.13.2"
+SERVER_VERSION = "0.14.0"
 
 
 def _object(properties: dict[str, Any] | None = None, required: list[str] | None = None) -> dict[str, Any]:

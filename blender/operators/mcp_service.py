@@ -20,7 +20,7 @@ class PARAMETRIC_CAD_OT_start_mcp_service(bpy.types.Operator):
 
     def execute(self, context):
         ui = getattr(context.scene, "parametric_cad_ui", None)
-        port = int(getattr(ui, "mcp_service_port", 9876))
+        port = int(getattr(ui, "mcp_service_port", 9800))
         try:
             info = start_embedded_service(port=port)
         except (OSError, RuntimeError, ValueError) as exc:

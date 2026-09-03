@@ -1,7 +1,7 @@
 # Blender Parametric CAD API
 
 This reference describes the public API in the Blender Parametric CAD
-extension (current extension release 0.15.4). It covers both direct Python
+extension (current extension release 0.15.5). It covers both direct Python
 scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
 
 ## MCP bridge
@@ -26,7 +26,7 @@ Example client entry:
       "args": ["/absolute/path/to/blender_parametric_cad/mcp/server.py"],
       "env": {
         "BLENDER_CAD_EXECUTABLE": "/Applications/Blender.app/Contents/MacOS/Blender",
-        "BLENDER_CAD_PORT": "9876",
+        "BLENDER_CAD_PORT": "9800",
         "BLENDER_CAD_ENDPOINT_FILE": "/tmp/blender_parametric_cad_mcp.json",
         "BLENDER_CAD_AUTOSTART": "1",
         "BLENDER_CAD_FILE": "/absolute/path/to/model.blend"
@@ -44,8 +44,8 @@ existing endpoint is found, `BLENDER_CAD_FILE` is ignored so the already-open
 Blender window remains authoritative. The endpoint path defaults to the system
 temporary directory when
 `BLENDER_CAD_ENDPOINT_FILE` is omitted. For the exact-window workflow, enable
-the extension in the desired open Blender window, click **Start Service in This
-Window** in the CAD panel, and start/restart the MCP client once. Use
+the extension in the desired open Blender window, expand **CAD MCP Service**,
+click **Start Service in This Window**, and start/restart the MCP client once. Use
 `BLENDER_CAD_AUTOSTART=0` (or `--no-autostart`) to require that exact-window
 service and prohibit fallback Blender startup. Use
 `--headless` or `BLENDER_CAD_HEADLESS=1` for a worker without a window. On
@@ -87,6 +87,8 @@ The server exposes the same documentation through MCP resources
 
 The Blender add-on registration is reload-safe: stale or partially registered
 UI RNA classes are replaced before the current Scene properties are attached.
+In the N-panel, rollback controls live under **Model → History**, while Body
+Features expose independent top-level **Transform** and **Mirror** sections.
 
 A minimal MCP modeling sequence is:
 

@@ -37,9 +37,10 @@ with `_`; those are implementation details.
 Configure an MCP client to run `mcp/server.py` with Python. Set
 `BLENDER_CAD_EXECUTABLE` to the Blender 5.1.2 executable and optionally set
 `BLENDER_CAD_FILE` to the `.blend` file to open. To bind to a specific already
-open window, enable the extension there, open the CAD tab, click **Start
-Service in This Window**, and then start/restart the MCP client once. The
-bridge reads `BLENDER_CAD_ENDPOINT_FILE` (default: a file in the system temp
+open window, enable the extension there, open the CAD tab, expand **CAD MCP
+Service**, click **Start Service in This Window**, and then start/restart the
+MCP client once. The bridge reads `BLENDER_CAD_ENDPOINT_FILE` (default: a file
+in the system temp
 directory) and connects to that service before considering a new worker. If no
 service is available, the endpoint lock allows at most one fallback worker for
 the selected port/path. Mutating calls can autosave to
@@ -50,7 +51,7 @@ the CAD panel and interactive sketch tools in the chosen visible window.
 When an endpoint is already available, the bridge ignores `BLENDER_CAD_FILE` so
 the selected open Blender window remains authoritative.
 
-Use the same `BLENDER_CAD_PORT` (default `9876`) and optional endpoint path in
+Use the same `BLENDER_CAD_PORT` (default `9800`) and optional endpoint path in
 the MCP client and the Blender service. A reachable endpoint is authoritative:
 the bridge does not launch another Blender window. If an endpoint's process is
 still alive but not accepting connections, the bridge fails with a reconnect
@@ -70,6 +71,10 @@ MCP port and is cleared by restarting Blender once after upgrading.
 
 Workers from releases before 0.15.0 did not publish a reconnectable endpoint;
 close any such orphan Blender windows once after upgrading.
+
+In the CAD N-panel, use **Model → History** for rollback and roll-forward
+controls. The **Features** workspace keeps Body Features easy to scan by
+placing Transform and Mirror in separate top-level sections.
 
 Use `--headless` or `BLENDER_CAD_HEADLESS=1` only on machines without a display
 or in CI. On macOS, headless mode selects Blender's OpenGL backend by default

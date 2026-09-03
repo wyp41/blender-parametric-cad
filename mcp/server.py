@@ -361,7 +361,7 @@ class BlenderBridge:
     def _resolve_port(value: int | None) -> int:
         configured = value
         if configured is None:
-            configured = os.environ.get("BLENDER_CAD_PORT", "9876")
+            configured = os.environ.get("BLENDER_CAD_PORT", "9800")
         try:
             port = int(configured)
         except (TypeError, ValueError) as exc:
@@ -613,8 +613,8 @@ def _parser():
     parser.add_argument(
         "--port",
         type=int,
-        default=int(os.environ.get("BLENDER_CAD_PORT", "9876")),
-        help="Blender CAD service port (default: 9876)",
+        default=int(os.environ.get("BLENDER_CAD_PORT", "9800")),
+        help="Blender CAD service port (default: 9800)",
     )
     parser.add_argument(
         "--endpoint-file",

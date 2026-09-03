@@ -60,7 +60,6 @@ class PARAMETRIC_CAD_PT_main(bpy.types.Panel):
             layout.label(text="Enable the extension, then reopen this file.")
             return
 
-        _draw_mcp_service(layout, scene, ui)
         try:
             document = load_document_from_scene(scene)
         except CadDocumentError as exc:
@@ -107,8 +106,8 @@ class PARAMETRIC_CAD_PT_main(bpy.types.Panel):
 def _draw_mcp_service(layout, scene, ui):
     """Expose the one-window service toggle in the same Blender UI being edited."""
 
-    service = layout.box()
-    service.label(text="CAD MCP Service", icon="LINKED")
+    service = layout
+    service.label(text="Current Blender window", icon="LINKED")
     try:
         from ...mcp.blender_worker import embedded_service_info
 
@@ -145,6 +144,27 @@ def _draw_mcp_service(layout, scene, ui):
         )
 
 
+class PARAMETRIC_CAD_PT_mcp_service(bpy.types.Panel):
+    bl_label = "CAD MCP Service"
+    bl_idname = "PARAMETRIC_CAD_PT_mcp_service"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "CAD"
+    bl_parent_id = "PARAMETRIC_CAD_PT_main"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    @classmethod
+    def poll(cls, context):
+        return getattr(context.scene, "parametric_cad_ui", None) is not None
+
+    def draw(self, context):
+        _draw_mcp_service(
+            self.layout,
+            context.scene,
+            context.scene.parametric_cad_ui,
+        )
+
+
 def _draw_model_section(layout, part, ui):
     controls = layout.box()
     controls.label(text="Part Studio", icon="MESH_CUBE")
@@ -157,12 +177,28 @@ def _draw_model_section(layout, part, ui):
     layout.separator()
     layout.label(text="Feature History")
     draw_feature_tree(layout, part, ui.active_feature_id)
+    history = layout.box()
+    history.label(text="History", icon="TRACKING_BACKWARDS_SINGLE")
+    selected = part.get_feature(ui.active_feature_id)
+    if selected is None:
+        history.label(text="Select a feature to set the rollback point.", icon="INFO")
+    else:
+        history.label(text=f"Selected: {selected.name}", icon="DOT")
+        history.operator(
+            "parametric_cad.rollback_here",
+            text="Rollback Here",
+            icon="TRACKING_BACKWARDS_SINGLE",
+        )
     if part.rollback_index is not None:
-        layout.label(
+        history.label(
             text=f"Rolled back after feature {part.rollback_index + 1}",
             icon="PAUSE",
         )
-        layout.operator("parametric_cad.roll_forward", icon="TRACKING_FORWARDS_SINGLE")
+        history.operator(
+            "parametric_cad.roll_forward",
+            text="Roll Forward to End",
+            icon="TRACKING_FORWARDS_SINGLE",
+        )
 
 
 def _draw_sketch_section(layout, context, part, ui):
@@ -202,29 +238,43 @@ def _draw_sketch_section(layout, context, part, ui):
 
 
 def _draw_features_section(layout, part, ui):
-    body_tools = layout.box()
-    body_tools.label(text="Body Features", icon="MOD_SOLIDIFY")
-    transform = body_tools.box()
-    transform.label(text="Transform", icon="OBJECT_ORIGIN")
+    layout.label(text="Body Features", icon="MOD_SOLIDIFY")
+
+    transform = layout.box()
+    transform_header = transform.row(align=True)
+    transform_header.label(text="Transform", icon="OBJECT_ORIGIN")
     transform.prop(ui, "transform_translate_x_mm", text="Translate X (mm)")
     transform.prop(ui, "transform_translate_y_mm", text="Translate Y (mm)")
     transform.prop(ui, "transform_translate_z_mm", text="Translate Z (mm)")
     transform.prop(ui, "transform_rotate_x_deg", text="Rotate X (deg)")
     transform.prop(ui, "transform_rotate_y_deg", text="Rotate Y (deg)")
     transform.prop(ui, "transform_rotate_z_deg", text="Rotate Z (deg)")
-    transform.operator("parametric_cad.transform", icon="OBJECT_ORIGIN")
-    mirror = body_tools.box()
-    mirror.label(text="Mirror", icon="MOD_MIRROR")
+    transform.operator(
+        "parametric_cad.transform",
+        text="Add Transform",
+        icon="OBJECT_ORIGIN",
+    )
+
+    layout.separator()
+    mirror = layout.box()
+    mirror_header = mirror.row(align=True)
+    mirror_header.label(text="Mirror", icon="MOD_MIRROR")
     mirror.prop(ui, "mirror_source_feature_id", text="Source Feature")
     mirror.prop(ui, "mirror_plane_reference", text="Mirror Plane")
     mirror.prop(ui, "mirror_plane_offset_mm", text="Plane Offset (mm)")
-    mirror.operator("parametric_cad.mirror", icon="MOD_MIRROR")
+    mirror.operator(
+        "parametric_cad.mirror",
+        text="Add Mirror",
+        icon="MOD_MIRROR",
+    )
 
     selected = part.get_feature(ui.active_feature_id)
     if selected is None:
+        layout.separator()
         layout.label(text="Select a feature in the Model tab to edit it.", icon="INFO")
     elif ui.mode != "SKETCH_EDIT":
         layout.separator()
+        layout.label(text="Selected Feature", icon="RESTRICT_SELECT_OFF")
         draw_selected_feature(layout, selected, ui, part)
 
 
@@ -275,17 +325,21 @@ def _draw_sketch_editor(layout, context):
     snap_help = layout.box()
     snap_help.label(text="Snap enabled", icon="SNAP_ON")
     snap_help.label(text="Orange = snap point  •  Green = active target")
-    row = layout.row(align=True)
+    tools = layout.box()
+    tools.label(text="Geometry Tools", icon="TOOL_SETTINGS")
+    row = tools.row(align=True)
     row.operator("parametric_cad.select_tool", text="Select", icon="RESTRICT_SELECT_OFF")
     row.operator("parametric_cad.draw_line", text="Line", icon="IPO_LINEAR")
-    row = layout.row(align=True)
+    row = tools.row(align=True)
     row.operator("parametric_cad.draw_rectangle", text="Rectangle", icon="MESH_PLANE")
     row.operator("parametric_cad.draw_circle", text="Circle", icon="MESH_CIRCLE")
-    row = layout.row(align=True)
+    row = tools.row(align=True)
     row.operator("parametric_cad.draw_arc", text="Arc", icon="CURVE_BEZCURVE")
-    row = layout.row(align=True)
+
+    cleanup = layout.box()
+    cleanup.label(text="Geometry Cleanup", icon="X")
+    row = cleanup.row(align=True)
     row.operator("parametric_cad.delete_region", text="Delete Region", icon="X")
-    row = layout.row(align=True)
     if ui.active_sketch_entity_id and any(
         entity.id == ui.active_sketch_entity_id for entity in sketch.entities
     ):
@@ -331,13 +385,21 @@ def _draw_sketch_editor(layout, context):
         dimensions.prop(ui, "rectangle_y_mm", text="Y (mm)")
         dimensions.prop(ui, "rectangle_width_mm", text="Width (mm)")
         dimensions.prop(ui, "rectangle_height_mm", text="Height (mm)")
-        dimensions.operator("parametric_cad.numeric_rectangle", text="Update Rectangle")
+        dimensions.operator(
+            "parametric_cad.numeric_rectangle",
+            text="Apply & Rebuild Rectangle",
+            icon="FILE_REFRESH",
+        )
     elif circle_parameters(sketch, entity_id) is not None:
         dimensions.label(text="Circle Dimensions")
         dimensions.prop(ui, "circle_x_mm", text="Center X (mm)")
         dimensions.prop(ui, "circle_y_mm", text="Center Y (mm)")
         dimensions.prop(ui, "circle_diameter_mm", text="Diameter (mm)")
-        dimensions.operator("parametric_cad.numeric_circle", text="Update Circle")
+        dimensions.operator(
+            "parametric_cad.numeric_circle",
+            text="Apply & Rebuild Circle",
+            icon="FILE_REFRESH",
+        )
         if len(selected_circles) >= 2:
             dimensions.operator(
                 "parametric_cad.numeric_circle_group",
@@ -351,7 +413,11 @@ def _draw_sketch_editor(layout, context):
         dimensions.prop(ui, "arc_radius_mm", text="Radius (mm)")
         dimensions.prop(ui, "arc_start_deg", text="Start (deg)")
         dimensions.prop(ui, "arc_end_deg", text="End (deg)")
-        dimensions.operator("parametric_cad.numeric_arc", text="Update Arc")
+        dimensions.operator(
+            "parametric_cad.numeric_arc",
+            text="Apply & Rebuild Arc",
+            icon="FILE_REFRESH",
+        )
     else:
         dimensions.label(text="Dimensions")
         dimensions.label(
@@ -376,7 +442,11 @@ def _draw_sketch_editor(layout, context):
             text="Apply & Rebuild",
             icon="FILE_REFRESH",
         )
-    layout.operator("parametric_cad.clear_sketch", icon="TRASH")
+    layout.operator(
+        "parametric_cad.clear_sketch",
+        text="Delete All Sketch Geometry",
+        icon="TRASH",
+    )
     layout.separator()
     row = layout.row(align=True)
     row.operator("parametric_cad.finish_sketch", icon="CHECKMARK")
@@ -400,4 +470,8 @@ class PARAMETRIC_CAD_PT_sketch_tools(bpy.types.Panel):
         _draw_sketch_editor(self.layout, context)
 
 
-CLASSES = (PARAMETRIC_CAD_PT_main, PARAMETRIC_CAD_PT_sketch_tools)
+CLASSES = (
+    PARAMETRIC_CAD_PT_main,
+    PARAMETRIC_CAD_PT_mcp_service,
+    PARAMETRIC_CAD_PT_sketch_tools,
+)

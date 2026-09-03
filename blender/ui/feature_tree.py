@@ -150,9 +150,6 @@ def draw_selected_feature(layout, feature, ui, part) -> None:
     row = commands.row(align=True)
     row.operator("parametric_cad.rename_feature", text="Rename", icon="GREASEPENCIL")
     row.operator("parametric_cad.delete_feature", text="Delete", icon="TRASH")
-    commands.operator("parametric_cad.rollback_here", icon="TRACKING_BACKWARDS_SINGLE")
-    if part.rollback_index is not None:
-        commands.operator("parametric_cad.roll_forward", icon="TRACKING_FORWARDS_SINGLE")
     commands.operator(
         "parametric_cad.toggle_suppression",
         text="Unsuppress Feature" if feature.suppressed else "Suppress Feature",

@@ -228,7 +228,7 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
     mcp_service_port: IntProperty(
         name="MCP Service Port",
         description="Local TCP port used by the CAD MCP service",
-        default=9876,
+        default=9800,
         min=1,
         max=65535,
     )

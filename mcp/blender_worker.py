@@ -1402,7 +1402,7 @@ class _VisibleSocketServer:
 
 def start_embedded_service(
     host: str = "127.0.0.1",
-    port: int = 9876,
+    port: int = 9800,
     token: str | None = None,
     endpoint_file: str | None = None,
 ) -> dict[str, Any]:

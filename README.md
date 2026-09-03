@@ -1,12 +1,15 @@
 # Blender Parametric CAD
 
 An AI-first, history-based parametric CAD extension for Blender 5.1.2, designed
-for Codex, Claude, and other tool-using AI systems. Version 0.15.4 provides a
+for Codex, Claude, and other tool-using AI systems. Version 0.15.5 provides a
 real MCP interface and a Python API so an AI can create sketches, features,
 booleans, transforms, mirrors, and per-Part exports through normal CAD
 operations—not by spending tokens on mouse clicks or computer-use screenshots.
 This release also hardens Blender RNA class registration so extension reloads
-do not leave stale UI properties such as `panel_tab` behind.
+do not leave stale UI properties such as `panel_tab` behind. The CAD panel now
+keeps MCP service controls in a collapsible section, puts Body Feature tools in
+separate Transform and Mirror sections, and places rollback controls under
+Model → History.
 
 The resulting model is still a native, editable Blender workflow: every AI
 operation is stored as persistent CAD history, and the same Sketches, feature
@@ -29,7 +32,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.15.4.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.15.5.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## AI/API skill
@@ -54,9 +57,10 @@ instead of blocking Blender's UI thread, so each sketch, feature, Boolean,
 rebuild, and export is reflected in the open viewport as the AI works.
 
 For the strongest “edit this exact window” workflow, enable the extension in
-the Blender window you want to keep, open the CAD tab, and click **Start
-Service in This Window** in the **CAD MCP Service** box. Then start/restart the
-MCP client once. The bridge reads the published endpoint and does not call
+the Blender window you want to keep, open the CAD tab, expand the **CAD MCP
+Service** section, and click **Start Service in This Window**. Then
+start/restart the MCP client once. The bridge reads the published endpoint and
+does not call
 `Popen(Blender)` while that service is reachable. If the service is not
 enabled, the fallback starts at most one worker for the configured endpoint;
 the lock prevents duplicate fallback windows from concurrent MCP clients.
@@ -75,7 +79,7 @@ same Blender window.
 
 Warnings such as `Policy violation with top level module: blender_parametric_cad`
 come from Blender's extension namespace policy, not from another add-on and not
-from the MCP port. Version 0.15.4 loads the worker through Blender's qualified
+from the MCP port. Version 0.15.5 loads the worker through Blender's qualified
 `bl_ext.<repository>.blender_parametric_cad` namespace and keeps bundled modules
 out of the global Python namespace. After upgrading, restart Blender once (or
 disable/re-enable the extension) so modules imported by an older worker are
@@ -85,7 +89,7 @@ can be resolved by using that service or selecting a free port.
 
 Upgrade note: windows left behind by releases before 0.15.0 used a private
 per-client socket and cannot be rediscovered after their MCP parent exits. Close
-those orphan windows once, install 0.15.4, and use the in-window service toggle
+those orphan windows once, install 0.15.5, and use the in-window service toggle
 for the window you want to keep.
 
 If a machine has no display, or if a CI job needs a background worker, pass
@@ -106,7 +110,7 @@ Configure the MCP client with the checked-out server file:
       "args": ["/absolute/path/to/blender_parametric_cad/mcp/server.py"],
       "env": {
         "BLENDER_CAD_EXECUTABLE": "/Applications/Blender.app/Contents/MacOS/Blender",
-        "BLENDER_CAD_PORT": "9876",
+        "BLENDER_CAD_PORT": "9800",
         "BLENDER_CAD_ENDPOINT_FILE": "/tmp/blender_parametric_cad_mcp.json",
         "BLENDER_CAD_AUTOSTART": "1",
         "BLENDER_CAD_FILE": "/absolute/path/to/model.blend",
@@ -120,7 +124,7 @@ Configure the MCP client with the checked-out server file:
 `BLENDER_CAD_FILE` is optional. When set, the worker opens that file at startup;
 `BLENDER_CAD_AUTOSAVE` makes every mutating call save it (when omitted, the
 worker autosaves to `BLENDER_CAD_FILE`). Otherwise use the `cad_save_scene`
-tool. `BLENDER_CAD_PORT` defaults to `9876`; `BLENDER_CAD_ENDPOINT_FILE` is an
+tool. `BLENDER_CAD_PORT` defaults to `9800`; `BLENDER_CAD_ENDPOINT_FILE` is an
 optional shared discovery path (the system temporary directory is used when it
 is omitted). Set `BLENDER_CAD_AUTOSTART` to `0` when the MCP client must never
 launch Blender and may only use an already-running service. Keep the same port
@@ -143,7 +147,8 @@ In a 3D View, press `N` and open the **CAD** tab:
 
 The CAD panel now uses a compact icon rail on its left side. Choose **Model**
 for the Part Studio and history tree, **Sketch** for support and sketch
-editing, **Features** for Transform/Mirror and feature parameters, or
+editing, **Features** for the independent Transform and Mirror sections and
+feature parameters, or
 **Output** for validation and per-Part export. Only the selected workspace is
 expanded, so the controls no longer form one long column. Entering Sketch Edit
 opens the Sketch workspace automatically; finishing returns to Features.
@@ -174,7 +179,8 @@ opens the Sketch workspace automatically; finishing returns to Features.
    or semantic plane (with optional offset). The mirrored tool is unioned with
    the current body and must remain one connected solid.
 10. Select Features to edit, rename, delete with dependency confirmation,
-   suppress/unsuppress, or set the rollback point.
+   or suppress/unsuppress. Use **Model → History** to set a rollback point or
+   roll forward to the end of the feature tree.
 
 To attach a Sketch to generated geometry, press **Select Face**, click a
 supported planar face of a simple New Extrude, then press **New Sketch**. The

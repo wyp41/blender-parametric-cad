@@ -1,7 +1,7 @@
 # Blender Parametric CAD
 
 An AI-first, history-based parametric CAD extension for Blender 5.1.2, designed
-for Codex, Claude, and other tool-using AI systems. Version 0.12.0 provides a
+for Codex, Claude, and other tool-using AI systems. Version 0.13.0 provides a
 real MCP interface and a Python API so an AI can create sketches, features,
 booleans, transforms, mirrors, and per-Part exports through normal CAD
 operations—not by spending tokens on mouse clicks or computer-use screenshots.
@@ -27,7 +27,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.12.0.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.13.0.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## AI/API skill
@@ -41,12 +41,26 @@ from AI-generated instructions or scripts.
 ## MCP server
 
 The repository includes a dependency-free MCP server for Codex, Claude, and
-other MCP clients. It starts one persistent Blender 5.1.2 background worker on
-the first tool call, keeps it alive for the MCP session, and closes it when the
-client disconnects. The AI therefore calls semantic CAD actions in one normal
-modeling session instead of repeatedly starting Blender, driving the UI, or
-describing screenshots. This substantially reduces token consumption while
-preserving a complete, inspectable feature history in the `.blend` file.
+other MCP clients. By default it starts one persistent, **visible Blender 5.1.2
+window** on the first tool call and keeps that same window open after the MCP
+client disconnects. Requests are serviced through Blender's timer API instead
+of blocking Blender's UI thread, so each sketch, feature, Boolean, rebuild, and
+export is reflected in the open viewport as the AI works. The AI therefore
+calls semantic CAD actions in one normal modeling session instead of repeatedly
+starting Blender, driving the UI, or describing screenshots. This substantially
+reduces token consumption while preserving a complete, inspectable feature
+history that a person can continue editing in the same Blender window. Visible
+mode uses Blender's normal startup/preferences, so an enabled CAD extension and
+your usual workspace are available; `BLENDER_CAD_FILE` can then open a specific
+model into that window.
+
+If a machine has no display, or if a CI job needs a background worker, pass
+`--headless` or set `BLENDER_CAD_HEADLESS=1`. On macOS, headless mode selects
+the OpenGL backend by default to avoid Blender 5.1.2 Metal initialization
+crashes observed on some systems. Override this with `--gpu-backend` or
+`BLENDER_CAD_GPU_BACKEND=opengl|metal|vulkan` when needed. A visible session
+can also use `BLENDER_CAD_GPU_BACKEND=opengl` if the normal Metal backend is
+unstable.
 
 Configure the MCP client with the checked-out server file:
 
@@ -58,21 +72,25 @@ Configure the MCP client with the checked-out server file:
       "args": ["/absolute/path/to/blender_parametric_cad/mcp/server.py"],
       "env": {
         "BLENDER_CAD_EXECUTABLE": "/Applications/Blender.app/Contents/MacOS/Blender",
-        "BLENDER_CAD_FILE": "/absolute/path/to/model.blend"
+        "BLENDER_CAD_FILE": "/absolute/path/to/model.blend",
+        "BLENDER_CAD_AUTOSAVE": "/absolute/path/to/model.blend"
       }
     }
   }
 }
 ```
 
-`BLENDER_CAD_FILE` is optional. When set, the worker opens that file and
-autosaves mutations to it; otherwise use the `cad_save_scene` tool. The MCP
-tools use millimeters and degrees for human-friendly inputs, while the direct
-Python API keeps its documented meter/radian units. Tool discovery also
-exposes the skill and API reference as MCP resources. After an AI call, open
-the same `.blend` in Blender to review or directly edit the corresponding CAD
-history; later MCP calls rebuild from those human edits rather than from a
-separate AI-only copy.
+`BLENDER_CAD_FILE` is optional. When set, the worker opens that file at startup;
+`BLENDER_CAD_AUTOSAVE` makes every mutating call save it (when omitted, the
+worker autosaves to `BLENDER_CAD_FILE`). Otherwise use the `cad_save_scene`
+tool. The MCP tools use millimeters and degrees for human-friendly inputs,
+while the direct Python API keeps its documented meter/radian units. Tool
+discovery also exposes the skill and API reference as MCP resources. Because
+the visible worker is the same live Blender session, there is no separate
+AI-only copy to reopen: the person can inspect or edit the CAD history while
+the MCP session is running, and later calls rebuild from that shared document.
+Enable the extension in Blender Preferences to show its CAD panel and
+interactive sketch tools in the visible worker window.
 
 ## Part Studio workflow
 

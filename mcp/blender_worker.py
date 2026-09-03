@@ -1,10 +1,12 @@
 """Blender-side JSON worker used by :mod:`mcp.server`.
 
-This file is launched once by the stdio MCP bridge with Blender 5.1.2 in
-background mode.  All calls run on Blender's main thread, so the existing
-``bpy`` adapter and mesh backend remain the source of truth.  The worker never
-prints to stdout except for protocol messages; Blender's process output is
-discarded by the parent bridge.
+This file is launched once by the stdio MCP bridge with Blender 5.1.2.  In the
+default visible mode, requests are polled through ``bpy.app.timers`` so the
+normal Blender window remains responsive and shows each rebuild.  Headless mode
+keeps the legacy blocking loop for CI.  All calls run on Blender's main thread,
+so the existing ``bpy`` adapter and mesh backend remain the source of truth. The
+worker never prints to stdout except for protocol messages; Blender's process
+output is discarded by the parent bridge.
 """
 
 from __future__ import annotations
@@ -105,7 +107,26 @@ class BlenderCadWorker:
             raise WorkerError(f"Unknown CAD tool: {name}")
         if not isinstance(arguments, dict):
             raise WorkerError("Tool arguments must be an object.")
-        return handlers[name](arguments)
+        try:
+            return handlers[name](arguments)
+        finally:
+            # MCP calls run from a timer rather than an operator context. Tag
+            # every 3D View for redraw so sketch overlays and result meshes are
+            # visible immediately after the response is produced.
+            self._tag_viewports()
+
+    def _tag_viewports(self) -> None:
+        try:
+            windows = self._bpy.context.window_manager.windows
+        except (AttributeError, ReferenceError, RuntimeError):
+            return
+        for window in windows:
+            screen = getattr(window, "screen", None)
+            if screen is None:
+                continue
+            for area in screen.areas:
+                if area.type == "VIEW_3D":
+                    area.tag_redraw()
 
     def _document(self):
         from blender_parametric_cad.blender.adapter import load_document_from_scene
@@ -1054,9 +1075,123 @@ def _send(stream, message: dict[str, Any]) -> None:
     stream.flush()
 
 
-def main() -> int:
-    args = _parser().parse_args(_script_arguments())
-    worker = BlenderCadWorker(args.blend_file, args.autosave)
+class _VisibleSocketSession:
+    """Service one MCP connection without blocking Blender's UI event loop."""
+
+    interval = 0.01
+
+    def __init__(self, worker: BlenderCadWorker, connection: socket.socket, token: str):
+        self.worker = worker
+        self.connection = connection
+        self.token = token
+        self._incoming = bytearray()
+        self._outgoing = bytearray()
+        self._shutdown_requested = False
+        self._closed = False
+
+    def start(self) -> None:
+        self.connection.setblocking(True)
+        self.connection.sendall(_message_bytes({"type": "hello", "token": self.token}))
+        self.connection.setblocking(False)
+        self.worker._bpy.app.timers.register(self.poll, first_interval=0.0)
+
+    def poll(self):
+        if self._closed:
+            return None
+        if not self._receive():
+            self.close()
+            return None
+        self._flush()
+        if self._shutdown_requested and not self._outgoing:
+            self.close()
+            return None
+        return self.interval
+
+    def _receive(self) -> bool:
+        peer_closed = False
+        while True:
+            try:
+                chunk = self.connection.recv(65536)
+            except BlockingIOError:
+                break
+            except OSError:
+                return False
+            if not chunk:
+                peer_closed = True
+                break
+            self._incoming.extend(chunk)
+        while True:
+            separator = self._incoming.find(b"\n")
+            if separator < 0:
+                break
+            line = bytes(self._incoming[:separator])
+            del self._incoming[: separator + 1]
+            if line.strip():
+                self._handle_line(line)
+            if self._shutdown_requested:
+                break
+        return not peer_closed
+
+    def _handle_line(self, line: bytes) -> None:
+        request = None
+        try:
+            request = json.loads(line.decode("utf-8"))
+            if not isinstance(request, dict):
+                raise WorkerError("Worker message must be a JSON object.")
+            if request.get("token") != self.token:
+                raise WorkerError("Authentication failed.")
+            method = request.get("method")
+            if method == "shutdown":
+                self._queue({"id": request.get("id"), "ok": True, "result": {}})
+                self._shutdown_requested = True
+                return
+            if method != "tool":
+                raise WorkerError(f"Unknown worker method: {method}")
+            result = self.worker.handle(
+                request.get("name"), request.get("arguments") or {}
+            )
+            self._queue({"id": request.get("id"), "ok": True, "result": result})
+        except Exception as exc:
+            self._queue(
+                {
+                    "id": request.get("id") if isinstance(request, dict) else None,
+                    "ok": False,
+                    "error": str(exc),
+                }
+            )
+
+    def _queue(self, message: dict[str, Any]) -> None:
+        self._outgoing.extend(_message_bytes(message))
+
+    def _flush(self) -> None:
+        while self._outgoing:
+            try:
+                sent = self.connection.send(self._outgoing)
+            except BlockingIOError:
+                return
+            except OSError:
+                self.close()
+                return
+            if sent <= 0:
+                self.close()
+                return
+            del self._outgoing[:sent]
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self.connection.close()
+        except OSError:
+            pass
+
+
+def _message_bytes(message: dict[str, Any]) -> bytes:
+    return json.dumps(message, ensure_ascii=False).encode("utf-8") + b"\n"
+
+
+def _run_blocking_session(worker: BlenderCadWorker, args) -> int:
     with socket.create_connection((args.host, args.port), timeout=30.0) as connection:
         connection.settimeout(None)
         reader = connection.makefile("rb")
@@ -1090,6 +1225,28 @@ def main() -> int:
                     },
                 )
     return 0
+
+
+def _run_visible_session(worker: BlenderCadWorker, args) -> int:
+    connection = socket.create_connection((args.host, args.port), timeout=30.0)
+    session = _VisibleSocketSession(worker, connection, args.token)
+    try:
+        session.start()
+    except Exception:
+        session.close()
+        raise
+    # The timer owns ``session`` after this function returns. Blender's normal
+    # event loop remains active and the visible window stays open after MCP
+    # sends shutdown or disconnects.
+    return 0
+
+
+def main() -> int:
+    args = _parser().parse_args(_script_arguments())
+    worker = BlenderCadWorker(args.blend_file, args.autosave)
+    if worker._bpy.app.background:
+        return _run_blocking_session(worker, args)
+    return _run_visible_session(worker, args)
 
 
 if __name__ == "__main__":

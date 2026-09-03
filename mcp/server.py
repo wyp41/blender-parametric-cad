@@ -1,9 +1,10 @@
 """Dependency-free stdio MCP server for Blender Parametric CAD.
 
-The process speaking MCP is deliberately separate from Blender.  On the first
-tool call it starts one persistent background Blender worker and proxies all
-subsequent calls over a private localhost socket.  This keeps Blender's own
-stdout out of the MCP stream and avoids launching Blender once per operation.
+The process speaking MCP starts one persistent Blender worker and proxies all
+subsequent calls over a private localhost socket.  Visible sessions launch a
+normal Blender window and the worker services requests through Blender's timer
+API, so every rebuild is visible without blocking the UI.  Headless mode is
+available for CI or machines without a display.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import time
 from typing import Any, BinaryIO
 
 try:  # Running as ``python -m blender_parametric_cad.mcp.server``.
@@ -54,11 +56,15 @@ class BlenderBridge:
         blend_file: str | None = None,
         autosave: str | None = None,
         startup_timeout: float = 60.0,
+        visible: bool | None = None,
+        gpu_backend: str | None = None,
     ) -> None:
         self.blender_executable = blender_executable
         self.blend_file = blend_file
         self.autosave = autosave
         self.startup_timeout = startup_timeout
+        self.visible = self._resolve_visible(visible)
+        self.gpu_backend = self._resolve_gpu_backend(gpu_backend)
         self._listener: socket.socket | None = None
         self._connection: socket.socket | None = None
         self._reader: BinaryIO | None = None
@@ -83,20 +89,25 @@ class BlenderBridge:
         listener.settimeout(self.startup_timeout)
         self._listener = listener
         host, port = listener.getsockname()
-        command = [
-            executable,
-            "--background",
-            "--factory-startup",
-            "--python",
-            str(worker),
-            "--",
-            "--host",
-            host,
-            "--port",
-            str(port),
-            "--token",
-            self._token,
-        ]
+        command = [executable]
+        if self.gpu_backend:
+            command.extend(("--gpu-backend", self.gpu_backend))
+        if not self.visible:
+            command.append("--background")
+            command.append("--factory-startup")
+        command.extend(
+            (
+                "--python",
+                str(worker),
+                "--",
+                "--host",
+                host,
+                "--port",
+                str(port),
+                "--token",
+                self._token,
+            )
+        )
         if self.blend_file:
             command.extend(("--blend-file", self.blend_file))
         if self.autosave:
@@ -108,20 +119,38 @@ class BlenderBridge:
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                start_new_session=self.visible,
             )
-            connection, _address = listener.accept()
+            deadline = time.monotonic() + self.startup_timeout
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0.0:
+                    raise socket.timeout
+                listener.settimeout(min(0.25, remaining))
+                try:
+                    connection, _address = listener.accept()
+                    break
+                except socket.timeout:
+                    return_code = self._process.poll()
+                    if return_code is not None:
+                        raise BridgeError(self._startup_failure_message(return_code))
+        except BridgeError:
+            self.close(terminate_visible=True)
+            raise
         except (OSError, socket.timeout) as exc:
-            self.close()
+            self.close(terminate_visible=True)
             raise BridgeError(
-                "Could not start the Blender worker. Set "
-                "BLENDER_CAD_EXECUTABLE to the Blender 5.1.2 executable."
+                "Could not start the Blender worker within "
+                f"{self.startup_timeout:g} seconds. Set "
+                "BLENDER_CAD_EXECUTABLE to the Blender 5.1.2 executable "
+                "and verify that Blender can start normally."
             ) from exc
         finally:
             listener.close()
             self._listener = None
 
-        connection.settimeout(None)
         self._connection = connection
+        connection.settimeout(None)
         self._reader = connection.makefile("rb")
         self._writer = connection.makefile("wb")
         try:
@@ -129,23 +158,23 @@ class BlenderBridge:
             if hello.get("type") != "hello" or hello.get("token") != self._token:
                 raise BridgeError("Blender worker authentication failed.")
         except Exception:
-            self.close()
+            self.close(terminate_visible=True)
             raise
 
     def call(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
         self.ensure_started()
         request_id = self._next_id
         self._next_id += 1
-        self._write_message(
-            {
-                "id": request_id,
-                "method": "tool",
-                "name": name,
-                "arguments": arguments or {},
-                "token": self._token,
-            }
-        )
         try:
+            self._write_message(
+                {
+                    "id": request_id,
+                    "method": "tool",
+                    "name": name,
+                    "arguments": arguments or {},
+                    "token": self._token,
+                }
+            )
             response = self._read_message()
         except BridgeError:
             self.close()
@@ -156,7 +185,7 @@ class BlenderBridge:
             raise BridgeError(str(response.get("error", "Blender worker failed.")))
         return response.get("result")
 
-    def close(self) -> None:
+    def close(self, terminate_visible: bool = False) -> None:
         if self._writer is not None:
             try:
                 self._write_message(
@@ -178,7 +207,7 @@ class BlenderBridge:
             except OSError:
                 pass
         self._connection = None
-        if self._process is not None:
+        if self._process is not None and (not self.visible or terminate_visible):
             try:
                 self._process.wait(timeout=3.0)
             except subprocess.TimeoutExpired:
@@ -187,7 +216,11 @@ class BlenderBridge:
                     self._process.wait(timeout=3.0)
                 except subprocess.TimeoutExpired:
                     self._process.kill()
-            self._process = None
+        elif self._process is not None and self._process.poll() is not None:
+            # A visible Blender window remains available after MCP disconnect;
+            # reap it here only when it has already exited or crashed.
+            self._process.wait()
+        self._process = None
         if self._listener is not None:
             try:
                 self._listener.close()
@@ -216,6 +249,41 @@ class BlenderBridge:
             "the Blender executable (for example "
             "/Applications/Blender.app/Contents/MacOS/Blender)."
         )
+
+    @staticmethod
+    def _resolve_visible(value: bool | None) -> bool:
+        if value is not None:
+            return bool(value)
+        headless = os.environ.get("BLENDER_CAD_HEADLESS", "").strip().lower()
+        return headless not in {"1", "true", "yes", "on"}
+
+    def _resolve_gpu_backend(self, value: str | None) -> str | None:
+        configured = value
+        if configured is None:
+            configured = os.environ.get("BLENDER_CAD_GPU_BACKEND")
+        backend = str(configured or "").strip().lower() or None
+        if backend is None and not self.visible and sys.platform == "darwin":
+            # Blender 5.1.2 can initialize Metal even for a background worker
+            # on affected macOS installations. CAD evaluation does not need a
+            # GPU, and OpenGL is the supported software-safe fallback.
+            backend = "opengl"
+        if backend not in {None, "opengl", "metal", "vulkan"}:
+            raise BridgeError(
+                "BLENDER_CAD_GPU_BACKEND must be opengl, metal, or vulkan."
+            )
+        return backend
+
+    def _startup_failure_message(self, return_code: int) -> str:
+        detail = f"Blender worker exited during startup (exit code {return_code})."
+        if return_code in {-11, 139}:
+            detail += (
+                " This is a segmentation fault, commonly caused by GPU backend "
+                "initialization on macOS. The headless bridge already selects "
+                "OpenGL by default; for a visible session set "
+                "BLENDER_CAD_GPU_BACKEND=opengl, or start Blender normally "
+                "and use the visible MCP mode."
+            )
+        return detail
 
     def _write_message(self, message: dict[str, Any]) -> None:
         if self._writer is None:
@@ -271,7 +339,9 @@ class StdioMcpServer:
                     "instructions": (
                         "Use cad_* tools for persistent Part Studios, sketches, "
                         "features, Transform/Mirror history, rebuilds, and per-Part "
-                        "exports. MCP dimensions are millimeters and degrees."
+                        "exports. MCP dimensions are millimeters and degrees. "
+                        "The default worker is a visible Blender session; set "
+                        "BLENDER_CAD_HEADLESS=1 for background mode."
                     ),
                 },
             )
@@ -377,6 +447,22 @@ def _parser():
     parser.add_argument("--blend-file", help="Blend file to open when the worker starts")
     parser.add_argument("--autosave", help="Blend file to save after mutating tool calls")
     parser.add_argument(
+        "--gpu-backend",
+        choices=("opengl", "metal", "vulkan"),
+        help="Force Blender's GPU backend; macOS headless defaults to OpenGL.",
+    )
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--visible",
+        action="store_true",
+        help="Show a normal Blender window and keep it open after MCP disconnects (default).",
+    )
+    mode.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run Blender in background mode for CI or machines without a display.",
+    )
+    parser.add_argument(
         "--startup-timeout",
         type=float,
         default=float(os.environ.get("BLENDER_CAD_STARTUP_TIMEOUT", "60")),
@@ -392,6 +478,8 @@ def main(argv: list[str] | None = None) -> int:
         blend_file=args.blend_file or os.environ.get("BLENDER_CAD_FILE"),
         autosave=args.autosave or os.environ.get("BLENDER_CAD_AUTOSAVE"),
         startup_timeout=args.startup_timeout,
+        visible=False if args.headless else True if args.visible else None,
+        gpu_backend=args.gpu_backend,
     )
     server = StdioMcpServer(bridge)
     atexit.register(bridge.close)

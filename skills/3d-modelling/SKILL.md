@@ -8,7 +8,11 @@ description: "Use the Blender Parametric CAD Python API and MCP tools for direct
 Use this skill when an AI needs to build or edit a model in the Blender 5.1.2
 Parametric CAD extension without mouse-driven computer use. Prefer the MCP
 tools below when an MCP client is available: the checked-out server starts one
-persistent Blender worker automatically and reuses it for the whole session.
+persistent, visible Blender worker automatically and reuses it for the whole
+session. Requests are serviced by a Blender timer, so the normal Blender UI
+stays open and each operation is visible as it completes. Visible mode keeps
+Blender's normal startup/preferences, making the enabled CAD panel and workspace
+available for human edits.
 When writing a Blender Python script directly, construct the persistent
 `CadDocument`/`Part`/`Feature` graph, then call `rebuild_part` once. Use Blender
 operators only when an existing UI workflow is specifically required.
@@ -23,11 +27,19 @@ with `_`; those are implementation details.
 
 Configure an MCP client to run `mcp/server.py` with Python. Set
 `BLENDER_CAD_EXECUTABLE` to the Blender 5.1.2 executable and optionally set
-`BLENDER_CAD_FILE` to the `.blend` file to open and autosave. The bridge starts
-Blender on the first `tools/call`, keeps it alive, and shuts it down only when
-the MCP client ends the session; no per-operation start/stop or computer use is
-needed. The worker loads the CAD scene properties itself, so enabling the UI
-add-on is not required for MCP-only sessions.
+`BLENDER_CAD_FILE` to the `.blend` file to open. The bridge starts Blender on
+the first `tools/call`, keeps the visible window open after the MCP client
+disconnects, and never starts/stops Blender per operation. Mutating calls can
+autosave to `BLENDER_CAD_AUTOSAVE` (or to `BLENDER_CAD_FILE` when that variable
+is omitted). The worker loads the CAD scene properties itself, so enabling the
+UI add-on is not required for MCP-only sessions; enable the add-on in Blender
+when you want the CAD panel and interactive sketch tools in the visible window.
+
+Use `--headless` or `BLENDER_CAD_HEADLESS=1` only on machines without a display
+or in CI. On macOS, headless mode selects Blender's OpenGL backend by default
+to avoid known Metal startup crashes; override it with
+`--gpu-backend opengl|metal|vulkan` or `BLENDER_CAD_GPU_BACKEND`. A visible
+session can use the same override when the system Metal backend is unstable.
 
 MCP tool groups:
 

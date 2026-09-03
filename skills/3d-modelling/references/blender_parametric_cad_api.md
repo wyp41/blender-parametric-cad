@@ -1,16 +1,20 @@
 # Blender Parametric CAD API
 
 This reference describes the public API in the Blender Parametric CAD
-extension (current extension release 0.12.0). It covers both direct Python
+extension (current extension release 0.13.0). It covers both direct Python
 scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
 
 ## MCP bridge
 
 Run `mcp/server.py` with Python as an MCP stdio server. The bridge starts one
-background Blender 5.1.2 worker on the first tool call, proxies all subsequent
-calls over a private localhost connection, and keeps that worker alive for the
-MCP session. Blender is launched once per MCP session rather than once per
-operation. Blender's own stdout is isolated from the MCP stream.
+visible Blender 5.1.2 worker on the first tool call, proxies all subsequent
+calls over a private localhost connection, and keeps that same Blender window
+open after the MCP client disconnects. The worker polls the socket through
+`bpy.app.timers`, leaving Blender's normal event loop available for viewport
+redraws and human edits. Visible mode uses Blender's normal startup/preferences
+so an enabled CAD extension and the usual workspace are available. Blender is
+launched once per MCP session rather than once per operation, and its own
+stdout is isolated from the MCP stream.
 
 Example client entry:
 
@@ -31,7 +35,14 @@ Example client entry:
 
 `BLENDER_CAD_EXECUTABLE` may be omitted when `blender` is on `PATH`.
 `BLENDER_CAD_FILE` is optional; when set it is opened at worker startup and
-mutations are autosaved to the same path. Without it, call `cad_save_scene`.
+mutations are autosaved to the same path. `BLENDER_CAD_AUTOSAVE` can set a
+separate autosave target. Without either path, call `cad_save_scene`. Use
+`--headless` or `BLENDER_CAD_HEADLESS=1` for a worker without a window. On
+macOS headless mode defaults to `--gpu-backend opengl` to avoid Blender 5.1.2
+Metal initialization crashes; `--gpu-backend` and
+`BLENDER_CAD_GPU_BACKEND` accept `opengl`, `metal`, or `vulkan`.
+Enable the extension in Blender Preferences when the visible worker should
+also expose the CAD panel and interactive sketch tools.
 MCP tool inputs use millimeters and degrees; the direct Python API below uses
 meters and radians as documented in [Units and identifiers](#units-and-identifiers).
 

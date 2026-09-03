@@ -364,19 +364,37 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
 CLASSES = (PARAMETRIC_CAD_PG_ui_state,)
 
 
+def _registered_class(cls):
+    """Return the class currently registered under this Blender type name."""
+
+    try:
+        return getattr(bpy.types, cls.__name__, None)
+    except (AttributeError, RuntimeError):
+        return None
+
+
 def register() -> None:
     for cls in CLASSES:
-        bpy.utils.register_class(cls)
-    bpy.types.Scene.parametric_cad_document = StringProperty(
-        name="Parametric CAD Document",
-        default="",
-        options={"HIDDEN"},
-    )
-    bpy.types.Scene.parametric_cad_ui = PointerProperty(type=PARAMETRIC_CAD_PG_ui_state)
+        if _registered_class(cls) is None:
+            bpy.utils.register_class(cls)
+    if not hasattr(bpy.types.Scene, "parametric_cad_document"):
+        bpy.types.Scene.parametric_cad_document = StringProperty(
+            name="Parametric CAD Document",
+            default="",
+            options={"HIDDEN"},
+        )
+    if not hasattr(bpy.types.Scene, "parametric_cad_ui"):
+        bpy.types.Scene.parametric_cad_ui = PointerProperty(
+            type=PARAMETRIC_CAD_PG_ui_state
+        )
 
 
 def unregister() -> None:
-    del bpy.types.Scene.parametric_cad_ui
-    del bpy.types.Scene.parametric_cad_document
+    if hasattr(bpy.types.Scene, "parametric_cad_ui"):
+        del bpy.types.Scene.parametric_cad_ui
+    if hasattr(bpy.types.Scene, "parametric_cad_document"):
+        del bpy.types.Scene.parametric_cad_document
     for cls in reversed(CLASSES):
-        bpy.utils.unregister_class(cls)
+        registered = _registered_class(cls)
+        if registered is not None:
+            bpy.utils.unregister_class(registered)

@@ -36,7 +36,8 @@ def register() -> None:
         panels.CLASSES,
     ):
         for cls in group:
-            bpy.utils.register_class(cls)
+            if getattr(bpy.types, cls.__name__, None) is None:
+                bpy.utils.register_class(cls)
     sketch_overlay.start()
     history.register_keymaps()
     adapter.register_handlers()
@@ -78,5 +79,7 @@ def unregister() -> None:
     )
     for group in reversed(groups):
         for cls in reversed(group):
-            bpy.utils.unregister_class(cls)
+            registered = getattr(bpy.types, cls.__name__, None)
+            if registered is not None:
+                bpy.utils.unregister_class(registered)
     properties.unregister()

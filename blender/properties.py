@@ -18,29 +18,35 @@ _SKETCH_PLANE_ITEMS = []
 _REVOLVE_AXIS_ITEMS = []
 
 _CAD_PANEL_ITEMS = (
+    # EnumProperty treats a four-item tuple's fourth value as the numeric
+    # identifier.  Include both icon and numeric identifier explicitly.
     (
         "MODEL",
         "Model",
         "Part Studio and feature history",
         "MESH_CUBE",
+        1,
     ),
     (
         "SKETCH",
         "Sketch",
         "Create and edit Sketch geometry",
         "GREASEPENCIL",
+        2,
     ),
     (
         "FEATURES",
         "Features",
         "Create and edit body features",
         "MOD_SOLIDIFY",
+        3,
     ),
     (
         "OUTPUT",
         "Output",
         "Validate and export the active Part Studio",
         "EXPORT",
+        4,
     ),
 )
 
@@ -473,10 +479,11 @@ def _ensure_ui_state_registered() -> None:
     try:
         bpy.utils.register_class(cls)
     except (RuntimeError, TypeError, ValueError) as exc:
+        details = f": {exc}" if str(exc) else "."
         raise RuntimeError(
-            "Could not register Parametric CAD UI state (panel_tab). If this "
-            "is an add-on reload, restart Blender once to clear the previous "
-            "partial registration."
+            "Could not register Parametric CAD UI state"
+            f"{details} If this is an add-on reload, restart Blender once to "
+            "clear the previous partial registration."
         ) from exc
 
 

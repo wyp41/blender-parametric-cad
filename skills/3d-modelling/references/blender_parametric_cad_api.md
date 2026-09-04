@@ -1,7 +1,7 @@
 # Blender Parametric CAD API
 
 This reference describes the public API in the Blender Parametric CAD
-extension (current extension release 0.16.5). It covers both direct Python
+extension (current extension release 0.16.6). It covers both direct Python
 scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
 
 ## MCP bridge
@@ -105,6 +105,15 @@ create or edit parameters rendered beside the active icon. Model buttons select
 the matching tool automatically when you want an immediate create action
 without a viewport click. Sketch drawing tools consume the first 3D View click
 as the first point.
+
+The N-panel's **Measure** page and the left-toolbar **CAD Measure** ruler are a
+non-destructive point-to-point inspection workflow. Click two viewport points;
+the picker uses a screen-pixel tolerance to prefer mesh vertices and, during
+Sketch Edit, Sketch endpoints/intersections. The result is shown in the
+viewport and stored in transient UI state as a true 3D distance in millimeters,
+signed world-axis components, point labels, and A/B coordinates. Press Esc to
+leave the modal tool, use Start / Reset for another measurement, or clear the
+result from the panel. It does not add a Feature or change the CAD JSON.
 
 A minimal MCP modeling sequence is:
 
@@ -863,12 +872,31 @@ bpy.ops.parametric_cad.select_tool()
 bpy.ops.parametric_cad.delete_region()
 bpy.ops.parametric_cad.delete_geometry(selected_only=False)
 bpy.ops.parametric_cad.select_face()
+bpy.ops.parametric_cad.measure()
+bpy.ops.parametric_cad.clear_measurement()
 ```
 
 These are intended for human viewport interaction. Direct AI scripts should
 append entities, use the numeric helpers, and construct semantic references
 instead of synthesizing mouse events. `track_sketch_cursor` is an internal
-cursor tracker and should not be called by model-building scripts.
+cursor tracker and should not be called by model-building scripts. `measure`
+is a modal two-point inspection tool and requires a 3D View; it snaps to nearby
+mesh vertices or active Sketch endpoints/intersections and reports millimeters
+without changing persistent history. The transient UI fields are:
+
+```python
+ui.measure_snap_tolerance_px
+ui.measure_pending
+ui.measure_has_result
+ui.measure_point_a          # Blender-world meters, 3-tuple
+ui.measure_point_b          # Blender-world meters, 3-tuple
+ui.measure_distance_mm
+ui.measure_delta_x_mm
+ui.measure_delta_y_mm
+ui.measure_delta_z_mm
+ui.measure_point_a_label
+ui.measure_point_b_label
+```
 
 ## Runtime-only viewport helpers
 
@@ -878,6 +906,8 @@ data:
 - `blender.viewport.sketch_overlay.set_preview`, `clear_preview`
 - `set_snap_preview`, `clear_snap_preview`
 - `set_face_hover`, `set_face_selection`, `clear_face_selection`
+- `set_measurement_pending`, `clear_measurement_pending`,
+  `set_measurement_result`, `clear_measurement`
 - `tag_redraw`, `start`, `stop`
 - `blender.viewport.provenance.set_face_provenance`,
   `get_face_provenance`, `clear_face_provenance`

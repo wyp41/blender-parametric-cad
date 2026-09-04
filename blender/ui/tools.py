@@ -27,6 +27,22 @@ class _CADSketchTool(WorkSpaceTool):
         layout.label(text="Click in the 3D View; the first click starts this tool.")
 
 
+class _CADMeasureTool(WorkSpaceTool):
+    """Base class for the point-to-point CAD measurement tool."""
+
+    bl_space_type = "VIEW_3D"
+    bl_context_mode = "OBJECT"
+    bl_widget = None
+
+    @classmethod
+    def poll(cls, context):
+        return getattr(getattr(context, "scene", None), "parametric_cad_ui", None) is not None
+
+    @staticmethod
+    def draw_settings(context, layout, _tool):
+        _draw_measure_settings(context, layout)
+
+
 class _CADFeatureTool(WorkSpaceTool):
     """Base class for contextual post-Sketch feature tools."""
 
@@ -54,6 +70,39 @@ class _CADFeatureTool(WorkSpaceTool):
     @staticmethod
     def draw_settings(_context, layout, _tool):
         layout.label(text="Click in the 3D View to open this feature editor.")
+
+
+def _draw_measure_settings(context, layout) -> None:
+    """Keep measurement controls beside the active toolbar icon."""
+
+    layout.use_property_split = True
+    layout.use_property_decorate = False
+    ui = getattr(getattr(context, "scene", None), "parametric_cad_ui", None)
+    if ui is None:
+        layout.label(text="Enable Blender Parametric CAD first.", icon="ERROR")
+        return
+    layout.label(text="Click two CAD points in the viewport.", icon="DRIVER_DISTANCE")
+    layout.prop(ui, "measure_snap_tolerance_px", text="Snap (px)")
+    if ui.measure_pending:
+        layout.label(text="First point set; click the second point.", icon="DOT")
+    elif ui.measure_has_result:
+        layout.label(
+            text=f"Last distance: {ui.measure_distance_mm:.2f} mm",
+            icon="DRIVER_DISTANCE",
+        )
+    row = layout.row(align=True)
+    row.operator("parametric_cad.measure", text="Start / Reset", icon="DRIVER_DISTANCE")
+    row.operator("parametric_cad.clear_measurement", text="Clear", icon="X")
+
+
+class PARAMETRIC_CAD_WST_measure(_CADMeasureTool):
+    bl_idname = "parametric_cad.measure_tool"
+    bl_label = "CAD Measure"
+    bl_description = "Measure true 3D distance between two snapped CAD points"
+    bl_icon = "ops.view3d.ruler"
+    bl_keymap = (
+        ("parametric_cad.measure", {"type": "LEFTMOUSE", "value": "PRESS"}, None),
+    )
 
 
 def _draw_feature_settings(context, layout, kind: str) -> None:
@@ -305,6 +354,7 @@ class PARAMETRIC_CAD_WST_mirror(_CADFeatureTool):
 
 
 TOOL_CLASSES = (
+    PARAMETRIC_CAD_WST_measure,
     PARAMETRIC_CAD_WST_select,
     PARAMETRIC_CAD_WST_line,
     PARAMETRIC_CAD_WST_rectangle,

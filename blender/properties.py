@@ -7,6 +7,7 @@ from bpy.props import (
     BoolProperty,
     EnumProperty,
     FloatProperty,
+    FloatVectorProperty,
     IntProperty,
     PointerProperty,
     StringProperty,
@@ -33,6 +34,13 @@ _CAD_PANEL_ITEMS = (
         "Create and edit Sketch geometry",
         "GREASEPENCIL",
         2,
+    ),
+    (
+        "MEASURE",
+        "Measure",
+        "Measure true 3D distances between CAD points",
+        "DRIVER_DISTANCE",
+        3,
     ),
     (
         "OUTPUT",
@@ -99,6 +107,23 @@ def _active_part_changed(self, context):
     self.selected_face_reference = ""
     self.feature_create_kind = ""
     self.sketch_applied_signature = ""
+    self.measure_pending = False
+    self.measure_has_result = False
+    self.measure_point_a = (0.0, 0.0, 0.0)
+    self.measure_point_b = (0.0, 0.0, 0.0)
+    self.measure_distance_mm = 0.0
+    self.measure_delta_x_mm = 0.0
+    self.measure_delta_y_mm = 0.0
+    self.measure_delta_z_mm = 0.0
+    self.measure_point_a_label = ""
+    self.measure_point_b_label = ""
+    try:
+        from .viewport.sketch_overlay import clear_measurement
+
+        clear_measurement()
+    except (AttributeError, ImportError, ReferenceError, RuntimeError, TypeError):
+        # The callback can run while Blender is replacing the add-on modules.
+        pass
 
 
 def _sketch_plane_items(_self, context):
@@ -417,6 +442,73 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
     arc_end_deg: FloatProperty(name="End Angle", default=90.0)
     mouse_x_mm: FloatProperty(name="X", default=0.0)
     mouse_y_mm: FloatProperty(name="Y", default=0.0)
+    measure_snap_tolerance_px: FloatProperty(
+        name="Snap Tolerance",
+        description="Screen-space tolerance for snapping a measurement to a mesh vertex or Sketch intersection",
+        default=14.0,
+        min=3.0,
+        max=40.0,
+    )
+    measure_pending: BoolProperty(
+        name="Measurement Pending",
+        description="The first measurement point has been selected",
+        default=False,
+        options={"HIDDEN"},
+    )
+    measure_has_result: BoolProperty(
+        name="Measurement Available",
+        description="A completed CAD measurement is available",
+        default=False,
+        options={"HIDDEN"},
+    )
+    measure_point_a: FloatVectorProperty(
+        name="Point A",
+        description="First measurement point in Blender world meters",
+        size=3,
+        default=(0.0, 0.0, 0.0),
+        options={"HIDDEN"},
+    )
+    measure_point_b: FloatVectorProperty(
+        name="Point B",
+        description="Second measurement point in Blender world meters",
+        size=3,
+        default=(0.0, 0.0, 0.0),
+        options={"HIDDEN"},
+    )
+    measure_distance_mm: FloatProperty(
+        name="Distance",
+        description="True 3D distance between the measured points",
+        default=0.0,
+        options={"HIDDEN"},
+    )
+    measure_delta_x_mm: FloatProperty(
+        name="Delta X",
+        description="Signed X component of the measured distance",
+        default=0.0,
+        options={"HIDDEN"},
+    )
+    measure_delta_y_mm: FloatProperty(
+        name="Delta Y",
+        description="Signed Y component of the measured distance",
+        default=0.0,
+        options={"HIDDEN"},
+    )
+    measure_delta_z_mm: FloatProperty(
+        name="Delta Z",
+        description="Signed Z component of the measured distance",
+        default=0.0,
+        options={"HIDDEN"},
+    )
+    measure_point_a_label: StringProperty(
+        name="Point A Type",
+        default="",
+        options={"HIDDEN"},
+    )
+    measure_point_b_label: StringProperty(
+        name="Point B Type",
+        default="",
+        options={"HIDDEN"},
+    )
     sketch_session_new: BoolProperty(default=False)
     sketch_session_backup: StringProperty(default="")
     sketch_applied_signature: StringProperty(

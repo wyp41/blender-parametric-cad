@@ -1,6 +1,6 @@
 ---
 name: 3d-modelling
-description: "Use the Blender Parametric CAD Python API and MCP tools for direct, non-UI 3D modeling from sketches, features, booleans, and per-Part exports."
+description: "Use the Blender Parametric CAD Python API and MCP tools for direct, non-UI 3D modeling from sketches, features, booleans, per-Part exports, and CAD-friendly viewport measurement."
 ---
 
 # 3D Modelling
@@ -20,7 +20,7 @@ When writing a Blender Python script directly, construct the persistent
 operators only when an existing UI workflow is specifically required.
 
 For manual editing in Blender, the CAD N-panel is organized with a compact
-left icon rail: Model, Sketch, and Output. Only the selected section is
+left icon rail: Model, Sketch, Measure, and Output. Only the selected section is
 expanded. Sketch Edit adds CAD Select/Line/Rectangle/Circle/Arc and cleanup
 tools to Blender's native left 3D View toolbar; select a toolbar icon to arm
 its viewport action, and the first 3D View click is used as the first point.
@@ -39,6 +39,13 @@ transient panel state used by this icon rail.
 After Sketch Edit ends, the native toolbar also offers contextual feature tools
 for the selected Sketch/body; the Model buttons are the direct entry point when
 no viewport click is desired.
+
+The **Measure** section and ruler icon provide a CAD-friendly, non-destructive
+point-to-point tool. Click two viewport points to measure true 3D distance in
+millimeters; nearby mesh vertices and active Sketch endpoints/intersections are
+snapped automatically. The overlay shows A/B markers, the dimension line, and
+signed ΔX/ΔY/ΔZ components. Adjust the screen-pixel snap tolerance for the
+current zoom, press Esc to stop, or clear the saved result from the panel.
 
 The complete callable surface, MCP schemas, field values, units, limitations,
 and copyable examples are in
@@ -110,6 +117,12 @@ MCP tool groups:
   `cad_delete_feature`, `cad_suppress_feature`, `cad_rollback`,
   `cad_rebuild`.
 - Output: `cad_export_part` (isolated STL, OBJ, or PLY export by `part_id`).
+
+Viewport measurement is intentionally interactive and display-only; it does not
+modify the persistent CAD document and therefore is not an MCP modeling
+mutation. Scripts that need a numeric distance should use their own stable CAD
+coordinates or geometry parameters, while a person can use the Measure tool to
+inspect the live generated result in the same Blender window.
 
 MCP geometry lengths are millimeters and arc/revolve angles are degrees. Every
 response includes stable UUIDs and rebuild errors where applicable. The server

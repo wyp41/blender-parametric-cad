@@ -5,7 +5,9 @@ from __future__ import annotations
 from math import ceil, cos, pi, sin
 
 import bpy
+import blf
 import gpu
+from bpy_extras.view3d_utils import location_3d_to_region_2d
 from gpu_extras.batch import batch_for_shader
 from mathutils import Vector
 
@@ -19,6 +21,7 @@ from ..adapter import load_document_from_scene
 from .provenance import get_face_provenance
 
 _draw_handle = None
+_pixel_draw_handle = None
 _preview_points: list[tuple[float, float, float]] = []
 _preview_closed = False
 _snap_preview: tuple[
@@ -28,6 +31,17 @@ _snap_preview: tuple[
 ] | None = None
 _hover_face = None
 _selected_face = None
+_measurement_pending: tuple[
+    tuple[float, float, float], tuple[float, float, float] | None
+] | None = None
+_measurement_result: tuple[
+    tuple[float, float, float],
+    tuple[float, float, float],
+    float,
+    tuple[float, float, float],
+    str,
+    str,
+] | None = None
 
 
 def set_preview(points: list[tuple[float, float, float]], closed: bool = False) -> None:
@@ -86,27 +100,86 @@ def clear_face_selection() -> None:
     tag_redraw()
 
 
+def set_measurement_pending(
+    first: tuple[float, float, float],
+    second: tuple[float, float, float] | None = None,
+) -> None:
+    """Draw the first point and an optional live preview to the next point."""
+
+    global _measurement_pending
+    _measurement_pending = (first, second)
+    tag_redraw()
+
+
+def clear_measurement_pending() -> None:
+    global _measurement_pending
+    _measurement_pending = None
+    tag_redraw()
+
+
+def set_measurement_result(
+    first: tuple[float, float, float],
+    second: tuple[float, float, float],
+    distance_mm: float,
+    delta_mm: tuple[float, float, float],
+    first_label: str,
+    second_label: str,
+) -> None:
+    """Keep the last completed measurement visible in every 3D View."""
+
+    global _measurement_pending, _measurement_result
+    _measurement_pending = None
+    _measurement_result = (
+        first,
+        second,
+        float(distance_mm),
+        delta_mm,
+        first_label,
+        second_label,
+    )
+    tag_redraw()
+
+
+def clear_measurement() -> None:
+    global _measurement_pending, _measurement_result
+    _measurement_pending = None
+    _measurement_result = None
+    tag_redraw()
+
+
 def tag_redraw() -> None:
     for window in bpy.context.window_manager.windows:
-        for area in window.screen.areas:
+        screen = getattr(window, "screen", None)
+        if screen is None:
+            continue
+        for area in screen.areas:
             if area.type == "VIEW_3D":
                 area.tag_redraw()
 
 
 def start() -> None:
-    global _draw_handle
+    global _draw_handle, _pixel_draw_handle
     if _draw_handle is None:
         _draw_handle = bpy.types.SpaceView3D.draw_handler_add(
             _draw_callback, (), "WINDOW", "POST_VIEW"
         )
+    if _pixel_draw_handle is None:
+        _pixel_draw_handle = bpy.types.SpaceView3D.draw_handler_add(
+            _draw_pixel_callback, (), "WINDOW", "POST_PIXEL"
+        )
+    _restore_measurement_from_scene()
 
 
 def stop() -> None:
-    global _draw_handle
+    global _draw_handle, _pixel_draw_handle
     if _draw_handle is not None:
         bpy.types.SpaceView3D.draw_handler_remove(_draw_handle, "WINDOW")
         _draw_handle = None
+    if _pixel_draw_handle is not None:
+        bpy.types.SpaceView3D.draw_handler_remove(_pixel_draw_handle, "WINDOW")
+        _pixel_draw_handle = None
     clear_preview()
+    clear_measurement()
 
 
 def _draw_callback() -> None:
@@ -121,6 +194,7 @@ def _draw_callback() -> None:
     )
     _draw_face_highlight(_hover_face, hover_color)
     _draw_face_highlight(_selected_face, (1.0, 0.65, 0.1, 0.30))
+    _draw_measurement_geometry()
     try:
         document = load_document_from_scene(scene)
     except (ValueError, TypeError):
@@ -196,6 +270,118 @@ def _draw_callback() -> None:
         if _preview_closed:
             preview_segments.extend([_preview_points[-1], _preview_points[0]])
     _draw_segments(preview_segments, (1.0, 0.65, 0.1, 1.0))
+
+
+def _draw_measurement_geometry() -> None:
+    if _measurement_result is not None:
+        first, second, _distance_mm, _delta_mm, _first_label, _second_label = (
+            _measurement_result
+        )
+        _draw_segments([first, second], (0.1, 0.9, 1.0, 1.0), 5.0)
+        _draw_measurement_marker(first, (0.1, 0.9, 1.0, 1.0))
+        _draw_measurement_marker(second, (0.1, 0.9, 1.0, 1.0))
+    if _measurement_pending is not None:
+        first, second = _measurement_pending
+        if second is not None:
+            _draw_segments([first, second], (1.0, 0.7, 0.1, 0.9), 4.0)
+            _draw_measurement_marker(second, (1.0, 0.7, 0.1, 1.0))
+        _draw_measurement_marker(first, (1.0, 0.7, 0.1, 1.0))
+
+
+def _restore_measurement_from_scene() -> None:
+    """Rehydrate a saved last result after the add-on or a .blend reload."""
+
+    scene = getattr(bpy.context, "scene", None)
+    ui = getattr(scene, "parametric_cad_ui", None)
+    if ui is None or not getattr(ui, "measure_has_result", False):
+        return
+    try:
+        set_measurement_result(
+            tuple(ui.measure_point_a),
+            tuple(ui.measure_point_b),
+            float(ui.measure_distance_mm),
+            (
+                float(ui.measure_delta_x_mm),
+                float(ui.measure_delta_y_mm),
+                float(ui.measure_delta_z_mm),
+            ),
+            str(ui.measure_point_a_label),
+            str(ui.measure_point_b_label),
+        )
+    except (AttributeError, ReferenceError, RuntimeError, TypeError, ValueError):
+        clear_measurement()
+
+
+def _draw_measurement_marker(point, color) -> None:
+    size = 0.0018
+    segments = [
+        ((point[0] - size, point[1], point[2]), (point[0] + size, point[1], point[2])),
+        ((point[0], point[1] - size, point[2]), (point[0], point[1] + size, point[2])),
+        ((point[0], point[1], point[2] - size), (point[0], point[1], point[2] + size)),
+    ]
+    _draw_segments([point for segment in segments for point in segment], color, 4.0)
+
+
+def _draw_pixel_callback() -> None:
+    region = getattr(bpy.context, "region", None)
+    space_data = getattr(bpy.context, "space_data", None)
+    region_3d = getattr(space_data, "region_3d", None)
+    if region is None or region_3d is None:
+        return
+    if _measurement_pending is not None:
+        first, second = _measurement_pending
+        first_2d = _project_measurement_point(region, region_3d, first)
+        if first_2d is not None:
+            _draw_measurement_text(first_2d, "A · click second point", (1.0, 0.75, 0.2, 1.0))
+        if second is not None:
+            second_2d = _project_measurement_point(region, region_3d, second)
+            if second_2d is not None:
+                _draw_measurement_text(second_2d, "B", (1.0, 0.75, 0.2, 1.0))
+    if _measurement_result is None:
+        return
+    first, second, distance_mm, delta_mm, first_label, second_label = _measurement_result
+    first_2d = _project_measurement_point(region, region_3d, first)
+    second_2d = _project_measurement_point(region, region_3d, second)
+    if first_2d is not None:
+        _draw_measurement_text(first_2d, f"A · {first_label}", (0.2, 0.95, 1.0, 1.0))
+    if second_2d is not None:
+        _draw_measurement_text(second_2d, f"B · {second_label}", (0.2, 0.95, 1.0, 1.0))
+    midpoint = Vector(first).lerp(Vector(second), 0.5)
+    midpoint_2d = _project_measurement_point(region, region_3d, midpoint)
+    if midpoint_2d is None:
+        return
+    dx, dy, dz = delta_mm
+    _draw_measurement_text(
+        midpoint_2d,
+        f"{distance_mm:.2f} mm",
+        (0.2, 0.95, 1.0, 1.0),
+    )
+    _draw_measurement_text(
+        (midpoint_2d.x, midpoint_2d.y - 17.0),
+        f"ΔX {dx:.2f}  ΔY {dy:.2f}  ΔZ {dz:.2f} mm",
+        (0.75, 0.9, 1.0, 1.0),
+        size=11,
+    )
+
+
+def _project_measurement_point(region, region_3d, point):
+    try:
+        return location_3d_to_region_2d(region, region_3d, point)
+    except (AttributeError, ReferenceError, RuntimeError, TypeError, ValueError):
+        return None
+
+
+def _draw_measurement_text(position, text: str, color, size: int = 13) -> None:
+    try:
+        font_id = 0
+        x = float(getattr(position, "x", position[0]))
+        y = float(getattr(position, "y", position[1]))
+        blf.size(font_id, size)
+        blf.color(font_id, *color)
+        blf.position(font_id, x + 8.0, y + 8.0, 0.0)
+        blf.draw(font_id, text)
+    except (AttributeError, RuntimeError, TypeError, ValueError):
+        return
 
 
 def _draw_face_highlight(hit, color) -> None:

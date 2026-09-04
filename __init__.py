@@ -37,6 +37,7 @@ def register() -> None:
         sketch_tools,
         history,
         transform,
+        measure,
         mcp_service,
     )
     from .blender.ui import panels, tools
@@ -53,6 +54,7 @@ def register() -> None:
         revolve.CLASSES,
         transform.CLASSES,
         history.CLASSES,
+        measure.CLASSES,
         mcp_service.CLASSES,
         panels.CLASSES,
     ):
@@ -78,6 +80,7 @@ def unregister() -> None:
         sketch_tools,
         history,
         transform,
+        measure,
         mcp_service,
     )
     from .blender.ui import panels, tools
@@ -98,6 +101,7 @@ def unregister() -> None:
         revolve.CLASSES,
         transform.CLASSES,
         history.CLASSES,
+        measure.CLASSES,
         mcp_service.CLASSES,
         panels.CLASSES,
     )

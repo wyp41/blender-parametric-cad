@@ -20,11 +20,13 @@ from .feature_tree import (
 _PANEL_TITLES = {
     "MODEL": "Model",
     "SKETCH": "Sketch",
+    "MEASURE": "Measure",
     "OUTPUT": "Output",
 }
 _PANEL_ICONS = {
     "MODEL": "MESH_CUBE",
     "SKETCH": "GREASEPENCIL",
+    "MEASURE": "DRIVER_DISTANCE",
     "OUTPUT": "EXPORT",
 }
 
@@ -77,6 +79,9 @@ class PARAMETRIC_CAD_PT_main(bpy.types.Panel):
         part = document.active_part
         if part is None:
             studio.label(text="Create a Part Studio to begin.", icon="INFO")
+            if ui.panel_tab == "MEASURE":
+                content = _draw_section_navigation(layout, ui)
+                _draw_measure_section(content, ui)
             return
         runtime_error = scene.get("parametric_cad_runtime_error")
         if runtime_error:
@@ -97,6 +102,8 @@ class PARAMETRIC_CAD_PT_main(bpy.types.Panel):
         content = _draw_section_navigation(layout, ui)
         if ui.panel_tab == "SKETCH":
             _draw_sketch_section(content, context, part, ui)
+        elif ui.panel_tab == "MEASURE":
+            _draw_measure_section(content, ui)
         elif ui.panel_tab == "OUTPUT":
             _draw_output_section(content, part, ui)
         else:
@@ -276,6 +283,67 @@ def _draw_next_feature(layout, selected):
             icon=icon,
         )
         button.feature_kind = kind
+
+
+def _format_measure_point(point) -> str:
+    """Format a stored Blender-world point as compact CAD millimeters."""
+
+    return "(" + ", ".join(f"{float(value) * 1000.0:.2f}" for value in point) + ") mm"
+
+
+def _draw_measure_section(layout, ui):
+    """Draw the persistent result and controls for CAD point measurement."""
+
+    layout.use_property_split = True
+    layout.use_property_decorate = False
+    controls = layout.box()
+    controls.label(text="CAD Measure", icon="DRIVER_DISTANCE")
+    controls.label(
+        text="Click two points in the viewport for true 3D distance.",
+        icon="INFO",
+    )
+    controls.prop(ui, "measure_snap_tolerance_px", text="Snap Tolerance (px)")
+    controls.label(text="Snaps to mesh vertices and Sketch endpoints/intersections.")
+    controls.operator(
+        "parametric_cad.measure",
+        text="Start CAD Measure",
+        icon="DRIVER_DISTANCE",
+    )
+    if ui.measure_pending:
+        pending = layout.box()
+        pending.label(text="First point selected", icon="DOT")
+        pending.label(text="Click the second point, or press Esc to exit.")
+    if not ui.measure_has_result:
+        return
+
+    result = layout.box()
+    result.label(text="Last Measurement", icon="DRIVER_DISTANCE")
+    result.label(text=f"Distance: {ui.measure_distance_mm:.2f} mm", icon="DRIVER_DISTANCE")
+    result.label(
+        text=(
+            f"ΔX {ui.measure_delta_x_mm:.2f}  "
+            f"ΔY {ui.measure_delta_y_mm:.2f}  "
+            f"ΔZ {ui.measure_delta_z_mm:.2f} mm"
+        ),
+        icon="ARROW_LEFTRIGHT",
+    )
+    result.label(
+        text=f"A: {_format_measure_point(ui.measure_point_a)}",
+        icon="DOT",
+    )
+    result.label(
+        text=f"B: {_format_measure_point(ui.measure_point_b)}",
+        icon="DOT",
+    )
+    if ui.measure_point_a_label:
+        result.label(text=f"A · {ui.measure_point_a_label}")
+    if ui.measure_point_b_label:
+        result.label(text=f"B · {ui.measure_point_b_label}")
+    result.operator(
+        "parametric_cad.clear_measurement",
+        text="Clear Measurement",
+        icon="X",
+    )
 
 
 def _draw_output_section(layout, part, ui):

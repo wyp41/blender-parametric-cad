@@ -1,16 +1,20 @@
 # Blender Parametric CAD
 
 An AI-first, history-based parametric CAD extension for Blender 5.1.2, designed
-for Codex, Claude, and other tool-using AI systems. Version 0.16.5 provides a
+for Codex, Claude, and other tool-using AI systems. Version 0.16.6 provides a
 real MCP interface and a Python API so an AI can create sketches, features,
 booleans, transforms, mirrors, and per-Part exports through normal CAD
 operations—not by spending tokens on mouse clicks or computer-use screenshots.
-This release also hardens Blender RNA class registration so extension reloads
+This release also adds a CAD-friendly point measurement tool: click two points
+to get a true 3D millimeter distance, signed XYZ components, vertex/Sketch
+snapping, and an always-visible viewport annotation. It hardens Blender RNA
+class registration so extension reloads
 do not leave stale UI properties such as `panel_tab` behind. The CAD panel now
 keeps MCP service controls in a collapsible section and places rollback plus
-history actions under Model → History. The N-panel is limited to Model, Sketch,
-and Output; feature parameters are kept beside the matching native left-toolbar
-icon. After a Sketch is finished, Model presents only the next legal
+history actions under Model → History. The N-panel is organized as Model,
+Sketch, Measure, and Output; feature parameters are kept beside the matching
+native left-toolbar icon. After a Sketch is finished, Model presents only the
+next legal
 Extrude/Revolve or Transform/Mirror actions. Selecting a feature tool shows its
 source or selected history item, parameters, Name and Rename, and Apply &
 Rebuild in one place, so there is no separate Features page to hunt through.
@@ -38,7 +42,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.16.5.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.16.6.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## AI/API skill
@@ -85,7 +89,7 @@ same Blender window.
 
 Warnings such as `Policy violation with top level module: blender_parametric_cad`
 come from Blender's extension namespace policy, not from another add-on and not
-from the MCP port. Version 0.16.5 loads the worker through Blender's qualified
+from the MCP port. Version 0.16.6 loads the worker through Blender's qualified
 `bl_ext.<repository>.blender_parametric_cad` namespace and keeps bundled modules
 out of the global Python namespace. After upgrading, restart Blender once (or
 disable/re-enable the extension) so modules imported by an older worker are
@@ -95,7 +99,7 @@ can be resolved by using that service or selecting a free port.
 
 Upgrade note: windows left behind by releases before 0.15.0 used a private
 per-client socket and cannot be rediscovered after their MCP parent exits. Close
-those orphan windows once, install 0.16.5, and use the in-window service toggle
+those orphan windows once, install 0.16.6, and use the in-window service toggle
 for the window you want to keep.
 
 If a machine has no display, or if a CI job needs a background worker, pass
@@ -153,7 +157,8 @@ In a 3D View, press `N` and open the **CAD** tab:
 
 The CAD panel now uses a compact icon rail on its left side. Choose **Model**
 for the Part Studio and history tree, **Sketch** for support and sketch
-editing, or **Output** for validation and per-Part export. Feature parameters
+editing, **Measure** for CAD point-to-point measurements, or **Output** for
+validation and per-Part export. Feature parameters
 are not duplicated in a long N-panel page: the matching native left-toolbar
 icon is the single create/edit surface for Extrude, Revolve, Transform, and
 Mirror. Entering Sketch Edit opens the Sketch workspace automatically;
@@ -203,6 +208,15 @@ hunting through another page.
    **Apply & Rebuild** together. Model keeps the vertical **Feature Actions**
    for Sketch edit, delete with dependency confirmation, and
    suppress/unsuppress; **Model → History** sets rollback or roll-forward.
+
+For CAD measurements, choose **Measure** in the N-panel or the ruler icon in
+the left toolbar. Click two points in the viewport: mesh vertices are preferred
+when the cursor is nearby, and Sketch endpoints/intersections are available
+while editing a Sketch. The overlay keeps points A/B and the dimension line
+visible, while the panel reports true 3D distance and signed **ΔX/ΔY/ΔZ** in
+millimeters. Adjust **Snap Tolerance (px)** for the current zoom level, press
+**Start CAD Measure** to measure again, and press **Esc** or **Clear Measurement**
+when finished. Measurement is display-only and never changes CAD history.
 
 To attach a Sketch to generated geometry, press **Select Face**, click a
 supported planar face of a simple New Extrude, then press **New Sketch**. The

@@ -628,7 +628,11 @@ RevolveFeature(
 Angles must be greater than zero and no more than 360 degrees. Reverse axis is
 meaningful for partial sweeps; a full 360-degree sweep has the same geometric
 occupancy in either direction. Revolve Add/Remove tools normalize face winding
-before Blender Boolean evaluation.
+before Blender Boolean evaluation. A datum axis or SketchLine must be parallel
+to the source Sketch plane. A regular profile boundary line may be selected as
+the axis and remains part of the closed profile; cross-Sketch axes are stored
+by their owning Sketch UUID. Degenerate faces and zero-volume sweeps are
+rejected before the generated mesh can replace a valid result.
 
 ### `TransformFeature`
 

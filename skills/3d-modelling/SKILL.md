@@ -53,6 +53,14 @@ and copyable examples are in
 Read that reference before generating a CAD script. Do not call names starting
 with `_`; those are implementation details.
 
+For Revolve, use a closed line/arc/circle profile on a plane and choose a datum
+axis or a persistent SketchLine that is parallel to that Sketch plane. A normal
+profile boundary line may also be the axis; the evaluator keeps it in the
+closed profile instead of dropping it. `direction=-1`/Reverse Axis reverses
+partial sweeps. Zero-volume, degenerate, or invalid sweeps fail without
+replacing the previous generated result, and a failed downstream history is
+reported as `BLOCKED`.
+
 ## MCP fast path
 
 Configure an MCP client to run `mcp/server.py` with Python. Set

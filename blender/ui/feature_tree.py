@@ -76,32 +76,49 @@ def _draw_error(body, feature) -> None:
 
 
 def draw_feature_actions(layout, feature) -> None:
-    """Draw full-width actions for the currently selected history feature."""
+    """Draw compact actions for the currently selected history feature."""
 
     commands = layout.box()
-    commands.label(text=f"Feature Actions — {feature.name}", icon="TOOL_SETTINGS")
+    row = commands.row(align=True)
+    row.label(text=feature.name, icon="TOOL_SETTINGS")
     if isinstance(feature, SketchFeature):
-        edit = commands.operator(
+        edit = row.operator(
             "parametric_cad.edit_sketch",
-            text="Edit Sketch",
+            text="",
             icon="GREASEPENCIL",
         )
         edit.feature_id = feature.id
-    commands.operator(
+    rename = row.operator(
         "parametric_cad.rename_feature",
-        text="Rename Feature",
+        text="",
         icon="GREASEPENCIL",
     )
-    commands.operator(
+    delete = row.operator(
         "parametric_cad.delete_feature",
-        text="Delete Feature",
+        text="",
         icon="TRASH",
     )
-    commands.operator(
+    toggle = row.operator(
         "parametric_cad.toggle_suppression",
-        text="Unsuppress Feature" if feature.suppressed else "Suppress Feature",
+        text="",
         icon="HIDE_OFF" if feature.suppressed else "HIDE_ON",
     )
+    for operator in (rename, delete, toggle):
+        operator.feature_id = feature.id
+    commands.label(
+        text=(
+            "Suppressed"
+            if feature.suppressed
+            else feature.status.title().replace("_", " ")
+        ),
+        icon="HIDE_ON" if feature.suppressed else "CHECKMARK"
+        if feature.status == "OK"
+        else "ERROR" if feature.status == "ERROR" else "INFO",
+    )
+    if feature.status in {"ERROR", "BLOCKED"} and feature.error_message:
+        error = commands.box()
+        error.alert = True
+        error.label(text=feature.error_message, icon="ERROR")
 
 
 def _draw_sketch_feature_editor(body, feature, ui, part) -> None:

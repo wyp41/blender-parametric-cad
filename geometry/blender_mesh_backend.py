@@ -96,34 +96,84 @@ class BlenderMeshBackend(GeometryBackend):
         full_turn = abs(abs(angle) - tau) <= 1e-9
         vertices: list[tuple[float, float, float]] = []
         faces: list[tuple[int, ...]] = []
+        axis_tolerance = 1e-9
+
+        def axis_distance(point: tuple[float, float, float]) -> float:
+            vector = tuple(point[index] - axis_origin[index] for index in range(3))
+            cross = (
+                direction[1] * vector[2] - direction[2] * vector[1],
+                direction[2] * vector[0] - direction[0] * vector[2],
+                direction[0] * vector[1] - direction[1] * vector[0],
+            )
+            return sqrt(sum(value * value for value in cross))
+
+        def append_face(indices: tuple[int, ...]) -> None:
+            # Axis poles are shared by every sweep ring.  Removing repeated
+            # indices here turns pole quads into triangles and drops the
+            # zero-area faces produced by an edge that lies on the axis.
+            compact: list[int] = []
+            for index in indices:
+                if not compact or compact[-1] != index:
+                    compact.append(index)
+            if len(compact) > 1 and compact[0] == compact[-1]:
+                compact.pop()
+            if len(compact) >= 3 and len(set(compact)) >= 3:
+                faces.append(tuple(compact))
+
         for points, _entity_ids in self._profile_loops_and_ids(profile):
             base = [sketch_to_world(sketch, u, v) for u, v in points]
-            offset = len(vertices)
+            if len(base) < 3:
+                raise ValueError("Revolve profile requires at least three points.")
+            poles: dict[tuple[float, float, float], int] = {}
+
+            def point_key(point: tuple[float, float, float]) -> tuple[float, float, float]:
+                return tuple(round(value, 12) for value in point)
+
+            def add_pole(point: tuple[float, float, float]) -> int:
+                key = point_key(point)
+                if key not in poles:
+                    poles[key] = len(vertices)
+                    vertices.append(point)
+                return poles[key]
+
             ring_count = segments if full_turn else segments + 1
+            rings: list[list[int]] = []
             for ring in range(ring_count):
                 ring_angle = angle * ring / segments
-                vertices.extend(
-                    self._rotate_about_axis(point, axis_origin, direction, ring_angle)
-                    for point in base
-                )
+                ring_indices: list[int] = []
+                for point in base:
+                    if axis_distance(point) <= axis_tolerance:
+                        ring_indices.append(add_pole(point))
+                    else:
+                        ring_indices.append(len(vertices))
+                        vertices.append(
+                            self._rotate_about_axis(
+                                point, axis_origin, direction, ring_angle
+                            )
+                        )
+                rings.append(ring_indices)
 
             count = len(base)
             for ring in range(segments):
                 next_ring = (ring + 1) % segments if full_turn else ring + 1
                 for index in range(count):
                     next_index = (index + 1) % count
-                    faces.append(
+                    append_face(
                         (
-                            offset + ring * count + index,
-                            offset + ring * count + next_index,
-                            offset + next_ring * count + next_index,
-                            offset + next_ring * count + index,
+                            rings[ring][index],
+                            rings[ring][next_index],
+                            rings[next_ring][next_index],
+                            rings[next_ring][index],
                         )
                     )
             if not full_turn:
-                faces.append(tuple(offset + index for index in reversed(range(count))))
-                end = offset + segments * count
-                faces.append(tuple(end + index for index in range(count)))
+                append_face(tuple(rings[0][index] for index in reversed(range(count))))
+                append_face(tuple(rings[-1][index] for index in range(count)))
+
+        if not vertices or not faces:
+            raise ValueError("Revolve produced no non-degenerate faces.")
+        if abs(self._signed_volume(vertices, faces)) <= 1e-18:
+            raise ValueError("Revolve produced a zero-volume or invalid solid.")
 
         # Reversing the axis changes the sweep direction and can invert the
         # generated face winding.  Boolean tools must describe a consistently

@@ -22,7 +22,7 @@ from ..geometry.backend import GeometryBackend
 from ..sketch.entities import SketchLine
 from ..sketch.plane import PlaneResolutionError, PlaneResolver, ResolvedPlane
 from ..sketch.profile import ProfileDetector
-from ..sketch.sketch import SketchFeature, sketch_to_world
+from ..sketch.sketch import SketchFeature, sketch_normal, sketch_to_world
 from ..sketch.solver import SketchSolver
 from .feature import Feature
 from .part import Part
@@ -298,19 +298,14 @@ class PartEvaluator:
         if axis is None:
             return False
         axis_origin, axis_direction = axis
-        profile_entities = [
-            entity
-            for entity in source.entities
-            if not entity.construction
-            and not (
-                feature.axis_reference.reference_type == "SKETCH_LINE"
-                and feature.axis_reference.sketch_id == source.id
-                and entity.id == feature.axis_reference.entity_id
+        if abs(sum(axis_direction[index] * sketch_normal(source)[index] for index in range(3))) > 1e-7:
+            self._record_error(
+                feature,
+                "Revolve axis must be parallel to the source Sketch plane.",
+                errors,
             )
-        ]
-        detected = self.profile_detector.detect_entities(
-            profile_entities, source.deleted_regions
-        )
+            return False
+        detected = self._detect_revolve_profile(source, feature.axis_reference)
         if not detected.success or detected.profile is None:
             self._record_error(feature, detected.message, errors)
             return False
@@ -417,19 +412,10 @@ class PartEvaluator:
         if not isinstance(source_sketch, SketchFeature):
             self._record_error(feature, "Mirror source Sketch is missing or invalid.", errors)
             return False
-        profile_entities = [
-            entity
-            for entity in source_sketch.entities
-            if not entity.construction
-            and not (
-                isinstance(source, RevolveFeature)
-                and source.axis_reference.reference_type == "SKETCH_LINE"
-                and source.axis_reference.sketch_id == source_sketch.id
-                and entity.id == source.axis_reference.entity_id
-            )
-        ]
-        detected = self.profile_detector.detect_entities(
-            profile_entities, source_sketch.deleted_regions
+        detected = (
+            self._detect_revolve_profile(source_sketch, source.axis_reference)
+            if isinstance(source, RevolveFeature)
+            else self.profile_detector.detect(source_sketch)
         )
         if not detected.success or detected.profile is None:
             self._record_error(feature, detected.message, errors)
@@ -446,6 +432,18 @@ class PartEvaluator:
             else:
                 axis = self._resolve_axis(source.axis_reference, context, errors, feature)
                 if axis is None:
+                    return False
+                if abs(
+                    sum(
+                        axis[1][index] * sketch_normal(source_sketch)[index]
+                        for index in range(3)
+                    )
+                ) > 1e-7:
+                    self._record_error(
+                        feature,
+                        "Revolve axis must be parallel to the source Sketch plane.",
+                        errors,
+                    )
                     return False
                 source_tool = self.geometry_backend.revolve_profile(
                     source_sketch,
@@ -469,6 +467,33 @@ class PartEvaluator:
             return False
         self._mark_evaluated(feature, context)
         return True
+
+    def _detect_revolve_profile(self, sketch: SketchFeature, axis_reference):
+        """Detect a revolve profile without discarding a boundary axis line.
+
+        A regular SketchLine may be both a profile edge and the selected axis.
+        Try the complete non-construction graph first; only fall back to
+        excluding the line when it is a separate construction-style axis that
+        would otherwise make an otherwise valid profile look open.
+        """
+
+        entities = [entity for entity in sketch.entities if not entity.construction]
+        detected = self.profile_detector.detect_entities(
+            entities, sketch.deleted_regions
+        )
+        if detected.success or axis_reference.reference_type != "SKETCH_LINE":
+            return detected
+        if axis_reference.sketch_id != sketch.id:
+            return detected
+        filtered = [
+            entity
+            for entity in entities
+            if entity.id != axis_reference.entity_id
+        ]
+        fallback = self.profile_detector.detect_entities(
+            filtered, sketch.deleted_regions
+        )
+        return fallback if fallback.success else detected
 
     @staticmethod
     def _resolve_axis(reference, context, errors, feature):

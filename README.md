@@ -1,10 +1,17 @@
 # Blender Parametric CAD
 
 An AI-first, history-based parametric CAD extension for Blender 5.1.2, designed
-for Codex, Claude, and other tool-using AI systems. Version 0.16.6 provides a
+for Codex, Claude, and other tool-using AI systems. Version 0.16.7 provides a
 real MCP interface and a Python API so an AI can create sketches, features,
 booleans, transforms, mirrors, and per-Part exports through normal CAD
 operations—not by spending tokens on mouse clicks or computer-use screenshots.
+This release tightens Revolve validation and mesh generation: a boundary
+SketchLine can be the axis, axis direction is preserved across edits and
+cross-Sketch references, degenerate/zero-volume sweeps are rejected, and
+selected result objects hydrate the matching feature parameters. Failed
+rebuilds keep the last valid viewport mesh and mark downstream history as
+blocked, while the staged toolbar now exposes only Sketch tools during Sketch
+Edit and only body-feature tools during Feature Edit.
 This release also adds a CAD-friendly point measurement tool: click two points
 to get a true 3D millimeter distance, signed XYZ components, vertex/Sketch
 snapping, and an always-visible viewport annotation. It hardens Blender RNA
@@ -42,7 +49,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.16.6.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.16.7.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## AI/API skill
@@ -89,17 +96,19 @@ same Blender window.
 
 Warnings such as `Policy violation with top level module: blender_parametric_cad`
 come from Blender's extension namespace policy, not from another add-on and not
-from the MCP port. Version 0.16.6 loads the worker through Blender's qualified
+from the MCP port. Version 0.16.7 loads the worker through Blender's qualified
 `bl_ext.<repository>.blender_parametric_cad` namespace and keeps bundled modules
-out of the global Python namespace. After upgrading, restart Blender once (or
-disable/re-enable the extension) so modules imported by an older worker are
-cleared. A genuine `Address already in use` message is a separate socket issue;
+out of the global Python namespace. It also keeps the staged native toolbar in
+sync with CAD mode and consumes the initial click for CAD Measure. After
+upgrading, restart Blender once (or disable/re-enable the extension) so modules
+imported by an older worker are cleared. A genuine `Address already in use`
+message is a separate socket issue;
 it means the endpoint is owned by an existing service or another application and
 can be resolved by using that service or selecting a free port.
 
 Upgrade note: windows left behind by releases before 0.15.0 used a private
 per-client socket and cannot be rediscovered after their MCP parent exits. Close
-those orphan windows once, install 0.16.6, and use the in-window service toggle
+those orphan windows once, install 0.16.7, and use the in-window service toggle
 for the window you want to keep.
 
 If a machine has no display, or if a CI job needs a background worker, pass
@@ -205,7 +214,7 @@ hunting through another page.
    one connected solid.
 10. Select any feature in the Model history and click its matching toolbar
    icon. The toolbar shows the editable parameters, **Name**, **Rename**, and
-   **Apply & Rebuild** together. Model keeps the vertical **Feature Actions**
+   **Apply & Rebuild** together. Model keeps compact inline **Feature Actions**
    for Sketch edit, delete with dependency confirmation, and
    suppress/unsuppress; **Model → History** sets rollback or roll-forward.
 

@@ -104,6 +104,7 @@ def _active_part_changed(self, context):
     self.active_sketch_id = ""
     self.active_sketch_entity_id = ""
     self.active_sketch_entity_ids = "[]"
+    self.revolve_axis_sketch_id = ""
     self.selected_face_reference = ""
     self.feature_create_kind = ""
     self.sketch_applied_signature = ""
@@ -121,8 +122,34 @@ def _active_part_changed(self, context):
         from .viewport.sketch_overlay import clear_measurement
 
         clear_measurement()
-    except (AttributeError, ImportError, ReferenceError, RuntimeError, TypeError):
+    except (
+        AttributeError,
+        ImportError,
+        ReferenceError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ):
         # The callback can run while Blender is replacing the add-on modules.
+        pass
+
+
+def _mode_changed(self, context):
+    """Keep the native toolbar aligned with Sketch versus feature editing."""
+
+    try:
+        from .ui.tools import refresh_toolbar
+
+        refresh_toolbar(context)
+    except (
+        AttributeError,
+        ImportError,
+        ReferenceError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ):
+        # Mode changes can occur while Blender is registering/reloading tools.
         pass
 
 
@@ -167,33 +194,67 @@ def _revolve_axis_line_items(_self, context):
         try:
             from ..sketch.entities import SketchLine
             from ..sketch.sketch import SketchFeature
-            from ..features.revolve import RevolveFeature
             from .adapter import load_document_from_scene
 
             ui = context.scene.parametric_cad_ui
             part = load_document_from_scene(context.scene).active_part
             feature = part.get_feature(ui.active_feature_id) if part else None
-            if isinstance(feature, RevolveFeature):
-                feature = part.get_feature(feature.sketch_id)
-            if isinstance(feature, SketchFeature):
-                items = [
-                    (
-                        entity.id,
-                        f"Line {index + 1}",
-                        "Use this SketchLine as the Revolve axis",
-                    )
-                    for index, entity in enumerate(feature.entities)
-                    if isinstance(entity, SketchLine)
-                ]
-                if items:
-                    _REVOLVE_AXIS_ITEMS = items
-                    return _REVOLVE_AXIS_ITEMS
+            feature_index = part.get_feature_index(feature.id) if feature else None
+            candidates = (
+                part.features[: feature_index + 1]
+                if part is not None and feature_index is not None
+                else (part.features if part is not None else ())
+            )
+            items = []
+            for sketch in candidates:
+                if not isinstance(sketch, SketchFeature):
+                    continue
+                for index, entity in enumerate(sketch.entities):
+                    if isinstance(entity, SketchLine):
+                        items.append(
+                            (
+                                entity.id,
+                                f"{sketch.name} · Line {index + 1}",
+                                "Use this SketchLine as the Revolve axis",
+                            )
+                        )
+            if items:
+                _REVOLVE_AXIS_ITEMS = items
+                return _REVOLVE_AXIS_ITEMS
         except (AttributeError, TypeError, ValueError):
             pass
     _REVOLVE_AXIS_ITEMS = [
         ("NONE", "No SketchLines", "Create a SketchLine axis first")
     ]
     return _REVOLVE_AXIS_ITEMS
+
+
+def _revolve_axis_line_changed(self, context):
+    """Remember which Sketch owns a selected axis line.
+
+    The enum value remains the entity UUID for compatibility with existing
+    scenes and scripts; the hidden Sketch UUID preserves cross-Sketch axes.
+    """
+
+    self.revolve_axis_sketch_id = ""
+    if context is None or self.revolve_axis_line_id in {"", "NONE"}:
+        return
+    try:
+        from ..sketch.entities import SketchLine
+        from ..sketch.sketch import SketchFeature
+        from .adapter import load_document_from_scene
+
+        part = load_document_from_scene(context.scene).active_part
+        for feature in (part.features if part is not None else ()):
+            if isinstance(feature, SketchFeature) and any(
+                isinstance(entity, SketchLine)
+                and entity.id == self.revolve_axis_line_id
+                for entity in feature.entities
+            ):
+                self.revolve_axis_sketch_id = feature.id
+                return
+    except (AttributeError, TypeError, ValueError):
+        return
 
 
 def _mirror_source_items(_self, context):
@@ -272,6 +333,7 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
             ("FEATURE_EDIT", "Feature Edit", "Editing a CAD feature"),
         ],
         default="IDLE",
+        update=_mode_changed,
     )
     active_feature_id: StringProperty(default="")
     feature_name: StringProperty(
@@ -395,6 +457,13 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
     revolve_axis_line_id: EnumProperty(
         name="Sketch Line",
         items=_revolve_axis_line_items,
+        update=_revolve_axis_line_changed,
+    )
+    revolve_axis_sketch_id: StringProperty(
+        name="Axis Sketch",
+        description="Sketch that owns the selected Revolve axis line",
+        default="",
+        options={"HIDDEN"},
     )
     revolve_axis_reverse: BoolProperty(
         name="Reverse Axis Direction",

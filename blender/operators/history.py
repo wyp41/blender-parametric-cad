@@ -74,12 +74,9 @@ class PARAMETRIC_CAD_OT_edit_cad_history(bpy.types.Operator):
                 self.report({"ERROR"}, f"Cannot enter source Sketch: {exc}")
                 return {"CANCELLED"}
         elif feature is not None:
-            ui.active_feature_id = feature.id
-            ui.feature_name = feature.name
-            ui.active_sketch_id = ""
-            ui.active_sketch_entity_id = ""
-            ui.active_sketch_entity_ids = "[]"
-            ui.mode = "FEATURE_EDIT"
+            from .part import _set_active_feature
+
+            _set_active_feature(ui, feature)
             if getattr(feature, "feature_type", None) in BODY_FEATURE_TYPES:
                 _activate_feature_tool(context, feature.feature_type)
         else:
@@ -174,6 +171,24 @@ class PARAMETRIC_CAD_OT_open_feature_tools(bpy.types.Operator):
             return {"CANCELLED"}
         # A matching selected feature is edited in place; a Sketch/body source
         # opens a create form.  Both forms live in the native toolbar settings.
+        if not editing:
+            if kind == "REVOLVE":
+                ui.revolve_operation = "NEW"
+                ui.revolve_axis_type = "DATUM_AXIS"
+                ui.revolve_axis = "Z"
+                ui.revolve_axis_reverse = False
+                ui.revolve_angle_deg = 360.0
+                ui.revolve_axis_sketch_id = ""
+            elif kind == "EXTRUDE":
+                ui.extrude_operation = "NEW"
+                ui.extrude_depth_mode = "BLIND"
+            elif kind == "TRANSFORM":
+                ui.transform_translate_x_mm = 0.0
+                ui.transform_translate_y_mm = 0.0
+                ui.transform_translate_z_mm = 0.0
+                ui.transform_rotate_x_deg = 0.0
+                ui.transform_rotate_y_deg = 0.0
+                ui.transform_rotate_z_deg = 0.0
         ui.feature_create_kind = "" if editing else kind
         ui.mode = "FEATURE_EDIT"
         _activate_feature_tool(context, kind)

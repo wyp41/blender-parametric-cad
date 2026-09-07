@@ -40,9 +40,9 @@ def _set_active_feature(ui, feature) -> None:
     ui.active_sketch_id = feature.id if isinstance(feature, SketchFeature) else ""
     ui.active_sketch_entity_id = ""
     ui.active_sketch_entity_ids = "[]"
+    ui.revolve_axis_sketch_id = ""
     ui.sketch_dirty = False
     ui.sketch_applied_signature = ""
-    ui.mode = "FEATURE_EDIT" if feature else "IDLE"
     if isinstance(feature, ExtrudeFeature):
         ui.extrude_distance_mm = feature.distance * 1000.0
         ui.extrude_operation = "REMOVE" if feature.operation == "CUT" else feature.operation
@@ -57,7 +57,13 @@ def _set_active_feature(ui, feature) -> None:
         if feature.axis_reference.reference_type == "DATUM_AXIS":
             ui.revolve_axis = feature.axis_reference.axis or "Z"
         elif feature.axis_reference.entity_id:
-            ui.revolve_axis_line_id = feature.axis_reference.entity_id
+            try:
+                ui.revolve_axis_line_id = feature.axis_reference.entity_id
+            except (TypeError, ValueError):
+                pass
+            ui.revolve_axis_sketch_id = feature.axis_reference.sketch_id or ""
+        else:
+            ui.revolve_axis_sketch_id = ""
     elif isinstance(feature, SketchFeature):
         ui.sketch_plane_offset_mm = feature.plane_offset * 1000.0
     elif isinstance(feature, TransformFeature):
@@ -85,6 +91,7 @@ def _set_active_feature(ui, feature) -> None:
         except (TypeError, ValueError):
             pass
         ui.mirror_plane_offset_mm = reference.offset * 1000.0
+    ui.mode = "FEATURE_EDIT" if feature else "IDLE"
 
 
 class PARAMETRIC_CAD_OT_new_part(bpy.types.Operator):
@@ -107,6 +114,7 @@ class PARAMETRIC_CAD_OT_new_part(bpy.types.Operator):
         ui.active_sketch_id = ""
         ui.active_sketch_entity_id = ""
         ui.active_sketch_entity_ids = "[]"
+        ui.revolve_axis_sketch_id = ""
         ui.sketch_dirty = False
         ui.sketch_applied_signature = ""
         ui.selected_face_reference = ""
@@ -180,6 +188,7 @@ class PARAMETRIC_CAD_OT_delete_part(bpy.types.Operator):
         ui.active_sketch_id = ""
         ui.active_sketch_entity_id = ""
         ui.active_sketch_entity_ids = "[]"
+        ui.revolve_axis_sketch_id = ""
         ui.sketch_dirty = False
         ui.sketch_applied_signature = ""
         ui.selected_face_reference = ""
@@ -202,6 +211,12 @@ class PARAMETRIC_CAD_OT_select_feature(bpy.types.Operator):
             self.report({"ERROR"}, "CAD feature no longer exists")
             return {"CANCELLED"}
         _set_active_feature(context.scene.parametric_cad_ui, feature)
+        if getattr(feature, "feature_type", None) in {"EXTRUDE", "REVOLVE", "TRANSFORM", "MIRROR"}:
+            # Selecting a history row also opens the matching contextual
+            # toolbar, so editing never requires hunting for a second page.
+            from .history import _activate_feature_tool
+
+            _activate_feature_tool(context, feature.feature_type)
         return {"FINISHED"}
 
 
@@ -216,7 +231,9 @@ class PARAMETRIC_CAD_OT_rename_feature(bpy.types.Operator):
     def invoke(self, context, _event):
         document = load_document_from_scene(context.scene)
         part = document.active_part
-        self.feature_id = context.scene.parametric_cad_ui.active_feature_id
+        self.feature_id = (
+            self.feature_id or context.scene.parametric_cad_ui.active_feature_id
+        )
         feature = part.get_feature(self.feature_id) if part else None
         if feature is None:
             return {"CANCELLED"}
@@ -257,7 +274,9 @@ class PARAMETRIC_CAD_OT_delete_feature(bpy.types.Operator):
     def invoke(self, context, _event):
         document = load_document_from_scene(context.scene)
         part = document.active_part
-        self.feature_id = context.scene.parametric_cad_ui.active_feature_id
+        self.feature_id = (
+            self.feature_id or context.scene.parametric_cad_ui.active_feature_id
+        )
         if part is None or part.get_feature(self.feature_id) is None:
             return {"CANCELLED"}
         return context.window_manager.invoke_props_dialog(self, width=380)
@@ -344,11 +363,14 @@ class PARAMETRIC_CAD_OT_toggle_suppression(bpy.types.Operator):
     bl_label = "Suppress / Unsuppress Feature"
     bl_options = {"REGISTER", "UNDO"}
 
+    feature_id: bpy.props.StringProperty(options={"HIDDEN"})
+
     def execute(self, context):
         document = load_document_from_scene(context.scene)
         part = document.active_part
         ui = context.scene.parametric_cad_ui
-        feature = part.get_feature(ui.active_feature_id) if part else None
+        feature_id = self.feature_id or ui.active_feature_id
+        feature = part.get_feature(feature_id) if part else None
         if feature is None:
             return {"CANCELLED"}
         feature.suppressed = not feature.suppressed

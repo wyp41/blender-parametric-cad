@@ -171,20 +171,12 @@ def sync_active_part_from_object(scene: bpy.types.Scene, obj) -> str | None:
         feature_id = obj.get("cad_feature_id")
         feature = document.get_part(part_id).get_feature(feature_id) if feature_id else None
         if feature is not None and ui.active_feature_id != feature.id:
-            # Result objects carry the terminal CAD feature UUID.  Selecting
-            # one therefore gives the left toolbar and Model page a useful
-            # context without making generated meshes editable.
-            ui.active_feature_id = feature.id
-            ui.feature_name = feature.name
-            ui.active_sketch_id = (
-                feature.id if getattr(feature, "feature_type", None) == "SKETCH" else ""
-            )
-            ui.active_sketch_entity_id = ""
-            ui.active_sketch_entity_ids = "[]"
-            ui.feature_create_kind = ""
-            ui.sketch_dirty = False
-            ui.sketch_applied_signature = ""
-            ui.mode = "FEATURE_EDIT"
+            # Result objects carry the terminal CAD feature UUID.  Reuse the
+            # same hydration path as a history-row selection so Revolve,
+            # Transform, and Mirror parameters cannot remain stale in the UI.
+            from .operators.part import _set_active_feature
+
+            _set_active_feature(ui, feature)
         elif feature is not None:
             ui.feature_name = feature.name
     return part_id
@@ -206,6 +198,7 @@ def validate_cad_document(scene: bpy.types.Scene) -> list[str]:
     from ..features.mirror import MirrorFeature
     from ..features.revolve import RevolveFeature
     from ..features.transform import TransformFeature
+    from ..sketch.entities import SketchLine
     from ..sketch.profile import ProfileDetector
     from ..sketch.sketch import SketchFeature
     from ..sketch.solver import SketchSolver
@@ -242,7 +235,57 @@ def validate_cad_document(scene: bpy.types.Scene) -> list[str]:
                         f"{part.name}/{feature.name}: source Sketch {feature.sketch_id} is missing."
                     )
                 else:
-                    profile = ProfileDetector().detect(source)
+                    detector = ProfileDetector()
+                    if isinstance(feature, RevolveFeature):
+                        entities = [
+                            entity for entity in source.entities if not entity.construction
+                        ]
+                        profile = detector.detect_entities(
+                            entities, source.deleted_regions
+                        )
+                        reference = feature.axis_reference
+                        if reference.reference_type == "DATUM_AXIS" and reference.axis not in {
+                            "X",
+                            "Y",
+                            "Z",
+                        }:
+                            diagnostics.append(
+                                f"{part.name}/{feature.name}: invalid Revolve datum axis."
+                            )
+                        elif reference.reference_type == "SKETCH_LINE":
+                            axis_sketch = part.get_feature(reference.sketch_id)
+                            axis_line = (
+                                next(
+                                    (
+                                        entity
+                                        for entity in axis_sketch.entities
+                                        if isinstance(entity, SketchLine)
+                                        and entity.id == reference.entity_id
+                                    ),
+                                    None,
+                                )
+                                if isinstance(axis_sketch, SketchFeature)
+                                else None
+                            )
+                            if axis_line is None:
+                                diagnostics.append(
+                                    f"{part.name}/{feature.name}: referenced Revolve SketchLine is missing."
+                                )
+                            if not profile.success and reference.sketch_id == source.id:
+                                profile = detector.detect_entities(
+                                    [
+                                        entity
+                                        for entity in entities
+                                        if entity.id != reference.entity_id
+                                    ],
+                                    source.deleted_regions,
+                                )
+                        elif reference.reference_type != "DATUM_AXIS":
+                            diagnostics.append(
+                                f"{part.name}/{feature.name}: unsupported Revolve axis reference."
+                            )
+                    else:
+                        profile = detector.detect(source)
                     if not profile.success:
                         diagnostics.append(f"{part.name}/{feature.name}: {profile.message}")
             elif isinstance(feature, TransformFeature):

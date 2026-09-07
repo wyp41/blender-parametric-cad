@@ -31,7 +31,7 @@ is the single parameter surface: it shows the source or selected history item,
 all operation fields, **Name**, **Rename**, and **Apply & Rebuild** beside the
 icon. Transform keeps its Translation and Rotation groups collapsed by default
 so the complete viewport remains visible; expand only the group being edited.
-Model keeps the history tree, rollback/roll-forward, and vertical
+Model keeps the history tree, rollback/roll-forward, and compact inline
 Feature Actions for Sketch edit, delete, and suppress/unsuppress; there is no
 separate Features page. The add-on registration path replaces stale or
 partially registered RNA classes left by an extension reload, including the
@@ -94,7 +94,7 @@ Workers from releases before 0.15.0 did not publish a reconnectable endpoint;
 close any such orphan Blender windows once after upgrading.
 
 In the CAD N-panel, use **Model → History** for rollback and roll-forward
-controls. The Model page also exposes vertical Feature Actions for the selected
+controls. The Model page also exposes compact inline Feature Actions for the selected
 feature, while the matching left-toolbar feature icon owns its parameters,
 rename, and Apply & Rebuild controls. This keeps Transform, Mirror, Extrude,
 and Revolve easy to find without switching to another workspace.

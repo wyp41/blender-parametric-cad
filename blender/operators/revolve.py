@@ -18,7 +18,7 @@ def _previous_body_feature(part, before_index: int):
     return previous_body_feature(part, before_index)
 
 
-def _axis_reference(ui, sketch: SketchFeature) -> AxisReference:
+def _axis_reference(ui, sketch: SketchFeature, part=None) -> AxisReference:
     direction = -1 if ui.revolve_axis_reverse else 1
     if ui.revolve_axis_type == "DATUM_AXIS":
         return AxisReference(
@@ -26,10 +26,22 @@ def _axis_reference(ui, sketch: SketchFeature) -> AxisReference:
             axis=ui.revolve_axis,
             direction=direction,
         )
+    entity_id = str(ui.revolve_axis_line_id or "")
+    axis_sketch_id = str(getattr(ui, "revolve_axis_sketch_id", "") or sketch.id)
+    # Resolve the owner from the UUID as a final compatibility fallback for
+    # older scenes/scripts that only stored revolve_axis_line_id.
+    if part is not None and entity_id not in {"", "NONE"}:
+        for candidate in part.features:
+            if isinstance(candidate, SketchFeature) and any(
+                isinstance(entity, SketchLine) and entity.id == entity_id
+                for entity in candidate.entities
+            ):
+                axis_sketch_id = candidate.id
+                break
     return AxisReference(
         reference_type="SKETCH_LINE",
-        sketch_id=sketch.id,
-        entity_id=ui.revolve_axis_line_id,
+        sketch_id=axis_sketch_id,
+        entity_id=entity_id,
         direction=direction,
     )
 
@@ -58,6 +70,20 @@ def _validate_operation(part, operation: str, before_index: int | None = None) -
     return None
 
 
+def _validate_axis(part, axis: AxisReference) -> str | None:
+    if axis.reference_type != "SKETCH_LINE":
+        return None
+    if axis.entity_id in {None, "", "NONE"}:
+        return "Select a valid SketchLine axis."
+    source = part.get_feature(axis.sketch_id) if part is not None else None
+    if not isinstance(source, SketchFeature) or not any(
+        isinstance(entity, SketchLine) and entity.id == axis.entity_id
+        for entity in source.entities
+    ):
+        return "The selected Revolve axis SketchLine is unavailable."
+    return None
+
+
 def _report_rebuild(operator, result) -> bool:
     if result.success:
         return True
@@ -79,14 +105,11 @@ def _create_revolve(operator, context):
     if operation_error:
         operator.report({"ERROR"}, operation_error)
         return {"CANCELLED"}
-    axis = _axis_reference(ui, sketch)
-    if axis.reference_type == "SKETCH_LINE":
-        if axis.entity_id in {None, "", "NONE"} or not any(
-            isinstance(entity, SketchLine) and entity.id == axis.entity_id
-            for entity in sketch.entities
-        ):
-            operator.report({"ERROR"}, "Select a valid SketchLine axis")
-            return {"CANCELLED"}
+    axis = _axis_reference(ui, sketch, part)
+    axis_error = _validate_axis(part, axis)
+    if axis_error:
+        operator.report({"ERROR"}, axis_error)
+        return {"CANCELLED"}
     revolve = RevolveFeature(
         name=part.next_feature_name("Revolve"),
         sketch_id=sketch.id,
@@ -141,7 +164,11 @@ class PARAMETRIC_CAD_OT_apply_revolve(bpy.types.Operator):
         if operation_error:
             self.report({"ERROR"}, operation_error)
             return {"CANCELLED"}
-        axis = _axis_reference(ui, sketch)
+        axis = _axis_reference(ui, sketch, part)
+        axis_error = _validate_axis(part, axis)
+        if axis_error:
+            self.report({"ERROR"}, axis_error)
+            return {"CANCELLED"}
         revolve.axis_reference = axis
         revolve.operation = ui.revolve_operation
         revolve.angle = radians(ui.revolve_angle_deg)

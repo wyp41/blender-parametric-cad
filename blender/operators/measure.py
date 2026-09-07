@@ -146,6 +146,12 @@ def _sketch_point(context, event):
 
 
 def _pick_point(context, event):
+    ui = getattr(getattr(context, "scene", None), "parametric_cad_ui", None)
+    if ui is not None and ui.mode == "SKETCH_EDIT":
+        # In Sketch Edit the semantic 2D point (including intersections) is
+        # authoritative; a generated result mesh underneath must not steal
+        # the click before Sketch snapping gets a chance.
+        return _sketch_point(context, event) or _mesh_point(context, event)
     return _mesh_point(context, event) or _sketch_point(context, event)
 
 
@@ -172,7 +178,7 @@ class PARAMETRIC_CAD_OT_measure(bpy.types.Operator):
     bl_description = "Measure true 3D distance between two snapped CAD points"
     bl_options = {"BLOCKING", "REGISTER"}
 
-    def invoke(self, context, _event):
+    def invoke(self, context, event):
         if getattr(context, "area", None) is None or context.area.type != "VIEW_3D":
             self.report({"ERROR"}, "CAD Measure must run in a 3D View.")
             return {"CANCELLED"}
@@ -182,10 +188,23 @@ class PARAMETRIC_CAD_OT_measure(bpy.types.Operator):
         if ui is not None:
             _reset_measurement_state(ui)
         clear_measurement()
-        context.window_manager.modal_handler_add(self)
-        context.area.header_text_set(
-            "CAD Measure: click first point, click second point; Esc exits"
+        in_viewport = getattr(getattr(context, "region", None), "type", None) == "WINDOW"
+        initial_click = (
+            in_viewport
+            and getattr(event, "type", None) == "LEFTMOUSE"
+            and getattr(event, "value", None) == "PRESS"
         )
+        if initial_click:
+            # Consume a click that started the tool when the operator was
+            # invoked from the viewport, matching Sketch tool behavior.
+            result = self.modal(context, event)
+            if result != {"RUNNING_MODAL"}:
+                return result
+        context.window_manager.modal_handler_add(self)
+        if not initial_click or self.first_point is None:
+            context.area.header_text_set(
+                "CAD Measure: click first point, click second point; Esc exits"
+            )
         return {"RUNNING_MODAL"}
 
     def modal(self, context, event):

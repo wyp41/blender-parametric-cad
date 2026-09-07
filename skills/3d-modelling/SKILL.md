@@ -28,8 +28,10 @@ Finishing a Sketch returns to **Model**, where the selected Sketch exposes
 vertical **Create Extrude** and **Create Revolve** buttons. Selecting a body
 exposes **Create Transform** and **Create Mirror**. The matching feature icon
 is the single parameter surface: it shows the source or selected history item,
-all operation fields, **Name**, **Rename**, and **Apply & Rebuild** beside the
-icon. Transform keeps its Translation and Rotation groups collapsed by default
+all operation fields, **Name**, **Rename**, and full-width **Apply & Rebuild** /
+**Cancel** controls beside the icon. Create and edit state plus the current
+object are shown at the top, and fields are stacked one per row so narrow
+toolbar popovers do not truncate labels. Transform keeps its Translation and Rotation groups collapsed by default
 so the complete viewport remains visible; expand only the group being edited.
 Model keeps the history tree, rollback/roll-forward, and compact inline
 Feature Actions for Sketch edit, delete, and suppress/unsuppress; there is no
@@ -107,7 +109,7 @@ close any such orphan Blender windows once after upgrading.
 In the CAD N-panel, use **Model → History** for rollback and roll-forward
 controls. The Model page also exposes compact inline Feature Actions for the selected
 feature, while the matching left-toolbar feature icon owns its parameters,
-rename, and Apply & Rebuild controls. This keeps Transform, Mirror, Extrude,
+rename, Apply & Rebuild, and Cancel controls. This keeps Transform, Mirror, Extrude,
 and Revolve easy to find without switching to another workspace.
 
 Use `--headless` or `BLENDER_CAD_HEADLESS=1` only on machines without a display

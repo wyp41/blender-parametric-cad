@@ -131,17 +131,23 @@ def _draw_feature_settings(context, layout, kind: str) -> None:
         return
     editing = getattr(selected, "feature_type", None) == kind
     panel = layout.box()
-    header = panel.row(align=True)
-    header.label(
-        text=f"Edit {selected.name}" if editing else f"Create {kind.title()}",
+
+    # Keep the context at the top of the popover.  The native toolbar gives
+    # feature settings only a narrow column, so a separate line for each item
+    # is much easier to read than two properties competing for one row.
+    panel.label(
+        text=f"{'Edit' if editing else 'Create'} {kind.title()}",
         icon="TOOL_SETTINGS" if editing else "ADD",
     )
+    panel.label(
+        text=f"Object: {selected.name}",
+        icon="OUTLINER_OB_MESH" if editing else "LINKED",
+    )
     if editing:
-        identity = panel.row(align=True)
-        identity.prop(ui, "feature_name", text="Name")
-        rename = identity.operator(
+        panel.prop(ui, "feature_name", text="Name")
+        rename = panel.operator(
             "parametric_cad.rename_feature",
-            text="",
+            text="Rename",
             icon="GREASEPENCIL",
         )
         rename.feature_id = selected.id
@@ -151,65 +157,67 @@ def _draw_feature_settings(context, layout, kind: str) -> None:
             error.alert = True
             error.label(text=selected.error_message, icon="ERROR")
     else:
-        panel.label(text=f"Source: {selected.name}", icon="LINKED")
+        source_label = "Source Sketch" if kind in {"EXTRUDE", "REVOLVE"} else "Source Body"
+        panel.label(text=f"{source_label}: {selected.name}", icon="LINKED")
 
     form = panel.column(align=True)
     if kind == "EXTRUDE":
-        row = form.row(align=True)
-        row.prop(ui, "extrude_operation", text="Operation")
-        row.prop(ui, "extrude_depth_mode", text="Extent")
+        form.prop(ui, "extrude_operation", text="Operation")
+        form.prop(ui, "extrude_depth_mode", text="Extent")
         if ui.extrude_depth_mode == "BLIND":
             form.prop(ui, "extrude_distance_mm", text="Distance (mm)")
-        form.operator(
-            "parametric_cad.apply_extrude" if editing else "parametric_cad.extrude",
-            text="Apply & Rebuild" if editing else "Create Extrude",
-            icon="FILE_REFRESH" if editing else "MOD_SOLIDIFY",
-        )
+        action_id = "parametric_cad.apply_extrude" if editing else "parametric_cad.extrude"
+        action_icon = "FILE_REFRESH" if editing else "MOD_SOLIDIFY"
     elif kind == "REVOLVE":
-        row = form.row(align=True)
-        row.prop(ui, "revolve_operation", text="Operation")
-        row.prop(ui, "revolve_angle_deg", text="Angle (deg)")
-        row = form.row(align=True)
-        row.prop(ui, "revolve_axis_type", text="Axis")
+        form.prop(ui, "revolve_operation", text="Operation")
+        form.prop(ui, "revolve_angle_deg", text="Angle (deg)")
+        form.prop(ui, "revolve_axis_type", text="Axis Type")
         if ui.revolve_axis_type == "DATUM_AXIS":
-            row.prop(ui, "revolve_axis", text="")
+            form.prop(ui, "revolve_axis", text="Datum Axis")
         else:
-            row.prop(ui, "revolve_axis_line_id", text="")
-        row = form.row(align=True)
-        row.prop(ui, "revolve_axis_reverse", text="Reverse direction")
+            form.prop(ui, "revolve_axis_line_id", text="Sketch Line")
+        form.prop(ui, "revolve_axis_reverse", text="Reverse Axis")
         if ui.revolve_angle_deg >= 359.999:
-            row.label(text="Only affects partial angles", icon="INFO")
-        form.operator(
-            "parametric_cad.apply_revolve" if editing else "parametric_cad.revolve",
-            text="Apply & Rebuild" if editing else "Create Revolve",
-            icon="FILE_REFRESH" if editing else "MOD_SCREW",
-        )
+            form.label(text="Reverse affects partial angles only", icon="INFO")
+        action_id = "parametric_cad.apply_revolve" if editing else "parametric_cad.revolve"
+        action_icon = "FILE_REFRESH" if editing else "MOD_SCREW"
     elif kind == "TRANSFORM":
-        translation = form.column(align=True)
+        translation = form.box()
         translation.label(text="Translation (mm)", icon="ARROW_LEFTRIGHT")
         translation.prop(ui, "transform_translate_x_mm", text="X")
         translation.prop(ui, "transform_translate_y_mm", text="Y")
         translation.prop(ui, "transform_translate_z_mm", text="Z")
-        rotation = form.column(align=True)
+        rotation = form.box()
         rotation.label(text="Rotation (deg)", icon="DRIVER_ROTATIONAL_DIFFERENCE")
         rotation.prop(ui, "transform_rotate_x_deg", text="X")
         rotation.prop(ui, "transform_rotate_y_deg", text="Y")
         rotation.prop(ui, "transform_rotate_z_deg", text="Z")
-        form.operator(
-            "parametric_cad.apply_transform" if editing else "parametric_cad.transform",
-            text="Apply & Rebuild" if editing else "Create Transform",
-            icon="FILE_REFRESH" if editing else "OBJECT_ORIGIN",
-        )
+        action_id = "parametric_cad.apply_transform" if editing else "parametric_cad.transform"
+        action_icon = "FILE_REFRESH" if editing else "OBJECT_ORIGIN"
     elif kind == "MIRROR":
         form.prop(ui, "mirror_source_feature_id", text="Source Feature")
-        row = form.row(align=True)
-        row.prop(ui, "mirror_plane_reference", text="Mirror Plane")
-        row.prop(ui, "mirror_plane_offset_mm", text="Offset (mm)")
-        form.operator(
-            "parametric_cad.apply_mirror" if editing else "parametric_cad.mirror",
-            text="Apply & Rebuild" if editing else "Create Mirror",
-            icon="FILE_REFRESH" if editing else "MOD_MIRROR",
-        )
+        form.prop(ui, "mirror_plane_reference", text="Mirror Plane")
+        form.prop(ui, "mirror_plane_offset_mm", text="Offset (mm)")
+        action_id = "parametric_cad.apply_mirror" if editing else "parametric_cad.mirror"
+        action_icon = "FILE_REFRESH" if editing else "MOD_MIRROR"
+    else:
+        panel.label(text="Unsupported feature tool.", icon="ERROR")
+        return
+
+    # Keep the commit and exit controls visible in the same toolbar popover.
+    # They are full-width on purpose: Blender otherwise ellipsizes the action
+    # label when the selected left-toolbar icon is shown in a narrow region.
+    panel.separator(factor=0.4)
+    panel.operator(
+        action_id,
+        text="Apply & Rebuild" if editing else f"Create {kind.title()}",
+        icon=action_icon,
+    )
+    panel.operator(
+        "parametric_cad.cancel_feature_tools",
+        text="Cancel",
+        icon="CANCEL",
+    )
 
 
 class PARAMETRIC_CAD_WST_select(_CADSketchTool):

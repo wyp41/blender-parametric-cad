@@ -1,7 +1,7 @@
 # Blender Parametric CAD API
 
 This reference describes the public API in the Blender Parametric CAD
-extension (current extension release 0.16.8). It covers both direct Python
+extension (current extension release 0.16.9). It covers both direct Python
 scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
 
 ## MCP bridge
@@ -93,8 +93,10 @@ Sketch returns to **Model**. The selected Sketch then presents vertical
 **Create Extrude**/**Create Revolve** actions, while a selected body presents
 **Create Transform**/**Create Mirror**. The matching left-toolbar feature icon
 is the single parameter editor: it shows the source or selected history item,
-all operation fields, **Name**, **Rename**, and **Apply & Rebuild** beside the
-icon. Transform's Translation and Rotation groups are collapsed by default to
+all operation fields, **Name**, **Rename**, and full-width **Apply & Rebuild/Create** plus
+**Cancel** controls beside the icon. The popover also identifies the current
+object and Create/Edit state; fields are stacked one per row so labels remain
+readable in Blender's narrow toolbar settings region. Transform's Translation and Rotation groups are collapsed by default to
 keep the complete viewport visible. Rollback and roll-forward remain under
 **Model → History**, and Model
 also exposes compact inline Feature Actions for delete, suppress, and Sketch edit;

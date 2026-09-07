@@ -201,6 +201,33 @@ class PARAMETRIC_CAD_OT_open_feature_tools(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class PARAMETRIC_CAD_OT_cancel_feature_tools(bpy.types.Operator):
+    """Close the contextual feature editor without changing CAD history."""
+
+    bl_idname = "parametric_cad.cancel_feature_tools"
+    bl_label = "Cancel"
+    bl_description = "Close this feature editor without applying its parameters"
+    bl_options = {"REGISTER"}
+
+    @classmethod
+    def poll(cls, context):
+        ui = getattr(getattr(context, "scene", None), "parametric_cad_ui", None)
+        return ui is not None and ui.mode == "FEATURE_EDIT"
+
+    def execute(self, context):
+        ui = context.scene.parametric_cad_ui
+        # Create forms only hold transient UI values until their Create button
+        # runs.  Edit forms likewise write the CAD feature only in Apply, so
+        # closing the form is a safe, non-destructive operation.
+        ui.feature_create_kind = ""
+        ui.feature_name = ""
+        ui.revolve_axis_sketch_id = ""
+        ui.panel_tab = "MODEL"
+        ui.mode = "IDLE"
+        tag_redraw()
+        return {"FINISHED"}
+
+
 def _draw_object_context_menu(self, context):
     obj = getattr(getattr(context, "view_layer", None), "objects", None)
     active = getattr(obj, "active", None)
@@ -251,5 +278,6 @@ def unregister_keymaps() -> None:
 CLASSES = (
     PARAMETRIC_CAD_OT_edit_cad_history,
     PARAMETRIC_CAD_OT_open_feature_tools,
+    PARAMETRIC_CAD_OT_cancel_feature_tools,
     PARAMETRIC_CAD_OT_validate_document,
 )

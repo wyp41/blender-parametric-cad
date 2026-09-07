@@ -1,7 +1,7 @@
 # Blender Parametric CAD
 
 An AI-first, history-based parametric CAD extension for Blender 5.1.2, designed
-for Codex, Claude, and other tool-using AI systems. Version 0.16.8 provides a
+for Codex, Claude, and other tool-using AI systems. Version 0.16.9 provides a
 real MCP interface and a Python API so an AI can create sketches, features,
 booleans, transforms, mirrors, and per-Part exports through normal CAD
 operations—not by spending tokens on mouse clicks or computer-use screenshots.
@@ -12,9 +12,13 @@ selected result objects hydrate the matching feature parameters. Failed
 rebuilds keep the last valid viewport mesh and mark downstream history as
 blocked, while the staged toolbar now exposes only Sketch tools during Sketch
 Edit and only body-feature tools during Feature Edit.
-Create Extrude/Revolve/Transform/Mirror now also opens a visible parameter card
-directly in Model, so the operation can be completed without finding the
-toolbar settings popover.
+Feature settings are now anchored to the selected left-toolbar icon: the
+popover starts with the current object and an explicit Create/Edit state,
+shows one readable parameter per row, and keeps Rename plus full-width
+Apply & Rebuild/Create and Cancel controls together. Create
+Extrude/Revolve/Transform/Mirror also opens a visible parameter card directly
+in Model as a fallback, so the operation can be completed even when the
+toolbar settings popover is hidden.
 This release also adds a CAD-friendly point measurement tool: click two points
 to get a true 3D millimeter distance, signed XYZ components, vertex/Sketch
 snapping, and an always-visible viewport annotation. It hardens Blender RNA
@@ -52,7 +56,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.16.8.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.16.9.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## AI/API skill
@@ -99,7 +103,7 @@ same Blender window.
 
 Warnings such as `Policy violation with top level module: blender_parametric_cad`
 come from Blender's extension namespace policy, not from another add-on and not
-from the MCP port. Version 0.16.8 loads the worker through Blender's qualified
+from the MCP port. Version 0.16.9 loads the worker through Blender's qualified
 `bl_ext.<repository>.blender_parametric_cad` namespace and keeps bundled modules
 out of the global Python namespace. It also keeps the staged native toolbar in
 sync with CAD mode and consumes the initial click for CAD Measure. After
@@ -111,7 +115,7 @@ can be resolved by using that service or selecting a free port.
 
 Upgrade note: windows left behind by releases before 0.15.0 used a private
 per-client socket and cannot be rediscovered after their MCP parent exits. Close
-those orphan windows once, install 0.16.8, and use the in-window service toggle
+those orphan windows once, install 0.16.9, and use the in-window service toggle
 for the window you want to keep.
 
 If a machine has no display, or if a CI job needs a background worker, pass
@@ -173,7 +177,9 @@ editing, **Measure** for CAD point-to-point measurements, or **Output** for
 validation and per-Part export. Feature parameters
 are not duplicated in a long N-panel page: the matching native left-toolbar
 icon is the single create/edit surface for Extrude, Revolve, Transform, and
-Mirror. Entering Sketch Edit opens the Sketch workspace automatically;
+Mirror. Its settings popover keeps the current object, Create/Edit state,
+common parameters, Rename, Apply & Rebuild/Create, and Cancel together;
+parameters are stacked vertically so labels are not truncated. Entering Sketch Edit opens the Sketch workspace automatically;
 finishing returns to Model, where the next operation is available without
 hunting through another page.
 
@@ -206,8 +212,10 @@ hunting through another page.
 6. Finish the Sketch. **Show Sketches** keeps resolved Sketch references visible.
 7. With the finished Sketch selected in **Model**, click **Create Extrude** or
    **Create Revolve**. The matching left-toolbar tool is selected and its
-   settings appear beside the icon; choose **New**, **Add**, or **Remove**, set
-   the extent/axis, and press **Create**.
+   settings appear beside the icon; the popover identifies the source Sketch,
+   exposes one field per row, and provides **Create** and **Cancel** at the
+   bottom. Choose **New**, **Add**, or **Remove**, set the extent/axis, and
+   press **Create**.
 8. Select a body feature in **Model** and click **Create Transform**. Its
    matching toolbar tool exposes translation and rotation in the same place;
    **Apply & Rebuild** updates the history.
@@ -216,8 +224,9 @@ hunting through another page.
    offset). The mirrored tool is unioned with the current body and must remain
    one connected solid.
 10. Select any feature in the Model history and click its matching toolbar
-   icon. The toolbar shows the editable parameters, **Name**, **Rename**, and
-   **Apply & Rebuild** together. Model keeps compact inline **Feature Actions**
+   icon. The toolbar shows the current object, **Edit** state, editable
+   parameters, **Name**, **Rename**, **Apply & Rebuild**, and **Cancel** together.
+   Model keeps compact inline **Feature Actions**
    for Sketch edit, delete with dependency confirmation, and
    suppress/unsuppress; **Model → History** sets rollback or roll-forward.
 

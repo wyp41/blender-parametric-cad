@@ -32,6 +32,7 @@ class McpProtocolTests(unittest.TestCase):
         self.assertIn("cad_export_part", tool_names)
         self.assertIn("cad_create_transform", tool_names)
         self.assertIn("cad_create_mirror", tool_names)
+        self.assertIn("blender_execute_python", tool_names)
         self.assertIn("cad://api-reference", resource_uris)
 
     def test_m5_tool_schemas_expose_offset_and_history_parameters(self):
@@ -46,6 +47,9 @@ class McpProtocolTests(unittest.TestCase):
         self.assertIn("mirror_plane", mirror_properties)
         update_properties = tools["cad_update_feature"]["inputSchema"]["properties"]
         self.assertIn("offset_mm", update_properties)
+        python_schema = tools["blender_execute_python"]["inputSchema"]
+        self.assertEqual(python_schema["required"], ["code"])
+        self.assertIn("code", python_schema["properties"])
 
     def test_initialize_and_tool_list(self):
         server = StdioMcpServer(_FakeBridge())

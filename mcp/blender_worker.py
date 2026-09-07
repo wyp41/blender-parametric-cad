@@ -12,8 +12,11 @@ output is discarded by the parent bridge.
 from __future__ import annotations
 
 import argparse
+import ast
+from contextlib import redirect_stderr, redirect_stdout
 import errno
 import importlib
+from io import StringIO
 import json
 from math import isfinite, pi, radians
 import os
@@ -21,6 +24,7 @@ from pathlib import Path
 import secrets
 import socket
 import sys
+import traceback
 from typing import Any
 
 
@@ -147,10 +151,11 @@ class WorkerError(RuntimeError):
 
 
 class BlenderCadWorker:
-    """Dispatch high-level CAD tools inside one persistent Blender process."""
+    """Dispatch CAD tools and trusted Python inside one Blender process."""
 
     def __init__(self, blend_file: str | None = None, autosave: str | None = None):
         self._bpy = self._load_blender_runtime()
+        self._console_namespace = {"__name__": "__main__", "bpy": self._bpy}
         self._registered_properties = self._ensure_scene_properties()
         self.autosave_path = autosave or blend_file
         if blend_file:
@@ -190,6 +195,7 @@ class BlenderCadWorker:
 
     def handle(self, name: str, arguments: dict[str, Any]) -> Any:
         handlers = {
+            "blender_execute_python": self._execute_python,
             "cad_status": self._status,
             "cad_create_part": self._create_part,
             "cad_set_active_part": self._set_active_part,
@@ -225,6 +231,52 @@ class BlenderCadWorker:
             # every 3D View for redraw so sketch overlays and result meshes are
             # visible immediately after the response is produced.
             self._tag_viewports()
+
+    def _execute_python(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Run trusted Python in a persistent Blender-console-like namespace."""
+
+        code = arguments.get("code")
+        if not isinstance(code, str) or not code.strip():
+            raise WorkerError("code must be a non-empty string.")
+
+        filename = "<blender_execute_python>"
+        stdout = StringIO()
+        stderr = StringIO()
+        namespace = self._console_namespace
+        try:
+            tree = ast.parse(code, filename=filename, mode="exec")
+            result = None
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                if tree.body and isinstance(tree.body[-1], ast.Expr):
+                    final_expression = tree.body.pop()
+                    if tree.body:
+                        exec(compile(tree, filename, "exec"), namespace, namespace)
+                    expression = ast.Expression(final_expression.value)
+                    ast.copy_location(expression, final_expression)
+                    ast.fix_missing_locations(expression)
+                    result = eval(compile(expression, filename, "eval"), namespace, namespace)
+                else:
+                    exec(compile(tree, filename, "exec"), namespace, namespace)
+        except BaseException as exc:
+            details = traceback.format_exc().rstrip()
+            output = stdout.getvalue()
+            errors = stderr.getvalue()
+            message = f"Blender Python execution failed:\n{details}"
+            if output:
+                message += f"\nstdout:\n{output.rstrip()}"
+            if errors:
+                message += f"\nstderr:\n{errors.rstrip()}"
+            raise WorkerError(message) from exc
+
+        try:
+            result_repr = repr(result) if result is not None else None
+        except BaseException:
+            result_repr = f"<{type(result).__name__} repr unavailable>"
+        return {
+            "stdout": stdout.getvalue(),
+            "stderr": stderr.getvalue(),
+            "result": result_repr,
+        }
 
     def _tag_viewports(self) -> None:
         try:

@@ -1,9 +1,9 @@
 """Small dependency-free MCP protocol surface for the CAD bridge.
 
 The stdio process in :mod:`mcp.server` owns the MCP transport.  Blender runs a
-separate, persistent worker process and only receives the high-level ``cad_*``
-tool calls; visible sessions keep Blender's normal event loop active while
-headless sessions remain available for CI.
+separate, persistent worker process and receives both high-level ``cad_*``
+tool calls and trusted direct Python calls; visible sessions keep Blender's
+normal event loop active while headless sessions remain available for CI.
 Keeping the schemas in this module makes discovery available without starting
 Blender and keeps the protocol implementation usable with Python's standard
 library only.
@@ -18,7 +18,7 @@ from typing import Any
 PROTOCOL_VERSION = "2025-06-18"
 SUPPORTED_PROTOCOL_VERSIONS = {"2024-11-05", "2025-03-26", PROTOCOL_VERSION}
 SERVER_NAME = "blender-parametric-cad"
-SERVER_VERSION = "0.16.6"
+SERVER_VERSION = "0.16.11"
 
 
 def _object(properties: dict[str, Any] | None = None, required: list[str] | None = None) -> dict[str, Any]:
@@ -76,6 +76,22 @@ _MIRROR_PLANE = {
 
 
 TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
+    {
+        "name": "blender_execute_python",
+        "description": (
+            "Execute trusted multiline Python in the connected Blender process "
+            "on Blender's main thread, equivalent to running code in Blender's "
+            "Python Console without Computer Use. The namespace persists between "
+            "calls. Use bpy for Blender API access. Returns captured stdout, "
+            "stderr, and the repr of a final expression. Full Python access can "
+            "modify the current scene, files, and process; use only with a "
+            "trusted MCP client."
+        ),
+        "inputSchema": _object(
+            {"code": _string("Python code to execute. Multiline code is supported.")},
+            ["code"],
+        ),
+    },
     {
         "name": "cad_status",
         "description": "Return the persistent CAD document, Part Studios, feature history, and active selection.",

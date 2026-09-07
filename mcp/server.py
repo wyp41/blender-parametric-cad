@@ -500,7 +500,10 @@ class StdioMcpServer:
                     "instructions": (
                         "Use cad_* tools for persistent Part Studios, sketches, "
                         "features, Transform/Mirror history, rebuilds, and per-Part "
-                        "exports. MCP dimensions are millimeters and degrees. "
+                        "exports. Use blender_execute_python for trusted arbitrary "
+                        "Python in the same Blender process when direct bpy access "
+                        "is needed; it runs on Blender's main thread and does not "
+                        "require Computer Use. MCP dimensions are millimeters and degrees. "
                         "The default worker is a visible Blender session; set "
                         "BLENDER_CAD_HEADLESS=1 for background mode."
                     ),

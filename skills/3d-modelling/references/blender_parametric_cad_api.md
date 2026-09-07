@@ -1,7 +1,7 @@
 # Blender Parametric CAD API
 
 This reference describes the public API in the Blender Parametric CAD
-extension (current extension release 0.16.10). It covers both direct Python
+extension (current extension release 0.16.11). It covers both direct Python
 scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
 
 ## MCP bridge
@@ -81,9 +81,27 @@ The MCP tools are:
 | Sketch | `cad_create_sketch`, `cad_add_geometry`, `cad_update_geometry`, `cad_delete_geometry`, `cad_profile`, `cad_delete_region`, `cad_restore_region` |
 | Features | `cad_create_extrude`, `cad_create_revolve`, `cad_create_transform`, `cad_create_mirror`, `cad_update_feature`, `cad_delete_feature`, `cad_suppress_feature`, `cad_rollback`, `cad_rebuild` |
 | Output | `cad_export_part` |
+| Runtime | `blender_execute_python` |
 
 The server exposes the same documentation through MCP resources
 `cad://skill/3d-modelling` and `cad://api-reference`.
+
+### Direct Blender Python
+
+`blender_execute_python` executes trusted single-line or multiline Python on
+Blender's main thread in the connected process. It is equivalent to running
+code in Blender's Python Console without Computer Use; the console namespace
+persists between calls and already contains `bpy`. The result contains captured
+`stdout`, `stderr`, and the `repr` of the final expression. For example:
+
+```text
+blender_execute_python({"code": "import bpy\nbpy.ops.mesh.primitive_cube_add()\nprint(bpy.context.object.name)"})
+```
+
+This is unrestricted Python access: it may modify the scene, files, or Blender
+process. Expose the MCP server only to a trusted client. Use the semantic
+`cad_*` tools when you need persistent Part Studio history, CAD units, and
+validation.
 
 The Blender add-on registration is reload-safe: stale or partially registered
 UI RNA classes are replaced before the current Scene properties are attached.

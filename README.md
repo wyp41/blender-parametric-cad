@@ -1,7 +1,7 @@
 # Blender Parametric CAD
 
 An AI-first, history-based parametric CAD extension for Blender 5.1.2, designed
-for Codex, Claude, and other tool-using AI systems. Version 0.16.10 provides a
+for Codex, Claude, and other tool-using AI systems. Version 0.16.11 provides a
 real MCP interface and a Python API so an AI can create sketches, features,
 booleans, transforms, mirrors, and per-Part exports through normal CAD
 operations—not by spending tokens on mouse clicks or computer-use screenshots.
@@ -36,6 +36,9 @@ Transform's Translation and Rotation groups are collapsed by default; expand
 only the group being edited so the full viewport remains visible.
 Each contextual CAD tool is now an independent left-toolbar button, separate
 from Add Cube; Blender's native tool groups are unchanged.
+The MCP bridge now also exposes `blender_execute_python`, which runs trusted
+multiline Python in the connected Blender process on Blender's main thread,
+preserving a Console-like namespace without Computer Use.
 
 The resulting model is still a native, editable Blender workflow: every AI
 operation is stored as persistent CAD history, and the same Sketches, feature
@@ -58,7 +61,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.16.10.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.16.11.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## AI/API skill
@@ -105,7 +108,7 @@ same Blender window.
 
 Warnings such as `Policy violation with top level module: blender_parametric_cad`
 come from Blender's extension namespace policy, not from another add-on and not
-from the MCP port. Version 0.16.10 loads the worker through Blender's qualified
+from the MCP port. Version 0.16.11 loads the worker through Blender's qualified
 `bl_ext.<repository>.blender_parametric_cad` namespace and keeps bundled modules
 out of the global Python namespace. It also keeps the staged native toolbar in
 sync with CAD mode and consumes the initial click for CAD Measure. After
@@ -117,7 +120,7 @@ can be resolved by using that service or selecting a free port.
 
 Upgrade note: windows left behind by releases before 0.15.0 used a private
 per-client socket and cannot be rediscovered after their MCP parent exits. Close
-those orphan windows once, install 0.16.10, and use the in-window service toggle
+those orphan windows once, install 0.16.11, and use the in-window service toggle
 for the window you want to keep.
 
 If a machine has no display, or if a CI job needs a background worker, pass
@@ -168,6 +171,22 @@ the already-open window is the source of truth.
 The built-in CAD service speaks this extension's semantic `cad_*` protocol. A
 generic third-party Blender MCP add-on may expose a different protocol and is
 not automatically interchangeable with this server.
+
+### Direct Blender Python via MCP
+
+The `blender_execute_python` tool runs trusted single-line or multiline Python
+in the same Blender process and on Blender's main thread. Its namespace persists
+between calls, so it can be used like Blender's Python Console while returning
+captured `stdout`, `stderr`, and the `repr` of a final expression:
+
+```text
+blender_execute_python({"code": "import bpy\nbpy.ops.mesh.primitive_cube_add()\nprint(bpy.context.object.name)"})
+```
+
+This provides direct `bpy` control without Computer Use. It is full Python
+access and can change the scene, files, or Blender process, so only expose it to
+a trusted MCP client. Use the semantic `cad_*` tools when persistent Part
+Studio history, unit conversion, and CAD validation are desired.
 
 ## Part Studio workflow
 

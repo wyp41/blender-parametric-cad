@@ -58,6 +58,14 @@ and copyable examples are in
 Read that reference before generating a CAD script. Do not call names starting
 with `_`; those are implementation details.
 
+For direct code execution, use the trusted `blender_execute_python` MCP tool.
+It runs multiline Python on Blender's main thread in the same persistent
+process, keeps a console-like namespace between calls, and returns stdout,
+stderr, and the final expression representation. This replaces typing into
+Blender's Python Console with Computer Use; it has full `bpy`/Python access and
+should only be used with a trusted MCP client. Prefer the semantic `cad_*`
+tools when persistent Part Studio history and CAD validation are important.
+
 For Revolve, use a closed line/arc/circle profile on a plane and choose a datum
 axis or a persistent SketchLine that is parallel to that Sketch plane. A normal
 profile boundary line may also be the axis; the evaluator keeps it in the
@@ -130,6 +138,8 @@ MCP tool groups:
   `cad_delete_feature`, `cad_suppress_feature`, `cad_rollback`,
   `cad_rebuild`.
 - Output: `cad_export_part` (isolated STL, OBJ, or PLY export by `part_id`).
+- Runtime: `blender_execute_python` (trusted direct Python/`bpy` execution in
+  the connected Blender process).
 
 Viewport measurement is intentionally interactive and display-only; it does not
 modify the persistent CAD document and therefore is not an MCP modeling

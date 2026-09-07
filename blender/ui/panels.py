@@ -33,13 +33,25 @@ _PANEL_ICONS = {
 
 
 def _draw_section_navigation(layout, ui):
-    """Draw a compact icon rail and return the selected section column."""
+    """Draw the CAD sections as visible, separate navigation buttons."""
 
-    navigation = layout.row(align=True)
-    rail = navigation.column(align=True)
-    rail.ui_units_x = 2.4
-    rail.prop(ui, "panel_tab", text="", expand=True, icon_only=True)
-    content = navigation.column(align=True)
+    navigation = layout.column(align=True)
+    navigation.label(text="CAD Sections", icon="MESH_CUBE")
+    tabs = navigation.grid_flow(
+        row_major=True,
+        columns=2,
+        even_columns=True,
+        even_rows=True,
+    )
+    for value, title in _PANEL_TITLES.items():
+        tabs.prop_enum(
+            ui,
+            "panel_tab",
+            value=value,
+            text=title,
+            icon=_PANEL_ICONS[value],
+        )
+    content = layout.column(align=True)
     content.label(
         text=_PANEL_TITLES.get(ui.panel_tab, "Model"),
         icon=_PANEL_ICONS.get(ui.panel_tab, "MESH_CUBE"),
@@ -182,12 +194,15 @@ def _draw_model_section(layout, context, part, ui):
     delete.part_id = part.id
     controls.prop(ui, "show_sketches")
 
+    selected = part.get_feature(ui.active_feature_id)
+    if selected is not None:
+        _draw_active_feature_editor(layout, context, selected, ui)
+
     layout.separator()
     layout.label(text="Feature History")
     draw_feature_tree(layout, part, ui.active_feature_id)
     history = layout.box()
     history.label(text="History", icon="TRACKING_BACKWARDS_SINGLE")
-    selected = part.get_feature(ui.active_feature_id)
     if selected is None:
         history.label(text="Select a feature to set the rollback point.", icon="INFO")
     else:
@@ -213,7 +228,6 @@ def _draw_model_section(layout, context, part, ui):
         actions.label(text="Select a feature above to edit or remove it.", icon="INFO")
     else:
         draw_feature_actions(layout, selected)
-        _draw_active_feature_editor(layout, context, selected, ui)
         _draw_next_feature(layout, selected, ui)
 
 
@@ -270,11 +284,11 @@ def _draw_next_feature(layout, selected, ui):
     active_kind = str(getattr(ui, "feature_create_kind", "") or "").upper()
     if active_kind in tools:
         card.label(
-            text=f"{active_kind.title()} active — parameters shown below.",
+            text=f"{active_kind.title()} active — parameters shown above.",
             icon="CHECKMARK",
         )
         return
-    card.label(text="Choose an operation to open its parameters below.", icon="INFO")
+    card.label(text="Choose an operation to open its parameters above.", icon="INFO")
     for kind, label, icon in (
         ("EXTRUDE", "Extrude", "MOD_SOLIDIFY"),
         ("REVOLVE", "Revolve", "MOD_SCREW"),

@@ -113,7 +113,10 @@ def _draw_feature_settings(context, layout, kind: str) -> None:
     and edits to an existing selected history item.
     """
 
-    layout.use_property_split = True
+    in_tool_header = (
+        getattr(getattr(context, "region", None), "type", None) == "TOOL_HEADER"
+    )
+    layout.use_property_split = not in_tool_header
     layout.use_property_decorate = False
     ui = getattr(getattr(context, "scene", None), "parametric_cad_ui", None)
     if ui is None:
@@ -130,7 +133,10 @@ def _draw_feature_settings(context, layout, kind: str) -> None:
         layout.label(text="Select a CAD Sketch or body feature first.", icon="INFO")
         return
     editing = getattr(selected, "feature_type", None) == kind
-    panel = layout.box()
+    # TOOL_HEADER is a single horizontal row.  A vertical box is clipped there
+    # and leaves only the title visible, so keep the complete feature form in
+    # one readable row when the top settings header is active.
+    panel = layout.row(align=True) if in_tool_header else layout.box()
 
     # Keep the context at the top of the popover.  The native toolbar gives
     # feature settings only a narrow column, so a separate line for each item
@@ -139,65 +145,78 @@ def _draw_feature_settings(context, layout, kind: str) -> None:
         text=f"{'Edit' if editing else 'Create'} {kind.title()}",
         icon="TOOL_SETTINGS" if editing else "ADD",
     )
-    panel.label(
-        text=f"Object: {selected.name}",
-        icon="OUTLINER_OB_MESH" if editing else "LINKED",
-    )
-    if editing:
-        panel.prop(ui, "feature_name", text="Name")
-        rename = panel.operator(
-            "parametric_cad.rename_feature",
-            text="Rename",
-            icon="GREASEPENCIL",
+    if not in_tool_header:
+        panel.label(
+            text=f"Object: {selected.name}",
+            icon="OUTLINER_OB_MESH" if editing else "LINKED",
         )
-        rename.feature_id = selected.id
-        rename.name = ui.feature_name or selected.name
-        if selected.status in {"ERROR", "BLOCKED"} and selected.error_message:
-            error = panel.box()
-            error.alert = True
-            error.label(text=selected.error_message, icon="ERROR")
-    else:
-        source_label = "Source Sketch" if kind in {"EXTRUDE", "REVOLVE"} else "Source Body"
-        panel.label(text=f"{source_label}: {selected.name}", icon="LINKED")
+        if editing:
+            panel.prop(ui, "feature_name", text="Name")
+            rename = panel.operator(
+                "parametric_cad.rename_feature",
+                text="Rename",
+                icon="GREASEPENCIL",
+            )
+            rename.feature_id = selected.id
+            rename.name = ui.feature_name or selected.name
+            if selected.status in {"ERROR", "BLOCKED"} and selected.error_message:
+                error = panel.box()
+                error.alert = True
+                error.label(text=selected.error_message, icon="ERROR")
+        else:
+            source_label = "Source Sketch" if kind in {"EXTRUDE", "REVOLVE"} else "Source Body"
+            panel.label(text=f"{source_label}: {selected.name}", icon="LINKED")
+    elif editing:
+        panel.prop(ui, "feature_name", text="Name")
 
-    form = panel.column(align=True)
+    form = panel.row(align=True) if in_tool_header else panel.column(align=True)
     if kind == "EXTRUDE":
-        form.prop(ui, "extrude_operation", text="Operation")
-        form.prop(ui, "extrude_depth_mode", text="Extent")
+        form.prop(ui, "extrude_operation", text="Op" if in_tool_header else "Operation")
+        form.prop(ui, "extrude_depth_mode", text="To" if in_tool_header else "Extent")
         if ui.extrude_depth_mode == "BLIND":
-            form.prop(ui, "extrude_distance_mm", text="Distance (mm)")
+            form.prop(ui, "extrude_distance_mm", text="mm" if in_tool_header else "Distance (mm)")
         action_id = "parametric_cad.apply_extrude" if editing else "parametric_cad.extrude"
         action_icon = "FILE_REFRESH" if editing else "MOD_SOLIDIFY"
     elif kind == "REVOLVE":
-        form.prop(ui, "revolve_operation", text="Operation")
-        form.prop(ui, "revolve_angle_deg", text="Angle (deg)")
-        form.prop(ui, "revolve_axis_type", text="Axis Type")
+        form.prop(ui, "revolve_operation", text="Op" if in_tool_header else "Operation")
+        form.prop(ui, "revolve_angle_deg", text="°" if in_tool_header else "Angle (deg)")
+        form.prop(ui, "revolve_axis_type", text="Axis" if in_tool_header else "Axis Type")
         if ui.revolve_axis_type == "DATUM_AXIS":
-            form.prop(ui, "revolve_axis", text="Datum Axis")
+            form.prop(ui, "revolve_axis", text="" if in_tool_header else "Datum Axis")
         else:
-            form.prop(ui, "revolve_axis_line_id", text="Sketch Line")
-        form.prop(ui, "revolve_axis_reverse", text="Reverse Axis")
-        if ui.revolve_angle_deg >= 359.999:
+            form.prop(ui, "revolve_axis_line_id", text="" if in_tool_header else "Sketch Line")
+        form.prop(ui, "revolve_axis_reverse", text="Rev" if in_tool_header else "Reverse Axis")
+        if ui.revolve_angle_deg >= 359.999 and not in_tool_header:
             form.label(text="Reverse affects partial angles only", icon="INFO")
         action_id = "parametric_cad.apply_revolve" if editing else "parametric_cad.revolve"
         action_icon = "FILE_REFRESH" if editing else "MOD_SCREW"
     elif kind == "TRANSFORM":
-        translation = form.box()
-        translation.label(text="Translation (mm)", icon="ARROW_LEFTRIGHT")
-        translation.prop(ui, "transform_translate_x_mm", text="X")
-        translation.prop(ui, "transform_translate_y_mm", text="Y")
-        translation.prop(ui, "transform_translate_z_mm", text="Z")
-        rotation = form.box()
-        rotation.label(text="Rotation (deg)", icon="DRIVER_ROTATIONAL_DIFFERENCE")
-        rotation.prop(ui, "transform_rotate_x_deg", text="X")
-        rotation.prop(ui, "transform_rotate_y_deg", text="Y")
-        rotation.prop(ui, "transform_rotate_z_deg", text="Z")
+        if in_tool_header:
+            form.label(text="Move", icon="ARROW_LEFTRIGHT")
+            form.prop(ui, "transform_translate_x_mm", text="X")
+            form.prop(ui, "transform_translate_y_mm", text="Y")
+            form.prop(ui, "transform_translate_z_mm", text="Z")
+            form.label(text="Rot", icon="DRIVER_ROTATIONAL_DIFFERENCE")
+            form.prop(ui, "transform_rotate_x_deg", text="X")
+            form.prop(ui, "transform_rotate_y_deg", text="Y")
+            form.prop(ui, "transform_rotate_z_deg", text="Z")
+        else:
+            translation = form.box()
+            translation.label(text="Translation (mm)", icon="ARROW_LEFTRIGHT")
+            translation.prop(ui, "transform_translate_x_mm", text="X")
+            translation.prop(ui, "transform_translate_y_mm", text="Y")
+            translation.prop(ui, "transform_translate_z_mm", text="Z")
+            rotation = form.box()
+            rotation.label(text="Rotation (deg)", icon="DRIVER_ROTATIONAL_DIFFERENCE")
+            rotation.prop(ui, "transform_rotate_x_deg", text="X")
+            rotation.prop(ui, "transform_rotate_y_deg", text="Y")
+            rotation.prop(ui, "transform_rotate_z_deg", text="Z")
         action_id = "parametric_cad.apply_transform" if editing else "parametric_cad.transform"
         action_icon = "FILE_REFRESH" if editing else "OBJECT_ORIGIN"
     elif kind == "MIRROR":
-        form.prop(ui, "mirror_source_feature_id", text="Source Feature")
-        form.prop(ui, "mirror_plane_reference", text="Mirror Plane")
-        form.prop(ui, "mirror_plane_offset_mm", text="Offset (mm)")
+        form.prop(ui, "mirror_source_feature_id", text="Source" if in_tool_header else "Source Feature")
+        form.prop(ui, "mirror_plane_reference", text="Plane" if in_tool_header else "Mirror Plane")
+        form.prop(ui, "mirror_plane_offset_mm", text="mm" if in_tool_header else "Offset (mm)")
         action_id = "parametric_cad.apply_mirror" if editing else "parametric_cad.mirror"
         action_icon = "FILE_REFRESH" if editing else "MOD_MIRROR"
     else:
@@ -210,7 +229,9 @@ def _draw_feature_settings(context, layout, kind: str) -> None:
     panel.separator(factor=0.4)
     panel.operator(
         action_id,
-        text="Apply & Rebuild" if editing else f"Create {kind.title()}",
+        text=("Apply" if in_tool_header and editing else
+              "Create" if in_tool_header else
+              "Apply & Rebuild" if editing else f"Create {kind.title()}"),
         icon=action_icon,
     )
     panel.operator(
@@ -402,6 +423,49 @@ _registered_tools = []
 _toolbar_registered = False
 
 
+def _ensure_view3d_regions_visible():
+    """Keep the native toolbar and top tool settings visible after startup."""
+
+    if not _toolbar_registered:
+        return None
+    window_manager = getattr(bpy.context, "window_manager", None)
+    for window in getattr(window_manager, "windows", ()):
+        screen = getattr(window, "screen", None)
+        for area in getattr(screen, "areas", ()):
+            if area.type != "VIEW_3D":
+                continue
+            space = area.spaces.active
+            space.show_region_toolbar = True
+            space.show_region_tool_header = True
+            area.tag_redraw()
+    return None
+
+
+def _ungroup_cad_tools() -> None:
+    """Keep registered CAD tools as individual toolbar buttons."""
+
+    from bl_ui.space_toolsystem_common import ToolSelectPanelHelper
+
+    toolbar = ToolSelectPanelHelper._tool_class_from_space_type("VIEW_3D")
+    cad_ids = {tool.bl_idname for tool in _registered_tools}
+    for tools in toolbar._tools.values():
+        for index in range(len(tools) - 1, -1, -1):
+            group = tools[index]
+            if (
+                type(group) is not tuple
+                or not any(getattr(item, "idname", None) in cad_ids for item in group)
+            ):
+                continue
+            expanded = []
+            for item in group:
+                if item is None:
+                    continue
+                if expanded:
+                    expanded.append(None)
+                expanded.append(item)
+            tools[index:index + 1] = expanded
+
+
 def register() -> None:
     """Register only the tools for the current CAD editing stage."""
 
@@ -409,6 +473,7 @@ def register() -> None:
     _registered_tools = []
     _toolbar_registered = True
     refresh_toolbar()
+    bpy.app.timers.register(_ensure_view3d_regions_visible, first_interval=0.5)
 
 
 def refresh_toolbar(context=None) -> None:
@@ -416,7 +481,7 @@ def refresh_toolbar(context=None) -> None:
 
     Blender 5.1 copies a WorkSpaceTool class into a static ToolDef and does
     not call a class-level ``poll`` while drawing the toolbar.  Re-registering
-    the small stage-specific group is therefore the reliable way to keep
+    the small stage-specific tool set is therefore the reliable way to keep
     Sketch tools out of the finished-body workflow (and vice versa).
     """
 
@@ -460,12 +525,15 @@ def refresh_toolbar(context=None) -> None:
             bpy.utils.register_tool(
                 tool,
                 after=after,
-                separator=index == 0 or index == 1,
+                separator=True,
+                group=index == 0,
             )
         except Exception as exc:  # Blender version/reload may already own a tool.
             print(f"Parametric CAD toolbar tool {tool.bl_idname!r} unavailable: {exc}")
             continue
         _registered_tools.append(tool)
+
+    _ungroup_cad_tools()
 
 
 def unregister() -> None:

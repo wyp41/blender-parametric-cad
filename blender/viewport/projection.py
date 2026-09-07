@@ -10,7 +10,15 @@ from ...sketch.sketch import SketchFeature, sketch_normal
 
 def screen_to_sketch(context, event, sketch: SketchFeature) -> tuple[float, float] | None:
     region = context.region
-    region_3d = context.space_data.region_3d
+    space = context.space_data
+    if (
+        region is None
+        or region.type != "WINDOW"
+        or space is None
+        or not hasattr(space, "region_3d")
+    ):
+        return None
+    region_3d = space.region_3d
     coordinate = (event.mouse_region_x, event.mouse_region_y)
     ray_origin = view3d_utils.region_2d_to_origin_3d(region, region_3d, coordinate)
     ray_direction = view3d_utils.region_2d_to_vector_3d(region, region_3d, coordinate)

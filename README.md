@@ -1,7 +1,7 @@
 # Blender Parametric CAD
 
 An AI-first, history-based parametric CAD extension for Blender 5.1.2, designed
-for Codex, Claude, and other tool-using AI systems. Version 0.16.9 provides a
+for Codex, Claude, and other tool-using AI systems. Version 0.16.10 provides a
 real MCP interface and a Python API so an AI can create sketches, features,
 booleans, transforms, mirrors, and per-Part exports through normal CAD
 operations—not by spending tokens on mouse clicks or computer-use screenshots.
@@ -34,6 +34,8 @@ source or selected history item, parameters, Name and Rename, and Apply &
 Rebuild in one place, so there is no separate Features page to hunt through.
 Transform's Translation and Rotation groups are collapsed by default; expand
 only the group being edited so the full viewport remains visible.
+Each contextual CAD tool is now an independent left-toolbar button, separate
+from Add Cube; Blender's native tool groups are unchanged.
 
 The resulting model is still a native, editable Blender workflow: every AI
 operation is stored as persistent CAD history, and the same Sketches, feature
@@ -56,7 +58,7 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.16.9.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.16.10.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## AI/API skill
@@ -103,7 +105,7 @@ same Blender window.
 
 Warnings such as `Policy violation with top level module: blender_parametric_cad`
 come from Blender's extension namespace policy, not from another add-on and not
-from the MCP port. Version 0.16.9 loads the worker through Blender's qualified
+from the MCP port. Version 0.16.10 loads the worker through Blender's qualified
 `bl_ext.<repository>.blender_parametric_cad` namespace and keeps bundled modules
 out of the global Python namespace. It also keeps the staged native toolbar in
 sync with CAD mode and consumes the initial click for CAD Measure. After
@@ -115,7 +117,7 @@ can be resolved by using that service or selecting a free port.
 
 Upgrade note: windows left behind by releases before 0.15.0 used a private
 per-client socket and cannot be rediscovered after their MCP parent exits. Close
-those orphan windows once, install 0.16.9, and use the in-window service toggle
+those orphan windows once, install 0.16.10, and use the in-window service toggle
 for the window you want to keep.
 
 If a machine has no display, or if a CI job needs a background worker, pass

@@ -216,6 +216,7 @@ class PARAMETRIC_CAD_OT_select_feature(bpy.types.Operator):
             # toolbar, so editing never requires hunting for a second page.
             from .history import _activate_feature_tool
 
+            context.scene.parametric_cad_ui.panel_tab = "MODEL"
             _activate_feature_tool(context, feature.feature_type)
         return {"FINISHED"}
 

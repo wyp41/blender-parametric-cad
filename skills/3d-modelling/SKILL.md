@@ -38,7 +38,10 @@ partially registered RNA classes left by an extension reload, including the
 transient panel state used by this icon rail.
 After Sketch Edit ends, the native toolbar also offers contextual feature tools
 for the selected Sketch/body; the Model buttons are the direct entry point when
-no viewport click is desired.
+no viewport click is desired. Clicking a Model **Create Extrude**, **Create
+Revolve**, **Create Transform**, or **Create Mirror** button switches to Model
+and opens the complete parameter card there as well, so the operation can be
+finished without relying on a toolbar settings popover.
 
 The **Measure** section and ruler icon provide a CAD-friendly, non-destructive
 point-to-point tool. Click two viewport points to measure true 3D distance in

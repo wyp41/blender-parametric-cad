@@ -15,6 +15,7 @@ from .feature_tree import (
     draw_feature_actions,
     draw_feature_tree,
 )
+from .tools import _draw_feature_settings
 
 
 _PANEL_TITLES = {
@@ -107,7 +108,7 @@ class PARAMETRIC_CAD_PT_main(bpy.types.Panel):
         elif ui.panel_tab == "OUTPUT":
             _draw_output_section(content, part, ui)
         else:
-            _draw_model_section(content, part, ui)
+            _draw_model_section(content, context, part, ui)
 
 
 def _draw_mcp_service(layout, scene, ui):
@@ -172,7 +173,7 @@ class PARAMETRIC_CAD_PT_mcp_service(bpy.types.Panel):
         )
 
 
-def _draw_model_section(layout, part, ui):
+def _draw_model_section(layout, context, part, ui):
     controls = layout.box()
     controls.label(text="Part Studio", icon="MESH_CUBE")
     row = controls.row(align=True)
@@ -212,7 +213,8 @@ def _draw_model_section(layout, part, ui):
         actions.label(text="Select a feature above to edit or remove it.", icon="INFO")
     else:
         draw_feature_actions(layout, selected)
-        _draw_next_feature(layout, selected)
+        _draw_active_feature_editor(layout, context, selected, ui)
+        _draw_next_feature(layout, selected, ui)
 
 
 def _draw_sketch_section(layout, context, part, ui):
@@ -251,8 +253,8 @@ def _draw_sketch_section(layout, context, part, ui):
     create.operator("parametric_cad.new_sketch", icon="OUTLINER_OB_CURVE")
 
 
-def _draw_next_feature(layout, selected):
-    """Show legal modeling tools whose parameters live in the toolbar."""
+def _draw_next_feature(layout, selected, ui):
+    """Show legal modeling tools and avoid duplicate create controls."""
 
     if isinstance(selected, SketchFeature):
         title = "Next Feature — from Sketch"
@@ -265,10 +267,14 @@ def _draw_next_feature(layout, selected):
 
     card = layout.box()
     card.label(text=title, icon="ADD")
-    card.label(
-        text="Choose an operation; edit its parameters beside the toolbar icon.",
-        icon="INFO",
-    )
+    active_kind = str(getattr(ui, "feature_create_kind", "") or "").upper()
+    if active_kind in tools:
+        card.label(
+            text=f"{active_kind.title()} active — parameters shown below.",
+            icon="CHECKMARK",
+        )
+        return
+    card.label(text="Choose an operation to open its parameters below.", icon="INFO")
     for kind, label, icon in (
         ("EXTRUDE", "Extrude", "MOD_SOLIDIFY"),
         ("REVOLVE", "Revolve", "MOD_SCREW"),
@@ -283,6 +289,20 @@ def _draw_next_feature(layout, selected):
             icon=icon,
         )
         button.feature_kind = kind
+
+
+def _draw_active_feature_editor(layout, context, selected, ui):
+    """Keep create/edit parameters visible in Model beside the history tree."""
+
+    if getattr(ui, "mode", "IDLE") != "FEATURE_EDIT":
+        return
+    kind = str(
+        getattr(ui, "feature_create_kind", "")
+        or getattr(selected, "feature_type", "")
+    ).upper()
+    if kind not in {"EXTRUDE", "REVOLVE", "TRANSFORM", "MIRROR"}:
+        return
+    _draw_feature_settings(context, layout, kind)
 
 
 def _format_measure_point(point) -> str:

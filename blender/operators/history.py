@@ -77,6 +77,7 @@ class PARAMETRIC_CAD_OT_edit_cad_history(bpy.types.Operator):
             from .part import _set_active_feature
 
             _set_active_feature(ui, feature)
+            ui.panel_tab = "MODEL"
             if getattr(feature, "feature_type", None) in BODY_FEATURE_TYPES:
                 _activate_feature_tool(context, feature.feature_type)
         else:
@@ -169,6 +170,10 @@ class PARAMETRIC_CAD_OT_open_feature_tools(bpy.types.Operator):
                 f"{kind.title()} requires an earlier body feature.",
             )
             return {"CANCELLED"}
+        # The Model panel is the canonical create/edit surface.  Switching
+        # here keeps the parameters visible even when the command was started
+        # from the Sketch page or the native left toolbar.
+        ui.panel_tab = "MODEL"
         # A matching selected feature is edited in place; a Sketch/body source
         # opens a create form.  Both forms live in the native toolbar settings.
         if not editing:

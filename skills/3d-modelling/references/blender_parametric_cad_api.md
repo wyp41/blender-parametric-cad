@@ -1,7 +1,7 @@
 # Blender Parametric CAD API
 
 This reference describes the public API in the Blender Parametric CAD
-extension (current extension release 0.16.7). It covers both direct Python
+extension (current extension release 0.16.8). It covers both direct Python
 scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
 
 ## MCP bridge
@@ -103,8 +103,10 @@ When Sketch Edit is not active, the native toolbar exposes the same contextual
 Extrude/Revolve/Transform/Mirror tools for the selected history item, with the
 create or edit parameters rendered beside the active icon. Model buttons select
 the matching tool automatically when you want an immediate create action
-without a viewport click. Sketch drawing tools consume the first 3D View click
-as the first point.
+without a viewport click. They also switch the N-panel to Model and show the
+same create/edit parameter card there, including the operation button, when a
+toolbar settings popover is unavailable or hidden. Sketch drawing tools consume
+the first 3D View click as the first point.
 
 The N-panel's **Measure** page and the left-toolbar **CAD Measure** ruler are a
 non-destructive point-to-point inspection workflow. Click two viewport points;

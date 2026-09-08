@@ -6,7 +6,9 @@ from dataclasses import dataclass, field
 from math import isfinite, tau
 from typing import Any
 
+from ..features.chamfer import ChamferFeature
 from ..features.extrude import ExtrudeFeature
+from ..features.fillet import FilletFeature
 from ..features.mirror import MirrorFeature
 from ..features.revolve import RevolveFeature
 from ..features.transform import TransformFeature
@@ -29,7 +31,7 @@ from ..sketch.sketch import SketchFeature, sketch_normal
 from ..sketch.solver import SketchSolver
 from .feature import Feature
 from .part import Part
-from .references import TopoReference
+from .references import EdgeReference, TopoReference
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,19 @@ class EvaluationContext:
     evaluated_features: dict[str, Feature] = field(default_factory=dict)
     face_provenance: dict[int, TopoReference] = field(default_factory=dict)
     semantic_planes: dict[tuple, ResolvedPlane] = field(default_factory=dict)
+    # Runtime-only M7 candidates. Polygon indices live only in this cache and
+    # are discarded on every rebuild.
+    derived_plane_candidates: dict[str, tuple[Any, ...]] = field(default_factory=dict)
+    derived_polygon_candidates: dict[int, Any] = field(default_factory=dict)
+    derived_producer_feature_id: str | None = None
+    derived_candidates_ready: bool = False
+    # Runtime-only straight-edge candidates.  Mesh edge indices are valid only
+    # for this rebuild and are never serialized into the CAD document.
+    edge_provenance: dict[int, EdgeReference] = field(default_factory=dict)
+    edge_candidates: dict[int, Any] = field(default_factory=dict)
+    edge_producer_feature_id: str | None = None
+    body_producer_feature_id: str | None = None
+    edge_candidates_ready: bool = False
     # Rigid transforms applied to the Part reference frame so downstream datum
     # Sketches resolve in the same parametric coordinate system as the body.
     frame_matrix: Matrix4 = IDENTITY_MATRIX
@@ -123,6 +138,15 @@ class PartEvaluator:
             previous_frame_matrix = context.frame_matrix
             previous_planes = dict(context.resolved_planes)
             previous_semantic_planes = dict(context.semantic_planes)
+            previous_derived_planes = dict(context.derived_plane_candidates)
+            previous_derived_polygons = dict(context.derived_polygon_candidates)
+            previous_derived_producer = context.derived_producer_feature_id
+            previous_derived_ready = context.derived_candidates_ready
+            previous_edge_provenance = dict(context.edge_provenance)
+            previous_edge_candidates = dict(context.edge_candidates)
+            previous_edge_producer = context.edge_producer_feature_id
+            previous_body_producer = context.body_producer_feature_id
+            previous_edge_ready = context.edge_candidates_ready
             if isinstance(feature, SketchFeature):
                 blocked = not self._evaluate_sketch(feature, context, errors)
             elif isinstance(feature, ExtrudeFeature):
@@ -133,6 +157,10 @@ class PartEvaluator:
                 blocked = not self._evaluate_transform(feature, context, errors)
             elif isinstance(feature, MirrorFeature):
                 blocked = not self._evaluate_mirror(feature, context, errors)
+            elif isinstance(feature, ChamferFeature):
+                blocked = not self._evaluate_edge_feature(feature, context, errors, "CHAMFER")
+            elif isinstance(feature, FilletFeature):
+                blocked = not self._evaluate_edge_feature(feature, context, errors, "FILLET")
             else:
                 self._record_error(
                     feature, f"Unsupported feature: {feature.feature_type}", errors
@@ -147,6 +175,15 @@ class PartEvaluator:
                 context.frame_matrix = previous_frame_matrix
                 context.resolved_planes = previous_planes
                 context.semantic_planes = previous_semantic_planes
+                context.derived_plane_candidates = previous_derived_planes
+                context.derived_polygon_candidates = previous_derived_polygons
+                context.derived_producer_feature_id = previous_derived_producer
+                context.derived_candidates_ready = previous_derived_ready
+                context.edge_provenance = previous_edge_provenance
+                context.edge_candidates = previous_edge_candidates
+                context.edge_producer_feature_id = previous_edge_producer
+                context.body_producer_feature_id = previous_body_producer
+                context.edge_candidates_ready = previous_edge_ready
                 blocked_by = feature
 
         return EvaluationResult(not errors, context.current_body, errors, context)
@@ -161,6 +198,8 @@ class PartEvaluator:
             plane = self.plane_resolver.resolve(feature.plane_reference, context)
         except PlaneResolutionError as exc:
             self._record_error(feature, str(exc), errors)
+            if feature.plane_reference.reference_type == "DERIVED_PLANE":
+                feature.status = "BLOCKED"
             return False
         feature.apply_resolved_plane(plane)
         solved = self.solver.solve(feature)
@@ -277,6 +316,13 @@ class PartEvaluator:
             return False
 
         self._mark_evaluated(feature, context)
+        if operation in {"ADD", "REMOVE"}:
+            self._publish_derived_candidates(
+                feature,
+                context,
+                (feature.sketch_id, *feature.dependencies),
+            )
+        self._publish_edge_candidates(feature, context)
         return True
 
     def _evaluate_revolve(
@@ -362,6 +408,13 @@ class PartEvaluator:
             return False
 
         self._mark_evaluated(feature, context)
+        if feature.operation in {"ADD", "REMOVE"}:
+            self._publish_derived_candidates(
+                feature,
+                context,
+                (feature.sketch_id, *feature.dependencies),
+            )
+        self._publish_edge_candidates(feature, context)
         return True
 
     def _evaluate_transform(
@@ -394,6 +447,7 @@ class PartEvaluator:
             self._record_error(feature, str(exc), errors)
             return False
         self._mark_evaluated(feature, context)
+        self._publish_edge_candidates(feature, context)
         return True
 
     def _evaluate_mirror(
@@ -480,6 +534,63 @@ class PartEvaluator:
             self._record_error(feature, str(exc), errors)
             return False
         self._mark_evaluated(feature, context)
+        self._publish_derived_candidates(
+            feature,
+            context,
+            (feature.source_feature_id, *feature.dependencies),
+        )
+        self._publish_edge_candidates(feature, context)
+        return True
+
+    def _evaluate_edge_feature(
+        self,
+        feature: ChamferFeature | FilletFeature,
+        context: EvaluationContext,
+        errors: list[EvaluationError],
+        operation: str,
+    ) -> bool:
+        if context.current_body is None:
+            self._record_blocked(
+                feature,
+                f"{operation.title()} requires an earlier body feature.",
+                errors,
+            )
+            return False
+        references = list(feature.edge_references)
+        amount = feature.distance if isinstance(feature, ChamferFeature) else feature.radius
+        label = "Chamfer distance" if operation == "CHAMFER" else "Fillet radius"
+        if not references:
+            self._record_error(feature, f"{operation.title()} requires at least one edge.", errors)
+            return False
+        if not isfinite(amount) or amount <= 0.0:
+            self._record_error(feature, f"{label} must be finite and greater than zero.", errors)
+            return False
+        from ..sketch.edges import EdgeResolutionError, PersistentEdgeResolver
+
+        resolver = PersistentEdgeResolver()
+        try:
+            resolved_edges = resolver.resolve_all(references, context)
+            if operation == "CHAMFER":
+                result_body = self.geometry_backend.chamfer_edges(
+                    context.current_body, resolved_edges, amount
+                )
+            else:
+                result_body = self.geometry_backend.fillet_edges(
+                    context.current_body, resolved_edges, amount
+                )
+            if result_body is None:
+                raise ValueError(f"{operation.title()} produced no result.")
+            context.current_body = result_body
+            context.face_provenance = {}
+        except EdgeResolutionError as exc:
+            self._record_blocked(feature, f"{exc.status}: {exc}", errors)
+            return False
+        except Exception as exc:
+            self._record_error(feature, str(exc), errors)
+            return False
+
+        self._mark_evaluated(feature, context)
+        self._publish_edge_candidates(feature, context)
         return True
 
     def _detect_revolve_profile(self, sketch: SketchFeature, axis_reference):
@@ -546,10 +657,35 @@ class PartEvaluator:
         propagate_planes(feature, context)
 
     @staticmethod
+    def _publish_derived_candidates(
+        feature: Feature,
+        context: EvaluationContext,
+        source_feature_ids: tuple[str, ...],
+    ) -> None:
+        from ..sketch.planar_faces import publish_derived_candidates
+
+        publish_derived_candidates(context, feature.id, source_feature_ids)
+
+    @staticmethod
+    def _publish_edge_candidates(feature: Feature, context: EvaluationContext) -> None:
+        from ..sketch.edges import publish_edge_candidates
+
+        context.body_producer_feature_id = feature.id
+        publish_edge_candidates(context, feature.id)
+
+    @staticmethod
     def _record_error(
         feature: Feature, message: str, errors: list[EvaluationError]
     ) -> None:
         feature.status = "ERROR"
+        feature.error_message = message
+        errors.append(EvaluationError(feature.id, feature.name, message))
+
+    @staticmethod
+    def _record_blocked(
+        feature: Feature, message: str, errors: list[EvaluationError]
+    ) -> None:
+        feature.status = "BLOCKED"
         feature.error_message = message
         errors.append(EvaluationError(feature.id, feature.name, message))
 

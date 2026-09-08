@@ -134,7 +134,7 @@ MCP tool groups:
   `cad_delete_geometry`, `cad_profile`, `cad_delete_region`,
   `cad_restore_region`.
 - Features: `cad_create_extrude`, `cad_create_revolve`, `cad_create_transform`,
-  `cad_create_mirror`, `cad_update_feature`,
+  `cad_create_mirror`, `cad_create_chamfer`, `cad_create_fillet`, `cad_update_feature`,
   `cad_delete_feature`, `cad_suppress_feature`, `cad_rollback`,
   `cad_rebuild`.
 - Output: `cad_export_part` (isolated STL, OBJ, or PLY export by `part_id`).

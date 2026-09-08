@@ -274,14 +274,52 @@ TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
         ),
     },
     {
+        "name": "cad_create_chamfer",
+        "description": "Create an equal-distance Chamfer on persistent straight EdgeReferences. Mesh edge indices are not accepted.",
+        "inputSchema": _object(
+            {
+                "part_id": _PART_ID,
+                "name": _string("Optional feature display name."),
+                "edge_references": {
+                    "type": "array",
+                    "description": "Persistent EdgeReference objects returned by the CAD selection/history, never Blender edge indices.",
+                    "items": {"type": "object", "additionalProperties": True},
+                    "minItems": 1,
+                },
+                "distance_mm": _number("Equal chamfer distance in millimeters."),
+            },
+            ["edge_references", "distance_mm"],
+        ),
+    },
+    {
+        "name": "cad_create_fillet",
+        "description": "Create a constant-radius Fillet on persistent straight EdgeReferences. Mesh edge indices are not accepted.",
+        "inputSchema": _object(
+            {
+                "part_id": _PART_ID,
+                "name": _string("Optional feature display name."),
+                "edge_references": {
+                    "type": "array",
+                    "description": "Persistent EdgeReference objects returned by the CAD selection/history, never Blender edge indices.",
+                    "items": {"type": "object", "additionalProperties": True},
+                    "minItems": 1,
+                },
+                "radius_mm": _number("Constant fillet radius in millimeters."),
+            },
+            ["edge_references", "radius_mm"],
+        ),
+    },
+    {
         "name": "cad_update_feature",
-        "description": "Edit an existing Sketch, Extrude, Revolve, Transform, or Mirror feature and rebuild the Part Studio.",
+        "description": "Edit an existing Sketch, Extrude, Revolve, Transform, Mirror, Chamfer, or Fillet feature and rebuild the Part Studio.",
         "inputSchema": _object(
             {
                 "feature_id": _FEATURE_ID,
                 "name": _string("Optional new display name."),
                 "suppressed": {"type": "boolean", "description": "Suppress or unsuppress the feature."},
-                "distance_mm": _number("Extrude blind distance in millimeters."),
+                "distance_mm": _number(
+                    "Extrude blind distance or equal Chamfer distance in millimeters."
+                ),
                 "direction": _integer("Extrude direction, +1 or -1."),
                 "depth_mode": _string("Extrude depth mode.", ["BLIND", "THROUGH_ALL"]),
                 "angle_deg": _number("Revolve angle in degrees."),
@@ -293,6 +331,12 @@ TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
                 "rotation_deg": _VECTOR3,
                 "source_feature_id": _FEATURE_ID,
                 "mirror_plane": _MIRROR_PLANE,
+                "edge_references": {
+                    "type": "array",
+                    "description": "Persistent EdgeReference objects for Chamfer/Fillet edits.",
+                    "items": {"type": "object", "additionalProperties": True},
+                },
+                "radius_mm": _number("Fillet radius in millimeters."),
             },
             ["feature_id"],
         ),

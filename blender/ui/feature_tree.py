@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from ...features.chamfer import ChamferFeature
 from ...features.extrude import ExtrudeFeature
+from ...features.fillet import FilletFeature
 from ...features.mirror import MirrorFeature
 from ...features.revolve import RevolveFeature
 from ...features.transform import TransformFeature
@@ -35,6 +37,10 @@ def draw_feature_tree(layout, part, active_feature_id: str) -> None:
             icon = "OBJECT_ORIGIN"
         elif isinstance(feature, MirrorFeature):
             icon = "MOD_MIRROR"
+        elif isinstance(feature, ChamferFeature):
+            icon = "MOD_BEVEL"
+        elif isinstance(feature, FilletFeature):
+            icon = "MOD_BEVEL"
         operator = row.operator(
             "parametric_cad.select_feature",
             text=feature.name,
@@ -129,6 +135,10 @@ def _draw_sketch_feature_editor(body, feature, ui, part) -> None:
         source = part.get_feature(reference.feature_id)
         source_name = source.name if source else "Missing Feature"
         plane_label = f"{source_name} {reference.role.replace('_', ' ').title()}"
+    elif reference.reference_type == "DERIVED_PLANE":
+        source = part.get_feature(reference.producer_feature_id or reference.feature_id)
+        source_name = source.name if source else "Missing Boolean"
+        plane_label = f"{source_name} Derived Plane"
     else:
         source = part.get_feature(reference.feature_id)
         source_name = source.name if source else "Missing Feature"
@@ -283,6 +293,40 @@ def draw_selected_feature(layout, feature, ui, part) -> None:
                 ui,
                 "parametric_cad.apply_mirror",
                 "Apply & Rebuild",
+            )
+            _draw_error(body, feature)
+    elif isinstance(feature, ChamferFeature):
+        body = _panel(
+            layout,
+            f"cad_editor_{feature.id}",
+            f"{feature.name} — Chamfer",
+            "MOD_BEVEL",
+            default_closed=False,
+        )
+        if body is not None:
+            body.label(text=f"Edges: {len(feature.edge_references)}", icon="EDGESEL")
+            body.prop(ui, "chamfer_distance_mm", text="Distance (mm)")
+            body.operator(
+                "parametric_cad.chamfer",
+                text="Apply & Rebuild",
+                icon="FILE_REFRESH",
+            )
+            _draw_error(body, feature)
+    elif isinstance(feature, FilletFeature):
+        body = _panel(
+            layout,
+            f"cad_editor_{feature.id}",
+            f"{feature.name} — Fillet",
+            "MOD_BEVEL",
+            default_closed=False,
+        )
+        if body is not None:
+            body.label(text=f"Edges: {len(feature.edge_references)}", icon="EDGESEL")
+            body.prop(ui, "fillet_radius_mm", text="Radius (mm)")
+            body.operator(
+                "parametric_cad.fillet",
+                text="Apply & Rebuild",
+                icon="FILE_REFRESH",
             )
             _draw_error(body, feature)
 

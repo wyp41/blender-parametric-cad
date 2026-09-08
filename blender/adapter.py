@@ -18,7 +18,12 @@ from ..core.document import CadDocument
 from ..core.evaluator import EvaluationResult, PartEvaluator
 from ..core.serialization import dumps, loads
 from ..geometry.blender_mesh_backend import BlenderMeshBackend
-from .viewport.provenance import clear_face_provenance, set_face_provenance, set_face_candidates
+from .viewport.provenance import (
+    clear_face_provenance,
+    set_edge_candidates,
+    set_face_candidates,
+    set_face_provenance,
+)
 
 
 CAD_ADDON_ID = "blender_parametric_cad"
@@ -198,7 +203,9 @@ def validate_cad_document(scene: bpy.types.Scene) -> list[str]:
         document = load_document_from_scene(scene)
     except CadDocumentError as exc:
         return [str(exc)]
+    from ..features.chamfer import ChamferFeature
     from ..features.extrude import ExtrudeFeature
+    from ..features.fillet import FilletFeature
     from ..features.mirror import MirrorFeature
     from ..features.revolve import RevolveFeature
     from ..features.transform import TransformFeature
@@ -310,7 +317,7 @@ def validate_cad_document(scene: bpy.types.Scene) -> list[str]:
                         f"{part.name}/{feature.name}: mirror source must precede the Mirror feature."
                     )
                 reference = feature.mirror_plane
-                if reference.reference_type not in {"DATUM", "FEATURE_PLANE", "FACE"}:
+                if reference.reference_type not in {"DATUM", "FEATURE_PLANE", "FACE", "DERIVED_PLANE"}:
                     diagnostics.append(f"{part.name}/{feature.name}: unsupported mirror plane reference.")
                 if reference.reference_type == "DATUM" and reference.datum_plane not in {"XY", "XZ", "YZ"}:
                     diagnostics.append(f"{part.name}/{feature.name}: invalid mirror datum plane.")
@@ -322,6 +329,18 @@ def validate_cad_document(scene: bpy.types.Scene) -> list[str]:
                     offset = None
                 if offset is None or not isfinite(offset):
                     diagnostics.append(f"{part.name}/{feature.name}: mirror plane offset is not finite.")
+            elif isinstance(feature, (ChamferFeature, FilletFeature)):
+                amount = feature.distance if isinstance(feature, ChamferFeature) else feature.radius
+                label = "chamfer distance" if isinstance(feature, ChamferFeature) else "fillet radius"
+                if not isfinite(float(amount)) or float(amount) <= 0.0:
+                    diagnostics.append(f"{part.name}/{feature.name}: {label} must be positive and finite.")
+                if not feature.edge_references:
+                    diagnostics.append(f"{part.name}/{feature.name}: no persistent edges are selected.")
+                for reference in feature.edge_references:
+                    if getattr(reference, "reference_type", None) != "EDGE":
+                        diagnostics.append(
+                            f"{part.name}/{feature.name}: invalid persistent edge reference."
+                        )
 
         result_object = _find_result_object(part.id)
         if result_object is None:
@@ -482,6 +501,9 @@ def rebuild_part(scene: bpy.types.Scene, part_id: str | None = None) -> Evaluati
         )
 
     result = PartEvaluator(BlenderMeshBackend()).evaluate(part)
+    from ..sketch.plane import register_runtime_evaluation
+
+    register_runtime_evaluation(part.id, result.context)
     save_document_to_scene(scene, document)
     display = _ensure_collection(scene, "CAD", "DISPLAY")
 
@@ -529,6 +551,7 @@ def rebuild_part(scene: bpy.types.Scene, part_id: str | None = None) -> Evaluati
     set_face_provenance(result_object, provenance)
     if result.context:
         set_face_candidates(result_object, result.context)
+        set_edge_candidates(result_object, result.context)
     result_object.update_tag()
     bpy.context.view_layer.update()
     return result

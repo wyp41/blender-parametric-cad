@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import bpy
 from bpy.types import WorkSpaceTool
 
@@ -219,6 +221,29 @@ def _draw_feature_settings(context, layout, kind: str) -> None:
         form.prop(ui, "mirror_plane_offset_mm", text="mm" if in_tool_header else "Offset (mm)")
         action_id = "parametric_cad.apply_mirror" if editing else "parametric_cad.mirror"
         action_icon = "FILE_REFRESH" if editing else "MOD_MIRROR"
+    elif kind in {"CHAMFER", "FILLET"}:
+        selected_edges = []
+        try:
+            selected_edges = json.loads(ui.selected_edge_references or "[]")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            selected_edges = []
+        edge_row = form
+        edge_row.label(
+            text=f"Edges: {len(selected_edges)}" if in_tool_header else f"Edges selected: {len(selected_edges)}",
+            icon="EDGESEL",
+        )
+        select = edge_row.operator(
+            "parametric_cad.select_edge",
+            text="Pick" if in_tool_header else "Select Edges",
+            icon="EDGESEL",
+        )
+        if kind == "CHAMFER":
+            form.prop(ui, "chamfer_distance_mm", text="mm" if in_tool_header else "Distance (mm)")
+            action_id = "parametric_cad.chamfer"
+        else:
+            form.prop(ui, "fillet_radius_mm", text="mm" if in_tool_header else "Radius (mm)")
+            action_id = "parametric_cad.fillet"
+        action_icon = "MOD_BEVEL"
     else:
         panel.label(text="Unsupported feature tool.", icon="ERROR")
         return
@@ -387,6 +412,46 @@ class PARAMETRIC_CAD_WST_mirror(_CADFeatureTool):
     )
 
 
+class PARAMETRIC_CAD_WST_chamfer(_CADFeatureTool):
+    bl_idname = "parametric_cad.feature_chamfer"
+    bl_label = "CAD Chamfer"
+    bl_description = "Select persistent straight edges and create an equal-distance chamfer"
+    bl_icon = "ops.mesh.bevel"
+    feature_kind = "CHAMFER"
+
+    @staticmethod
+    def draw_settings(context, layout, _tool):
+        _draw_feature_settings(context, layout, "CHAMFER")
+
+    bl_keymap = (
+        (
+            "parametric_cad.open_feature_tools",
+            {"type": "LEFTMOUSE", "value": "PRESS"},
+            {"properties": [("feature_kind", "CHAMFER")]},
+        ),
+    )
+
+
+class PARAMETRIC_CAD_WST_fillet(_CADFeatureTool):
+    bl_idname = "parametric_cad.feature_fillet"
+    bl_label = "CAD Fillet"
+    bl_description = "Select persistent straight edges and create a constant-radius fillet"
+    bl_icon = "ops.mesh.bevel"
+    feature_kind = "FILLET"
+
+    @staticmethod
+    def draw_settings(context, layout, _tool):
+        _draw_feature_settings(context, layout, "FILLET")
+
+    bl_keymap = (
+        (
+            "parametric_cad.open_feature_tools",
+            {"type": "LEFTMOUSE", "value": "PRESS"},
+            {"properties": [("feature_kind", "FILLET")]},
+        ),
+    )
+
+
 TOOL_CLASSES = (
     PARAMETRIC_CAD_WST_measure,
     PARAMETRIC_CAD_WST_select,
@@ -400,6 +465,8 @@ TOOL_CLASSES = (
     PARAMETRIC_CAD_WST_revolve,
     PARAMETRIC_CAD_WST_transform,
     PARAMETRIC_CAD_WST_mirror,
+    PARAMETRIC_CAD_WST_chamfer,
+    PARAMETRIC_CAD_WST_fillet,
 )
 
 FEATURE_TOOL_CLASSES = (
@@ -407,6 +474,8 @@ FEATURE_TOOL_CLASSES = (
     PARAMETRIC_CAD_WST_revolve,
     PARAMETRIC_CAD_WST_transform,
     PARAMETRIC_CAD_WST_mirror,
+    PARAMETRIC_CAD_WST_chamfer,
+    PARAMETRIC_CAD_WST_fillet,
 )
 
 SKETCH_TOOL_CLASSES = (

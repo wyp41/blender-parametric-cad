@@ -1,68 +1,66 @@
 # Blender Parametric CAD
 
-An AI-first, history-based parametric CAD extension for Blender 5.1.2, designed
-for Codex, Claude, and other tool-using AI systems. Version 0.16.12 provides a
-real MCP interface and a Python API so an AI can create sketches, features,
-booleans, transforms, mirrors, and per-Part exports through normal CAD
-operations—not by spending tokens on mouse clicks or computer-use screenshots.
-This release tightens Revolve validation and mesh generation: a boundary
-SketchLine can be the axis, axis direction is preserved across edits and
-cross-Sketch references, degenerate/zero-volume sweeps are rejected, and
-selected result objects hydrate the matching feature parameters. Failed
-rebuilds keep the last valid viewport mesh and mark downstream history as
-blocked, while the staged toolbar now exposes only Sketch tools during Sketch
-Edit and only body-feature tools during Feature Edit.
-Feature settings are now anchored to the selected left-toolbar icon: the
-popover starts with the current object and an explicit Create/Edit state,
-shows one readable parameter per row, and keeps Rename plus full-width
-Apply & Rebuild/Create and Cancel controls together. Create
-Extrude/Revolve/Transform/Mirror also opens a visible parameter card directly
-in Model as a fallback, so the operation can be completed even when the
-toolbar settings popover is hidden.
-This release also adds a CAD-friendly point measurement tool: click two points
-to get a true 3D millimeter distance, signed XYZ components, vertex/Sketch
-snapping, and an always-visible viewport annotation. It hardens Blender RNA
-class registration so extension reloads
-do not leave stale UI properties such as `panel_tab` behind. The CAD panel now
-keeps MCP service controls in a collapsible section and places rollback plus
-history actions under Model → History. The N-panel is organized as Model,
-Sketch, Measure, and Output; feature parameters are kept beside the matching
-native left-toolbar icon. After a Sketch is finished, Model presents only the
-next legal
-Extrude/Revolve or Transform/Mirror actions. Selecting a feature tool shows its
-source or selected history item, parameters, Name and Rename, and Apply &
-Rebuild in one place, so there is no separate Features page to hunt through.
-Transform's Translation and Rotation groups are collapsed by default; expand
-only the group being edited so the full viewport remains visible.
-Each contextual CAD tool is now an independent left-toolbar button, separate
-from Add Cube; Blender's native tool groups are unchanged.
-The MCP bridge now also exposes `blender_execute_python`, which runs trusted
-multiline Python in the connected Blender process on Blender's main thread,
-preserving a Console-like namespace without Computer Use.
+AI-first, history-based parametric CAD for Blender 5.1.2.
 
-The resulting model is still a native, editable Blender workflow: every AI
-operation is stored as persistent CAD history, and the same Sketches, feature
-parameters, dimensions, references, and generated result can be inspected and
-modified directly in Blender. This makes human–AI co-design practical: the AI
-can handle precise, repeatable construction while a person reviews, adjusts,
-or continues the design interactively, reducing both the token cost and the
-technical barrier of 3D modeling.
+Version `0.16.12` provides:
 
-The extension implements the M3.5–M3.6 Part Studio, precise Sketch and unified
-Extrude workflows, the M4 semantic face-selection/Revolve milestone, and M5
-parametric Transform, Sketch-plane offset, and Mirror features. Arc-based
-composite sketch regions, interactive sketch cleanup/snapping, and robust
-Boolean connectivity checks remain enabled.
+- A dependency-free MCP server and a direct Python API.
+- Persistent, editable CAD history based on stable UUIDs.
+- Sketch, Extrude, Revolve, Transform, Mirror, Chamfer, and Fillet tools.
+- Semantic planar and straight-edge references that survive rebuilds.
+- Per-Part Studio export to `STL`, `OBJ`, and `PLY`.
+- Direct Blender Python execution through `blender_execute_python`.
 
-The persistent JSON CAD history is authoritative. Blender result meshes,
-Boolean tools, and sketch overlays are disposable outputs resolved from stable
-CAD UUIDs.
+Generated Blender meshes are disposable outputs. A failed rebuild keeps the last
+valid viewport mesh and marks downstream history as `BLOCKED`.
+
+## UI at a glance
+
+- `Model`: Part Studios, feature history, rollback, and feature actions.
+- `Sketch`: support selection and sketch editing.
+- `Measure`: point-to-point 3D measurements with snapping.
+- `Output`: validation and per-Part export.
+- Contextual CAD tools are independent left-toolbar buttons; they are not folded
+  into Blender's native **Add Cube** group.
+- Feature parameters stay beside the matching toolbar icon. The Model panel
+  also provides a visible fallback parameter card.
+- Sketch Edit shows sketch tools. Feature Edit shows body-feature tools.
+
+## What is supported
+
+- M3.5–M3.6 Part Studio, Sketch, and unified Extrude workflows.
+- M4 semantic face selection and Revolve.
+- M5 Transform, Sketch-plane offset, and Mirror.
+- M6 persistent planar references; see [M6 planar references](M6_PLANAR_REFERENCES.md).
+- M7 derived planar references; see [M7 derived planar references](M7_DERIVED_PLANAR_REFERENCES.md).
+- M8 persistent straight edges, Chamfer, and Fillet; see [M8 persistent edges](M8_PERSISTENT_EDGES.md).
+
+The persistent JSON CAD history is authoritative. Blender result meshes, Boolean
+tools, and sketch overlays are disposable outputs resolved from stable CAD UUIDs.
 
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
 **Install from Disk**, and select `blender_parametric_cad-0.16.12.zip`. Enable
 **Blender Parametric CAD** if needed.
+
+## M7 derived planar references
+
+Boolean-created planar regions that do not match an existing M6 semantic plane
+can now be selected as persistent Sketch supports when their producer-local
+plane and optional region hint resolve uniquely. See [M7 derived planar
+references](M7_DERIVED_PLANAR_REFERENCES.md) for the matching rules and limits.
+
+## M8 persistent straight edges
+
+M8 adds persistent straight `EdgeReference` objects, screen-space hover/click
+edge selection, Shift-click multi-selection, equal-distance Chamfer, and
+constant-radius Fillet. Edge references use adjacent semantic planes and
+producer-local line signatures; Blender edge indices remain runtime-only.
+Missing or ambiguous edges block the dependent feature instead of silently
+choosing another edge. Curved edges, tangent chains, and variable-radius
+operations remain out of scope. See [M8 persistent edges](M8_PERSISTENT_EDGES.md)
+for the identity, resolver, persistence, tolerance, and verification details.
 
 ## AI/API skill
 
@@ -80,63 +78,32 @@ from AI-generated instructions or scripts.
 ## MCP server
 
 The repository includes a dependency-free MCP server for Codex, Claude, and
-other MCP clients. It first discovers and connects to an already-running
-**CAD MCP Service** in Blender. If no live service is published, it starts one
-persistent, **visible Blender 5.1.2 window** on the first tool call. A shared
-endpoint file plus a startup lock makes concurrent/restarted MCP processes
-reuse that same service instead of opening another window. The service remains
-listening when the stdio MCP process exits, so a later MCP process can reconnect
-to the same Blender window. Requests are serviced through Blender's timer API
-instead of blocking Blender's UI thread, so each sketch, feature, Boolean,
-rebuild, and export is reflected in the open viewport as the AI works.
+other MCP clients.
 
-For the strongest “edit this exact window” workflow, enable the extension in
-the Blender window you want to keep, open the CAD tab, expand the **CAD MCP
-Service** section, and click **Start Service in This Window**. Then
-start/restart the MCP client once. The bridge reads the published endpoint and
-does not call
-`Popen(Blender)` while that service is reachable. If the service is not
-enabled, the fallback starts at most one worker for the configured endpoint;
-the lock prevents duplicate fallback windows from concurrent MCP clients.
-If **Start Service in This Window** reports that the port is already in use,
-the add-on identifies a reachable CAD service and tells you to use that
-existing Blender window; it never silently starts a second service. For an
-unrelated process occupying the port, stop that process or choose another port
-in the CAD panel while keeping the same endpoint file in the MCP configuration.
-The AI therefore calls semantic CAD actions in one normal modeling session
-instead of repeatedly starting Blender, driving the UI, or describing
-screenshots. This substantially reduces token consumption while preserving a
-complete, inspectable feature history that a person can continue editing in the
-same Blender window.
+### How it works
 
-### Blender Preferences warnings
+- The bridge first discovers an already-running **CAD MCP Service** in Blender.
+- If none is available, it starts one persistent, visible Blender 5.1.2 window
+  on the first tool call.
+- A shared endpoint file and startup lock prevent duplicate fallback workers.
+- The service remains available after the stdio MCP process exits.
+- Blender timer callbacks keep the UI thread responsive while sketches, features,
+  Booleans, rebuilds, and exports run in the same viewport.
 
-Warnings such as `Policy violation with top level module: blender_parametric_cad`
-come from Blender's extension namespace policy, not from another add-on and not
-from the MCP port. Version 0.16.12 loads the worker through Blender's qualified
-`bl_ext.<repository>.blender_parametric_cad` namespace and keeps bundled modules
-out of the global Python namespace. It also keeps the staged native toolbar in
-sync with CAD mode and consumes the initial click for CAD Measure. After
-upgrading, restart Blender once (or disable/re-enable the extension) so modules
-imported by an older worker are cleared. A genuine `Address already in use`
-message is a separate socket issue;
-it means the endpoint is owned by an existing service or another application and
-can be resolved by using that service or selecting a free port.
+### Use an existing Blender window
 
-Upgrade note: windows left behind by releases before 0.15.0 used a private
-per-client socket and cannot be rediscovered after their MCP parent exits. Close
-those orphan windows once, install 0.16.12, and use the in-window service toggle
-for the window you want to keep.
+1. Enable the extension in the Blender window to keep.
+2. Open the CAD tab and expand **CAD MCP Service**.
+3. Click **Start Service in This Window**.
+4. Start or restart the MCP client once.
 
-If a machine has no display, or if a CI job needs a background worker, pass
-`--headless` or set `BLENDER_CAD_HEADLESS=1`. On macOS, headless mode selects
-the OpenGL backend by default to avoid Blender 5.1.2 Metal initialization
-crashes observed on some systems. Override this with `--gpu-backend` or
-`BLENDER_CAD_GPU_BACKEND=opengl|metal|vulkan` when needed. A visible session
-can also use `BLENDER_CAD_GPU_BACKEND=opengl` if the normal Metal backend is
-unstable.
+If the port is already in use, the add-on points to the reachable existing
+service instead of silently opening a second Blender window. For an unrelated
+process, stop it or choose another port while keeping the endpoint path aligned.
 
-Configure the MCP client with the checked-out server file:
+### Configure the MCP client
+
+Use the checked-out server file:
 
 ```json
 {
@@ -157,25 +124,40 @@ Configure the MCP client with the checked-out server file:
 }
 ```
 
-`BLENDER_CAD_FILE` is optional. When set, the worker opens that file at startup;
-`BLENDER_CAD_AUTOSAVE` makes every mutating call save it (when omitted, the
-worker autosaves to `BLENDER_CAD_FILE`). Otherwise use the `cad_save_scene`
-tool. `BLENDER_CAD_PORT` defaults to `9800`; `BLENDER_CAD_ENDPOINT_FILE` is an
-optional shared discovery path (the system temporary directory is used when it
-is omitted). Set `BLENDER_CAD_AUTOSTART` to `0` when the MCP client must never
-launch Blender and may only use an already-running service. Keep the same port
-and endpoint path in the Blender service and
-the MCP client. The MCP tools use millimeters and degrees for human-friendly inputs,
-while the direct Python API keeps its documented meter/radian units. Tool
-discovery also exposes the skill and API reference as MCP resources. Because
-the visible service is the same live Blender session, there is no separate
-AI-only copy to reopen: the person can inspect or edit the CAD history while
-the MCP session is running, and later calls rebuild from that shared document.
-When an existing service is found, `BLENDER_CAD_FILE` is deliberately ignored:
-the already-open window is the source of truth.
-The built-in CAD service speaks this extension's semantic `cad_*` protocol. A
-generic third-party Blender MCP add-on may expose a different protocol and is
-not automatically interchangeable with this server.
+Configuration notes:
+
+- `BLENDER_CAD_FILE` is optional and opens a file at worker startup.
+- `BLENDER_CAD_AUTOSAVE` saves every mutating call. If omitted, the worker
+  saves to `BLENDER_CAD_FILE`; without either path, use `cad_save_scene`.
+- `BLENDER_CAD_PORT` defaults to `9800`.
+- `BLENDER_CAD_ENDPOINT_FILE` is optional; the system temporary directory is
+  used when it is omitted.
+- Set `BLENDER_CAD_AUTOSTART=0` to use only an already-running service.
+- Keep the same port and endpoint path in Blender and the MCP client.
+- MCP tools use millimeters/degrees. The direct Python API uses its documented
+  meter/radian units.
+- When an existing service is found, `BLENDER_CAD_FILE` is ignored because the
+  open Blender window is the source of truth.
+- The built-in service speaks this extension's semantic `cad_*` protocol. A
+  third-party Blender MCP add-on may expose a different protocol.
+
+### Blender Preferences warnings
+
+- `Policy violation with top level module: blender_parametric_cad` is a Blender
+  extension namespace warning, not an MCP port error.
+- After upgrading, restart Blender once or disable/re-enable the extension so
+  modules from an older worker are cleared.
+- `Address already in use` means the endpoint belongs to an existing service or
+  another application. Reuse that service or choose another port.
+- Windows from releases before `0.15.0` used private per-client sockets. Close
+  those orphan windows once, then install `0.16.12` and use the in-window toggle.
+
+### Headless mode
+
+For CI or machines without a display, pass `--headless` or set
+`BLENDER_CAD_HEADLESS=1`. On macOS, headless mode defaults to OpenGL to avoid
+some Blender 5.1.2 Metal initialization crashes. Override it with
+`--gpu-backend` or `BLENDER_CAD_GPU_BACKEND=opengl|metal|vulkan`.
 
 ### Direct Blender Python via MCP
 
@@ -219,7 +201,8 @@ hunting through another page.
    3D View is consumed as the first point, so no extra arming click is needed.
    After finishing, the
    same toolbar switches to contextual **Extrude**, **Revolve**, **Transform**,
-   and **Mirror** tools for the selected history item; the Model buttons remain
+   **Mirror**, **Chamfer**, and **Fillet** tools for the selected history item;
+   the Model buttons remain
    the direct, no-viewport-click entry point.
 4. To edit exact dimensions, click the Sketch row's pencil button (or
    double-click a generated result to enter its source history), then select a
@@ -249,7 +232,11 @@ hunting through another page.
    additive Extrude or Revolve and a datum or semantic plane (with optional
    offset). The mirrored tool is unioned with the current body and must remain
    one connected solid.
-10. Select any feature in the Model history and click its matching toolbar
+10. Select straight edges with **Select Edges**. Hold **Shift** to add more
+   edges, then press **Enter**. Choose **Chamfer** or **Fillet**, set the
+   distance/radius, and press **Create**. Unsupported curved or ambiguous
+   edges show an explicit diagnostic and are not reassigned.
+11. Select any feature in the Model history and click its matching toolbar
    icon. The toolbar shows the current object, **Edit** state, editable
    parameters, **Name**, **Rename**, **Apply & Rebuild**, and **Cancel** together.
    Model keeps compact inline **Feature Actions**

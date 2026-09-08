@@ -106,6 +106,7 @@ def _active_part_changed(self, context):
     self.active_sketch_entity_ids = "[]"
     self.revolve_axis_sketch_id = ""
     self.selected_face_reference = ""
+    self.selected_edge_references = "[]"
     self.feature_create_kind = ""
     self.sketch_applied_signature = ""
     self.measure_pending = False
@@ -361,6 +362,12 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
         default=False,
     )
     selected_face_reference: StringProperty(default="")
+    selected_edge_references: StringProperty(
+        name="Selected Edge References",
+        description="JSON list of persistent EdgeReferences; runtime mesh indices are not stored",
+        default="[]",
+        options={"HIDDEN"},
+    )
     show_sketches: BoolProperty(
         name="Show Sketches",
         description="Show resolved Sketch geometry outside Sketch Edit",
@@ -496,6 +503,20 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
         name="Plane Offset",
         description="Offset the mirror plane along its normal",
         default=0.0,
+    )
+    chamfer_distance_mm: FloatProperty(
+        name="Distance",
+        description="Equal-distance chamfer size in millimeters",
+        default=2.0,
+        min=0.001,
+        soft_max=100.0,
+    )
+    fillet_radius_mm: FloatProperty(
+        name="Radius",
+        description="Constant fillet radius in millimeters",
+        default=2.0,
+        min=0.001,
+        soft_max=100.0,
     )
     rectangle_x_mm: FloatProperty(name="X", default=-40.0)
     rectangle_y_mm: FloatProperty(name="Y", default=-25.0)

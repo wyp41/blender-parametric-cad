@@ -211,6 +211,8 @@ class BlenderCadWorker:
             "cad_create_revolve": self._create_revolve,
             "cad_create_transform": self._create_transform,
             "cad_create_mirror": self._create_mirror,
+            "cad_create_chamfer": self._create_chamfer,
+            "cad_create_fillet": self._create_fillet,
             "cad_update_feature": self._update_feature,
             "cad_delete_feature": self._delete_feature,
             "cad_suppress_feature": self._suppress_feature,
@@ -728,7 +730,7 @@ class BlenderCadWorker:
             (
                 feature
                 for feature in reversed(part.features[:before_index])
-                if feature.feature_type in {"EXTRUDE", "REVOLVE", "TRANSFORM", "MIRROR"}
+                if feature.feature_type in {"EXTRUDE", "REVOLVE", "TRANSFORM", "MIRROR", "CHAMFER", "FILLET"}
                 and not feature.suppressed
             ),
             None,
@@ -1024,9 +1026,79 @@ class BlenderCadWorker:
             "rebuild": self._rebuild_payload(part.id),
         }
 
+    def _edge_references(self, values: Any):
+        from ..core.serialization import edge_reference_from_dict
+
+        if not isinstance(values, list) or not values:
+            raise WorkerError("edge_references must contain at least one persistent EdgeReference.")
+        references = []
+        for value in values:
+            if not isinstance(value, dict):
+                raise WorkerError("Each edge reference must be a JSON object.")
+            if "mesh_edge_index" in value or "edge_index" in value:
+                raise WorkerError(
+                    "Persistent EdgeReference input cannot contain Blender edge indices."
+                )
+            try:
+                reference = edge_reference_from_dict(value)
+            except (TypeError, ValueError, KeyError) as exc:
+                raise WorkerError(f"Invalid persistent EdgeReference: {exc}") from exc
+            if reference.reference_type != "EDGE":
+                raise WorkerError("edge_references may contain only persistent EDGE references.")
+            references.append(reference)
+        return references
+
+    @staticmethod
+    def _edge_feature_dependencies(part, references, before_index: int | None = None):
+        previous = BlenderCadWorker._previous_body_feature(
+            part, len(part.features) if before_index is None else before_index
+        )
+        dependencies = [previous.id] if previous is not None else []
+        for reference in references:
+            if reference.producer_feature_id not in dependencies:
+                dependencies.append(reference.producer_feature_id)
+        return dependencies
+
+    def _create_edge_feature(self, arguments: dict[str, Any], kind: str) -> dict[str, Any]:
+        from ..core.serialization import feature_to_dict
+        from ..features.chamfer import ChamferFeature
+        from ..features.fillet import FilletFeature
+
+        document = self._document()
+        part = self._part(document, arguments)
+        references = self._edge_references(arguments.get("edge_references"))
+        field = "distance_mm" if kind == "CHAMFER" else "radius_mm"
+        amount = self._number(arguments, field) / 1000.0
+        if amount <= 0.0:
+            raise WorkerError(f"{field} must be greater than zero.")
+        feature_class = ChamferFeature if kind == "CHAMFER" else FilletFeature
+        parameter = {"distance": amount} if kind == "CHAMFER" else {"radius": amount}
+        feature = feature_class(
+            name=str(arguments.get("name") or part.next_feature_name(kind.title())),
+            edge_references=references,
+            dependencies=self._edge_feature_dependencies(part, references),
+            **parameter,
+        )
+        part.add_feature(feature)
+        document.active_part_id = part.id
+        self._save_document(document)
+        return {
+            "part_id": part.id,
+            "feature": feature_to_dict(feature),
+            "rebuild": self._rebuild_payload(part.id),
+        }
+
+    def _create_chamfer(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        return self._create_edge_feature(arguments, "CHAMFER")
+
+    def _create_fillet(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        return self._create_edge_feature(arguments, "FILLET")
+
     def _update_feature(self, arguments: dict[str, Any]) -> dict[str, Any]:
         from ..core.serialization import feature_to_dict
         from ..features.extrude import ExtrudeFeature
+        from ..features.chamfer import ChamferFeature
+        from ..features.fillet import FilletFeature
         from ..features.mirror import MirrorFeature
         from ..features.revolve import RevolveFeature
         from ..features.transform import TransformFeature
@@ -1138,6 +1210,18 @@ class BlenderCadWorker:
             if previous is not None and previous.id not in dependencies:
                 dependencies.append(previous.id)
             feature.dependencies = dependencies
+        elif isinstance(feature, (ChamferFeature, FilletFeature)):
+            before_index = part.get_feature_index(feature.id)
+            if "edge_references" in arguments:
+                feature.edge_references = self._edge_references(arguments["edge_references"])
+            if isinstance(feature, ChamferFeature) and "distance_mm" in arguments:
+                feature.distance = self._number(arguments, "distance_mm") / 1000.0
+            if isinstance(feature, FilletFeature) and "radius_mm" in arguments:
+                feature.radius = self._number(arguments, "radius_mm") / 1000.0
+            references = feature.edge_references
+            feature.dependencies = self._edge_feature_dependencies(
+                part, references, before_index=before_index
+            )
         else:
             raise WorkerError(f"Unsupported feature type: {feature.feature_type}")
         document.active_part_id = part.id

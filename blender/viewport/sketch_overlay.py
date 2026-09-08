@@ -31,6 +31,8 @@ _snap_preview: tuple[
 ] | None = None
 _hover_face = None
 _selected_face = None
+_hover_edge = None
+_selected_edges = []
 _measurement_pending: tuple[
     tuple[float, float, float], tuple[float, float, float] | None
 ] | None = None
@@ -97,6 +99,25 @@ def clear_face_selection() -> None:
     global _hover_face, _selected_face
     _hover_face = None
     _selected_face = None
+    tag_redraw()
+
+
+def set_edge_hover(hit) -> None:
+    global _hover_edge
+    _hover_edge = hit
+    tag_redraw()
+
+
+def set_edge_selection(hits) -> None:
+    global _selected_edges
+    _selected_edges = list(hits or [])
+    tag_redraw()
+
+
+def clear_edge_selection() -> None:
+    global _hover_edge, _selected_edges
+    _hover_edge = None
+    _selected_edges = []
     tag_redraw()
 
 
@@ -180,6 +201,7 @@ def stop() -> None:
         _pixel_draw_handle = None
     clear_preview()
     clear_measurement()
+    clear_edge_selection()
 
 
 def _draw_callback() -> None:
@@ -331,6 +353,16 @@ def _draw_pixel_callback() -> None:
         if _hover_face is not None and _hover_face[2] is not None
         else (0.45, 0.45, 0.45, 0.16)
     )
+    if _hover_edge is not None:
+        _draw_edge_highlight_2d(
+            _hover_edge,
+            (0.15, 0.55, 1.0, 1.0)
+            if _hover_edge[2] is not None and _hover_edge[2].semantic_reference is not None
+            else (0.55, 0.55, 0.55, 0.9),
+            width=4.0,
+        )
+    for hit in _selected_edges:
+        _draw_edge_highlight_2d(hit, (1.0, 0.45, 0.05, 1.0), width=5.0)
     _draw_face_highlight_2d(_hover_face, hover_color)
     _draw_face_highlight_2d(
         _selected_face,
@@ -472,6 +504,50 @@ def _draw_face_highlight_2d(hit, color, selected: bool = False) -> None:
         gpu.state.line_width_set(1.0)
     gpu.state.blend_set("NONE")
     gpu.state.depth_test_set("LESS_EQUAL")
+
+
+def _draw_edge_highlight_2d(hit, color, width: float = 4.0) -> None:
+    """Draw the transient edge candidate above the viewport mesh."""
+
+    if hit is None or hit[2] is None:
+        return
+    region = getattr(bpy.context, "region", None)
+    space_data = getattr(bpy.context, "space_data", None)
+    region_3d = getattr(space_data, "region_3d", None)
+    if region is None or region_3d is None:
+        return
+    obj, _edge_index, candidate = hit
+    try:
+        first = location_3d_to_region_2d(
+            region, region_3d, obj.matrix_world @ Vector(candidate.start)
+        )
+        second = location_3d_to_region_2d(
+            region, region_3d, obj.matrix_world @ Vector(candidate.end)
+        )
+        if first is None or second is None:
+            return
+        shader = gpu.shader.from_builtin("UNIFORM_COLOR")
+        batch = batch_for_shader(
+            shader,
+            "LINES",
+            {
+                "pos": [
+                    (float(first.x), float(first.y), 0.0),
+                    (float(second.x), float(second.y), 0.0),
+                ]
+            },
+        )
+        gpu.state.depth_test_set("NONE")
+        gpu.state.blend_set("ALPHA")
+        gpu.state.line_width_set(width)
+        shader.bind()
+        shader.uniform_float("color", color)
+        batch.draw(shader)
+        gpu.state.line_width_set(1.0)
+        gpu.state.blend_set("NONE")
+        gpu.state.depth_test_set("LESS_EQUAL")
+    except (AttributeError, ReferenceError, RuntimeError, TypeError, ValueError):
+        return
 
 
 def _current_polygon_indices(obj, fallback: int, reference) -> list[int]:

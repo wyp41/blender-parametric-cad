@@ -3,7 +3,81 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite, sqrt
 from typing import Any
+
+
+def _canonical_direction(values: tuple[float, float, float]) -> tuple[float, float, float]:
+    if len(values) != 3:
+        raise ValueError("Edge direction must contain three finite non-zero numbers.")
+    length = sqrt(sum(value * value for value in values))
+    if length <= 1e-12 or not all(isfinite(value) for value in values):
+        raise ValueError("Edge direction must contain three finite non-zero numbers.")
+    direction = tuple(value / length for value in values)
+    for value in direction:
+        if abs(value) <= 1e-12:
+            continue
+        if value < 0.0:
+            direction = tuple(-component for component in direction)
+        break
+    return direction
+
+
+@dataclass(frozen=True)
+class EdgeSignature:
+    """Canonical producer-local geometry for one supported straight edge.
+
+    ``local_line_offset`` is the closest point on the infinite line to the
+    local origin.  It therefore remains unchanged when the two endpoints are
+    supplied in the opposite order and is not a frozen world-space position.
+    The midpoint and length are only disambiguation hints.
+    """
+
+    local_direction: tuple[float, float, float]
+    local_line_offset: tuple[float, float, float]
+    midpoint_hint: tuple[float, float, float]
+    length_hint: float
+
+    def __post_init__(self) -> None:
+        direction = _canonical_direction(tuple(float(value) for value in self.local_direction))
+        line_offset = tuple(float(value) for value in self.local_line_offset)
+        midpoint = tuple(float(value) for value in self.midpoint_hint)
+        if len(line_offset) != 3 or len(midpoint) != 3:
+            raise ValueError("Edge signature points must contain three values.")
+        if not all(isfinite(value) for value in (*line_offset, *midpoint)):
+            raise ValueError("Edge signature points must be finite.")
+        # Store the closest point on the line, which removes any component
+        # parallel to the direction and makes equivalent representations equal.
+        projection = sum(line_offset[index] * direction[index] for index in range(3))
+        line_offset = tuple(
+            line_offset[index] - projection * direction[index] for index in range(3)
+        )
+        length = float(self.length_hint)
+        if not isfinite(length) or length <= 0.0:
+            raise ValueError("Edge signature length must be finite and greater than zero.")
+        object.__setattr__(self, "local_direction", direction)
+        object.__setattr__(self, "local_line_offset", line_offset)
+        object.__setattr__(self, "midpoint_hint", midpoint)
+        object.__setattr__(self, "length_hint", length)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "local_direction": list(self.local_direction),
+            "local_line_offset": list(self.local_line_offset),
+            "midpoint_hint": list(self.midpoint_hint),
+            "length_hint": self.length_hint,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> "EdgeSignature | None":
+        if not data:
+            return None
+        return cls(
+            local_direction=tuple(float(value) for value in data.get("local_direction", ())),
+            local_line_offset=tuple(float(value) for value in data.get("local_line_offset", ())),
+            midpoint_hint=tuple(float(value) for value in data.get("midpoint_hint", ())),
+            length_hint=float(data.get("length_hint", 0.0)),
+        )
 
 
 @dataclass(frozen=True)
@@ -30,6 +104,79 @@ class FaceReference:
     def from_dict(cls, data):
         return cls(data.get("producer_feature_id") or data["feature_id"],
                    data["role"], data.get("source_entity_id"))
+
+
+@dataclass(frozen=True)
+class EdgeReference:
+    """Persistent semantic identity for a supported straight CAD edge.
+
+    The adjacent planes and producer-local line signature are persistent.  A
+    Blender mesh edge index is intentionally absent; indices belong only to
+    the runtime candidate cache rebuilt from the current display mesh.
+    """
+
+    producer_feature_id: str
+    role: str | None = None
+    adjacent_plane_refs: tuple[Any | None, Any | None] = (None, None)
+    source_entity_ids: tuple[str, ...] = ()
+    local_signature: EdgeSignature | None = None
+
+    def __post_init__(self) -> None:
+        if not self.producer_feature_id:
+            raise ValueError("Edge reference requires a producer feature UUID.")
+        planes = tuple(self.adjacent_plane_refs)
+        if len(planes) != 2:
+            raise ValueError("Edge reference requires two adjacent-plane slots.")
+        source_ids = tuple(
+            dict.fromkeys(str(value) for value in self.source_entity_ids if value)
+        )
+        object.__setattr__(self, "producer_feature_id", str(self.producer_feature_id))
+        object.__setattr__(self, "adjacent_plane_refs", planes)
+        object.__setattr__(self, "source_entity_ids", source_ids)
+
+    @property
+    def reference_type(self) -> str:
+        return "EDGE"
+
+    @property
+    def feature_id(self) -> str:
+        return self.producer_feature_id
+
+    def to_dict(self) -> dict[str, Any]:
+        from .serialization import plane_reference_to_dict
+
+        return {
+            "reference_type": self.reference_type,
+            "producer_feature_id": self.producer_feature_id,
+            "role": self.role,
+            "adjacent_plane_refs": [
+                plane_reference_to_dict(reference) if reference is not None else None
+                for reference in self.adjacent_plane_refs
+            ],
+            "source_entity_ids": list(self.source_entity_ids),
+            "local_signature": (
+                self.local_signature.to_dict() if self.local_signature is not None else None
+            ),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "EdgeReference":
+        from .serialization import plane_reference_from_dict
+
+        if "mesh_edge_index" in data or "edge_index" in data:
+            raise ValueError("Persistent EdgeReference cannot contain a Blender edge index.")
+        planes = data.get("adjacent_plane_refs", ())
+        if len(planes) != 2:
+            planes = tuple(planes) + (None,) * (2 - len(planes))
+        return cls(
+            producer_feature_id=str(data.get("producer_feature_id") or data.get("feature_id") or ""),
+            role=data.get("role"),
+            adjacent_plane_refs=tuple(
+                plane_reference_from_dict(value) if value else None for value in planes[:2]
+            ),
+            source_entity_ids=tuple(data.get("source_entity_ids", ())),
+            local_signature=EdgeSignature.from_dict(data.get("local_signature")),
+        )
 
 
 @dataclass(frozen=True)

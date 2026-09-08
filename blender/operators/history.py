@@ -153,7 +153,14 @@ class PARAMETRIC_CAD_OT_open_feature_tools(bpy.types.Operator):
         part = document.active_part
         selected = part.get_feature(ui.active_feature_id) if part else None
         kind = str(self.feature_kind or "").upper()
-        if kind not in {"EXTRUDE", "REVOLVE", "TRANSFORM", "MIRROR"}:
+        if kind not in {
+            "EXTRUDE",
+            "REVOLVE",
+            "TRANSFORM",
+            "MIRROR",
+            "CHAMFER",
+            "FILLET",
+        }:
             self.report({"ERROR"}, "Unknown body feature tool.")
             return {"CANCELLED"}
         editing = getattr(selected, "feature_type", None) == kind
@@ -162,7 +169,7 @@ class PARAMETRIC_CAD_OT_open_feature_tools(bpy.types.Operator):
         ):
             self.report({"ERROR"}, "Select a Sketch feature first.")
             return {"CANCELLED"}
-        if not editing and kind in {"TRANSFORM", "MIRROR"} and (
+        if not editing and kind in {"TRANSFORM", "MIRROR", "CHAMFER", "FILLET"} and (
             part is None or previous_body_feature(part) is None
         ):
             self.report(
@@ -194,6 +201,12 @@ class PARAMETRIC_CAD_OT_open_feature_tools(bpy.types.Operator):
                 ui.transform_rotate_x_deg = 0.0
                 ui.transform_rotate_y_deg = 0.0
                 ui.transform_rotate_z_deg = 0.0
+            elif kind == "CHAMFER":
+                ui.chamfer_distance_mm = 2.0
+                ui.selected_edge_references = "[]"
+            elif kind == "FILLET":
+                ui.fillet_radius_mm = 2.0
+                ui.selected_edge_references = "[]"
         ui.feature_create_kind = "" if editing else kind
         ui.mode = "FEATURE_EDIT"
         _activate_feature_tool(context, kind)

@@ -76,7 +76,7 @@ def _orient_to_plane(context, plane: ResolvedPlane) -> None:
 
 
 def _begin_edit(context, part, sketch: SketchFeature, is_new: bool) -> None:
-    plane = resolve_sketch_plane_from_history(part, sketch.id)
+    plane = _resolve_plane_for_edit(context, part, sketch)
     sketch.apply_resolved_plane(plane)
     ui = context.scene.parametric_cad_ui
     ui.mode = "SKETCH_EDIT"
@@ -106,6 +106,24 @@ def _begin_edit(context, part, sketch: SketchFeature, is_new: bool) -> None:
     tag_redraw()
 
 
+def _resolve_plane_for_edit(context, part, sketch: SketchFeature) -> ResolvedPlane:
+    """Resolve normal history planes without requiring Blender mesh access."""
+
+    try:
+        return resolve_sketch_plane_from_history(part, sketch.id)
+    except PlaneResolutionError:
+        if sketch.plane_reference.reference_type != "DERIVED_PLANE":
+            raise
+        result = rebuild_part(context.scene, part.id)
+        if not result.success or result.context is None:
+            message = result.errors[0].message if result.errors else "Derived Sketch support could not be rebuilt."
+            raise PlaneResolutionError(message)
+        plane = result.context.resolved_planes.get(sketch.id)
+        if plane is None:
+            raise PlaneResolutionError("Derived Sketch support is unavailable after rebuild.")
+        return plane
+
+
 class PARAMETRIC_CAD_OT_track_sketch_cursor(bpy.types.Operator):
     bl_idname = "parametric_cad.track_sketch_cursor"
     bl_label = "Track Sketch Coordinates"
@@ -132,7 +150,7 @@ class PARAMETRIC_CAD_OT_track_sketch_cursor(bpy.types.Operator):
                     )
                     point = screen_to_sketch(context, event, sketch)
                 except PlaneResolutionError:
-                    point = None
+                    point = screen_to_sketch(context, event, sketch)
                 if point is not None:
                     ui.mouse_x_mm = point[0] * 1000.0
                     ui.mouse_y_mm = point[1] * 1000.0
@@ -180,9 +198,13 @@ class PARAMETRIC_CAD_OT_new_sketch(bpy.types.Operator):
                 )
         part.add_feature(sketch)
         try:
+            # A derived support is resolved from the runtime Boolean candidate
+            # cache, so persist the new history entry before rebuilding it.
+            save_document_to_scene(context.scene, document)
             _begin_edit(context, part, sketch, True)
         except PlaneResolutionError as exc:
             part.remove_feature(sketch.id)
+            save_document_to_scene(context.scene, document)
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
         ui.selected_face_reference = ""

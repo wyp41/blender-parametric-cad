@@ -24,9 +24,53 @@ PLANE_AXES: dict[str, tuple[Vector3, Vector3]] = {
 }
 
 
+# Runtime-only contexts let Blender's sketch overlay and edit tools reuse the
+# last rebuild's derived candidates. The registry is never serialized.
+_RUNTIME_EVALUATIONS: dict[str, Any] = {}
+
+
+def register_runtime_evaluation(part_id: str, context: Any) -> None:
+    if context is not None:
+        _RUNTIME_EVALUATIONS[str(part_id)] = context
+
+
+def clear_runtime_evaluation(part_id: str) -> None:
+    _RUNTIME_EVALUATIONS.pop(str(part_id), None)
+
+
+@dataclass(frozen=True)
+class RegionHint:
+    """Geometric disambiguation data for one connected planar region."""
+
+    centroid: Vector3
+    area: float
+
+    def __post_init__(self) -> None:
+        centroid = tuple(float(value) for value in self.centroid)
+        if len(centroid) != 3 or not all(isfinite(value) for value in centroid):
+            raise ValueError("Region centroid must contain three finite numbers.")
+        area = float(self.area)
+        if not isfinite(area) or area < 0.0:
+            raise ValueError("Region area must be a finite non-negative number.")
+        object.__setattr__(self, "centroid", centroid)
+        object.__setattr__(self, "area", area)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"centroid": list(self.centroid), "area": self.area}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> "RegionHint | None":
+        if not data:
+            return None
+        return cls(
+            centroid=tuple(float(value) for value in data.get("centroid", ())),
+            area=float(data.get("area", 0.0)),
+        )
+
+
 @dataclass(frozen=True)
 class PlaneReference:
-    """Stable reference to a datum or semantic feature-generated plane."""
+    """Stable reference to a datum, semantic, or Boolean-derived plane."""
 
     reference_type: str = "DATUM"
     datum_plane: str | None = "XY"
@@ -36,6 +80,14 @@ class PlaneReference:
     # Offset along the resolved plane normal, stored in meters.
     offset: float = 0.0
     face_reference: FaceReference | None = None
+    # M7 derived-plane identity.  These fields are intentionally separate from
+    # ``offset``: offset is an editable Sketch support offset, while
+    # ``local_offset`` is part of the derived face identity.
+    producer_feature_id: str | None = None
+    local_normal: Vector3 | None = None
+    local_offset: float | None = None
+    source_feature_ids: tuple[str, ...] = ()
+    region_hint: RegionHint | None = None
 
     def __post_init__(self):
         if self.face_reference is not None:
@@ -45,6 +97,78 @@ class PlaneReference:
         elif self.reference_type == "FACE" and self.feature_id:
             object.__setattr__(self, "face_reference", FaceReference(
                 self.feature_id, self.role, self.source_entity_id))
+        elif self.reference_type == "DERIVED_PLANE":
+            producer = self.producer_feature_id or self.feature_id
+            if not producer:
+                raise ValueError("Derived plane reference requires a producer feature UUID.")
+            if self.local_normal is None or self.local_offset is None:
+                raise ValueError("Derived plane reference requires local plane geometry.")
+            normal, plane_offset = canonical_plane(
+                self.local_normal, float(self.local_offset)
+            )
+            object.__setattr__(self, "producer_feature_id", str(producer))
+            object.__setattr__(self, "feature_id", str(producer))
+            object.__setattr__(self, "datum_plane", None)
+            object.__setattr__(self, "role", "DERIVED_PLANE")
+            object.__setattr__(self, "source_entity_id", None)
+            object.__setattr__(self, "local_normal", normal)
+            object.__setattr__(self, "local_offset", plane_offset)
+            object.__setattr__(
+                self,
+                "source_feature_ids",
+                tuple(dict.fromkeys(str(value) for value in self.source_feature_ids if value)),
+            )
+
+
+@dataclass(frozen=True, init=False)
+class DerivedPlaneReference(PlaneReference):
+    """Convenience constructor for the derived form of ``PlaneReference``."""
+
+    reference_type: str = "DERIVED_PLANE"
+
+    def __init__(
+        self,
+        producer_feature_id: str,
+        local_normal: Vector3,
+        local_offset: float,
+        source_feature_ids: tuple[str, ...] | list[str] = (),
+        region_hint: RegionHint | None = None,
+        offset: float = 0.0,
+    ) -> None:
+        object.__setattr__(self, "reference_type", "DERIVED_PLANE")
+        object.__setattr__(self, "datum_plane", None)
+        object.__setattr__(self, "feature_id", str(producer_feature_id))
+        object.__setattr__(self, "role", "DERIVED_PLANE")
+        object.__setattr__(self, "source_entity_id", None)
+        object.__setattr__(self, "offset", float(offset))
+        object.__setattr__(self, "face_reference", None)
+        object.__setattr__(self, "producer_feature_id", str(producer_feature_id))
+        object.__setattr__(self, "local_normal", tuple(local_normal))
+        object.__setattr__(self, "local_offset", float(local_offset))
+        object.__setattr__(self, "source_feature_ids", tuple(source_feature_ids))
+        object.__setattr__(self, "region_hint", region_hint)
+        PlaneReference.__post_init__(self)
+
+
+def canonical_plane(normal: Vector3, offset: float) -> tuple[Vector3, float]:
+    """Canonicalize equivalent ``n·x = d`` planes to one sign."""
+
+    values = tuple(float(value) for value in normal)
+    length = sqrt(sum(value * value for value in values))
+    if len(values) != 3 or length <= 1e-12 or not all(isfinite(value) for value in values):
+        raise ValueError("Plane normal must contain three finite non-zero numbers.")
+    normalized = tuple(value / length for value in values)
+    plane_offset = float(offset) / length
+    for value in normalized:
+        if abs(value) <= 1e-12:
+            continue
+        if value < 0.0:
+            normalized = tuple(-component for component in normalized)
+            plane_offset = -plane_offset
+        break
+    if not isfinite(plane_offset):
+        raise ValueError("Plane offset must be finite.")
+    return normalized, plane_offset
 
 
 SketchPlaneReference = PlaneReference
@@ -66,6 +190,9 @@ class PlaneResolver:
     """Resolve semantic planes entirely from CAD history parameters."""
 
     def resolve(self, reference: SketchPlaneReference, context: Any) -> ResolvedPlane:
+        if reference.reference_type == "DERIVED_PLANE":
+            plane = self._resolve_derived(reference, context)
+            return self._apply_offset(reference, plane)
         semantic = getattr(context, "semantic_planes", {}).get(
             (reference.feature_id, reference.role, reference.source_entity_id))
         if semantic is not None and reference.reference_type != "DATUM":
@@ -104,6 +231,32 @@ class PlaneResolver:
                 f"Unsupported plane reference type: {reference.reference_type}"
             )
 
+        return self._apply_offset(reference, plane)
+
+    def _resolve_derived(
+        self, reference: SketchPlaneReference, context: Any
+    ) -> ResolvedPlane:
+        from .planar_faces import derived_reference_status
+
+        producer = reference.producer_feature_id or reference.feature_id
+        candidates = getattr(context, "derived_plane_candidates", {}).get(producer, ())
+        if not candidates:
+            raise PlaneResolutionError(
+                "Derived planar face reference is missing after rebuild."
+            )
+        matched, status = derived_reference_status(reference, candidates)
+        if matched is None:
+            raise PlaneResolutionError(
+                "Derived planar face reference is missing after rebuild."
+                if status == "MISSING"
+                else "This planar face reference is ambiguous after rebuild."
+            )
+        return matched.plane
+
+    @staticmethod
+    def _apply_offset(
+        reference: SketchPlaneReference, plane: ResolvedPlane
+    ) -> ResolvedPlane:
         try:
             offset = float(reference.offset)
         except (TypeError, ValueError) as exc:
@@ -201,6 +354,16 @@ def resolve_sketch_plane_from_history(part: Any, sketch_id: str) -> ResolvedPlan
     from ..features.mirror import MirrorFeature
     from .planar_faces import propagate_planes
     from .sketch import SketchFeature
+
+    target = part.get_feature(sketch_id)
+    if isinstance(target, SketchFeature) and target.plane_reference.reference_type == "DERIVED_PLANE":
+        runtime = _RUNTIME_EVALUATIONS.get(str(part.id))
+        if runtime is not None:
+            plane = runtime.resolved_planes.get(sketch_id)
+            if plane is not None:
+                return plane
+            message = target.error_message or "Derived Sketch support is unavailable after rebuild."
+            raise PlaneResolutionError(message)
 
     @dataclass
     class Context:

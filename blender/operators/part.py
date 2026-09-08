@@ -5,11 +5,15 @@ from __future__ import annotations
 from math import degrees
 
 import bpy
+import json
 
 from ...core.document import CadDocument
 from ...core.part import Part
 from ...core.part import delete_feature, get_recursive_dependents
+from ...core.serialization import edge_reference_to_dict
+from ...features.chamfer import ChamferFeature
 from ...features.extrude import ExtrudeFeature
+from ...features.fillet import FilletFeature
 from ...features.mirror import MirrorFeature
 from ...features.revolve import RevolveFeature
 from ...features.transform import TransformFeature
@@ -41,6 +45,7 @@ def _set_active_feature(ui, feature) -> None:
     ui.active_sketch_entity_id = ""
     ui.active_sketch_entity_ids = "[]"
     ui.revolve_axis_sketch_id = ""
+    ui.selected_edge_references = "[]"
     ui.sketch_dirty = False
     ui.sketch_applied_signature = ""
     if isinstance(feature, ExtrudeFeature):
@@ -91,6 +96,20 @@ def _set_active_feature(ui, feature) -> None:
         except (TypeError, ValueError):
             pass
         ui.mirror_plane_offset_mm = reference.offset * 1000.0
+    elif isinstance(feature, ChamferFeature):
+        ui.chamfer_distance_mm = feature.distance * 1000.0
+        ui.selected_edge_references = json.dumps(
+            [edge_reference_to_dict(item) for item in feature.edge_references],
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    elif isinstance(feature, FilletFeature):
+        ui.fillet_radius_mm = feature.radius * 1000.0
+        ui.selected_edge_references = json.dumps(
+            [edge_reference_to_dict(item) for item in feature.edge_references],
+            separators=(",", ":"),
+            sort_keys=True,
+        )
     ui.mode = "FEATURE_EDIT" if feature else "IDLE"
 
 
@@ -118,6 +137,7 @@ class PARAMETRIC_CAD_OT_new_part(bpy.types.Operator):
         ui.sketch_dirty = False
         ui.sketch_applied_signature = ""
         ui.selected_face_reference = ""
+        ui.selected_edge_references = "[]"
         self.report({"INFO"}, f"Created {part.name}")
         return {"FINISHED"}
 
@@ -192,6 +212,7 @@ class PARAMETRIC_CAD_OT_delete_part(bpy.types.Operator):
         ui.sketch_dirty = False
         ui.sketch_applied_signature = ""
         ui.selected_face_reference = ""
+        ui.selected_edge_references = "[]"
         ui.active_part_id = document.active_part_id or "NONE"
         self.report({"INFO"}, f"Deleted {removed.name}")
         return {"FINISHED"}
@@ -211,7 +232,14 @@ class PARAMETRIC_CAD_OT_select_feature(bpy.types.Operator):
             self.report({"ERROR"}, "CAD feature no longer exists")
             return {"CANCELLED"}
         _set_active_feature(context.scene.parametric_cad_ui, feature)
-        if getattr(feature, "feature_type", None) in {"EXTRUDE", "REVOLVE", "TRANSFORM", "MIRROR"}:
+        if getattr(feature, "feature_type", None) in {
+            "EXTRUDE",
+            "REVOLVE",
+            "TRANSFORM",
+            "MIRROR",
+            "CHAMFER",
+            "FILLET",
+        }:
             # Selecting a history row also opens the matching contextual
             # toolbar, so editing never requires hunting for a second page.
             from .history import _activate_feature_tool

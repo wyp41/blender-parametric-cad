@@ -70,7 +70,7 @@ plane is derived from the Revolve history; the conical side is not.
 
 ## Validation and limits
 
-86 Python tests passed using Blender's bundled Python 3.13 executable. The
+91 Python tests passed using the available Python test runner. The
 M6/M6.2 tests cover split-top and split-cap matching, side UUIDs and rectangle
 edits, SketchLine-axis edits, Transform changes, Mirror and subsequent
 Transform, unsupported geometry, Remove propagation, exact-provenance
@@ -95,14 +95,10 @@ perpendicular to the current axis to expose a planar cap; curved
 conical/cylindrical side surfaces remain unsupported. Coincident producers are
 resolved by provenance then history order; matching is O(polygons × semantic
 planes); manually modified generated meshes / external modifiers are outside
-the persistent CAD contract; no new general-purpose Boolean face naming is
-introduced.
-
-Remaining scope is general derived planar naming for Boolean-created faces
-that cannot map to an existing semantic plane; that is M7 and is intentionally
-not implemented here. Coincident start/end cap planes (for example an exactly
-180-degree sweep) still require exact runtime provenance to disambiguate; the
-persistent reference itself remains UUID/role based.
+the persistent CAD contract. M7 now adds derived planar references for
+Boolean-created faces that cannot map to an existing semantic plane; see
+`M7_DERIVED_PLANAR_REFERENCES.md`. Persistent edges, curved-face references,
+and topology repair remain outside the current scope.
 
 ## M6.2 — Revolve cap references
 

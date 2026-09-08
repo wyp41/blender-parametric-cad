@@ -98,3 +98,13 @@ class GeometryBackend(ABC):
         """Reflect a feature tool across a resolved semantic plane."""
 
         raise NotImplementedError
+
+    def chamfer_edges(self, body: Any, resolved_edges: Any, distance: float) -> Any:
+        """Return a new body with equal-distance chamfers on runtime edges."""
+
+        raise NotImplementedError
+
+    def fillet_edges(self, body: Any, resolved_edges: Any, radius: float) -> Any:
+        """Return a new body with constant-radius fillets on runtime edges."""
+
+        raise NotImplementedError

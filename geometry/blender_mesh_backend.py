@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from math import ceil, cos, pi, sin, sqrt, tau
+from typing import Any
 
 import bpy
 
@@ -376,6 +377,115 @@ class BlenderMeshBackend(GeometryBackend):
         if tool.users == 0:
             bpy.data.meshes.remove(tool)
         return result
+
+    def chamfer_edges(
+        self, body: bpy.types.Mesh, resolved_edges, distance: float
+    ) -> bpy.types.Mesh:
+        return self._bevel_edges(body, resolved_edges, distance, segments=1, name="CAD_Chamfer_Result")
+
+    def fillet_edges(
+        self, body: bpy.types.Mesh, resolved_edges, radius: float
+    ) -> bpy.types.Mesh:
+        return self._bevel_edges(body, resolved_edges, radius, segments=8, name="CAD_Fillet_Result")
+
+    def _bevel_edges(
+        self,
+        body: bpy.types.Mesh,
+        resolved_edges,
+        amount: float,
+        segments: int,
+        name: str,
+    ) -> bpy.types.Mesh:
+        """Apply Blender's mesh bevel to a disposable copy of the body.
+
+        The edge numbers are supplied by the current runtime resolver only;
+        they never leave the evaluator or enter CAD JSON.
+        """
+
+        if body is None or not resolved_edges:
+            raise ValueError("Chamfer/Fillet requires at least one resolved edge.")
+        if amount <= 0.0:
+            raise ValueError("Chamfer distance or Fillet radius must be greater than zero.")
+
+        import bmesh
+
+        source = bmesh.new()
+        result = bpy.data.meshes.new(name)
+        try:
+            source.from_mesh(body)
+            source.verts.ensure_lookup_table()
+            source.edges.ensure_lookup_table()
+            target_edges = self._resolve_bmesh_edges(source, resolved_edges)
+            if not target_edges:
+                raise ValueError("Resolved edge no longer exists in the current body.")
+            bmesh.ops.bevel(
+                source,
+                geom=target_edges,
+                offset=float(amount),
+                segments=max(1, int(segments)),
+                profile=0.5,
+                affect="EDGES",
+                clamp_overlap=True,
+            )
+            source.to_mesh(result)
+            result.validate()
+            result.update()
+        except Exception:
+            if result.users == 0:
+                bpy.data.meshes.remove(result)
+            raise
+        finally:
+            source.free()
+        if not result.vertices or not result.polygons:
+            if result.users == 0:
+                bpy.data.meshes.remove(result)
+            raise ValueError("Blender bevel produced an empty body.")
+        if body.users == 0:
+            self._face_provenance.pop(id(body), None)
+            self._revolve_cap_roles.pop(id(body), None)
+            bpy.data.meshes.remove(body)
+        return result
+
+    @staticmethod
+    def _resolve_bmesh_edges(bmesh_data, resolved_edges):
+        """Map disposable resolver results to the current BMesh edges.
+
+        ``BMesh.from_mesh`` normally preserves edge order, but order is not a
+        CAD identity and should not be relied on by the geometry operation.
+        Endpoint geometry is copied from the same source mesh, so exact
+        coordinate keys provide a deterministic runtime mapping.  The mesh
+        index is used only to disambiguate duplicate coincident runtime edges.
+        """
+
+        by_endpoints: dict[tuple[tuple[float, float, float], ...], list[Any]] = {}
+        for edge in bmesh_data.edges:
+            key = tuple(
+                sorted(
+                    tuple(float(value) for value in vertex.co)
+                    for vertex in edge.verts
+                )
+            )
+            by_endpoints.setdefault(key, []).append(edge)
+
+        selected = []
+        selected_ids: set[int] = set()
+        for resolved in resolved_edges:
+            start = tuple(float(value) for value in resolved.start)
+            end = tuple(float(value) for value in resolved.end)
+            key = tuple(sorted((start, end)))
+            matches = by_endpoints.get(key, [])
+            if len(matches) > 1:
+                index = int(getattr(resolved, "mesh_edge_index", -1))
+                indexed = bmesh_data.edges[index] if 0 <= index < len(bmesh_data.edges) else None
+                matches = [indexed] if indexed in matches else []
+            if len(matches) != 1:
+                raise ValueError("Resolved edge geometry is missing or ambiguous in the current body.")
+            edge = matches[0]
+            marker = id(edge)
+            if marker not in selected_ids:
+                selected_ids.add(marker)
+                selected.append(edge)
+        return selected
 
     def _boolean(
         self, body: bpy.types.Mesh, tool: bpy.types.Mesh, operation: str

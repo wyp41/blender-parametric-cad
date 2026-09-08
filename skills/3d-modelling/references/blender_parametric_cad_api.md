@@ -88,7 +88,7 @@ The MCP tools are:
 | --- | --- |
 | Document | `cad_status`, `cad_create_part`, `cad_set_active_part`, `cad_delete_part`, `cad_validate_document`, `cad_save_scene` |
 | Sketch | `cad_create_sketch`, `cad_add_geometry`, `cad_update_geometry`, `cad_delete_geometry`, `cad_profile`, `cad_delete_region`, `cad_restore_region` |
-| Features | `cad_create_extrude`, `cad_create_revolve`, `cad_create_transform`, `cad_create_mirror`, `cad_update_feature`, `cad_delete_feature`, `cad_suppress_feature`, `cad_rollback`, `cad_rebuild` |
+| Features | `cad_create_extrude`, `cad_create_revolve`, `cad_create_transform`, `cad_create_mirror`, `cad_create_chamfer`, `cad_create_fillet`, `cad_update_feature`, `cad_delete_feature`, `cad_suppress_feature`, `cad_rollback`, `cad_rebuild` |
 | Output | `cad_export_part` |
 | Runtime | `blender_execute_python` |
 
@@ -129,7 +129,7 @@ keep the complete viewport visible. Rollback and roll-forward remain under
 also exposes compact inline Feature Actions for delete, suppress, and Sketch edit;
 there is no separate Features workspace.
 When Sketch Edit is not active, the native toolbar exposes the same contextual
-Extrude/Revolve/Transform/Mirror tools for the selected history item, with the
+Extrude/Revolve/Transform/Mirror/Chamfer/Fillet tools for the selected history item, with the
 create or edit parameters rendered beside the active icon. Model buttons select
 the matching tool automatically when you want an immediate create action
 without a viewport click. They also switch the N-panel to Model and show the
@@ -164,6 +164,12 @@ cad_create_transform({"part_id": "<part UUID>",
 cad_create_mirror({"part_id": "<part UUID>",
                    "source_feature_id": "<additive feature UUID>",
                    "mirror_plane": "YZ"})
+cad_create_chamfer({"part_id": "<part UUID>",
+                    "edge_references": [<persistent EdgeReference JSON>],
+                    "distance_mm": 2})
+cad_create_fillet({"part_id": "<part UUID>",
+                   "edge_references": [<persistent EdgeReference JSON>],
+                   "radius_mm": 2})
 cad_export_part({"part_id": "<part UUID>", "filepath": "/tmp/bracket.stl",
                  "file_format": "STL"})
 ```
@@ -183,9 +189,14 @@ M5 MCP feature calls use these fields:
 - `cad_create_mirror`: `source_feature_id` must be an earlier additive Extrude
   or Revolve; `mirror_plane` is `"XY"`, `"XZ"`, `"YZ"`, or a semantic object with
   `type`, `feature_id`, `role`, and optional `offset_mm`.
+- `cad_create_chamfer` and `cad_create_fillet`: `edge_references` must contain
+  persistent straight-edge objects returned by the CAD selection/history. Do
+  not provide Blender mesh edge indices. `distance_mm` is the equal Chamfer
+  distance; `radius_mm` is the constant Fillet radius.
 - `cad_update_feature` accepts `offset_mm` for Sketch support planes,
   `translation_mm`/`rotation_deg` for Transform, `source_feature_id`/`mirror_plane`
-  for Mirror, and the existing Extrude or Revolve fields for those feature types.
+  for Mirror, `edge_references` plus `distance_mm`/`radius_mm` for Chamfer/Fillet,
+  and the existing Extrude or Revolve fields for those feature types.
 
 For example, a six-line closed guide profile can be appended with six `LINE`
 entities in exact local millimeter coordinates, followed by `cad_create_extrude`

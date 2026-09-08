@@ -6,20 +6,22 @@ import json
 from copy import deepcopy
 from typing import Any
 
+from ..features.chamfer import ChamferFeature
 from ..features.extrude import ExtrudeFeature
+from ..features.fillet import FilletFeature
 from ..features.mirror import MirrorFeature
 from ..features.revolve import RevolveFeature
 from ..features.transform import TransformFeature
 from ..sketch.entities import SketchArc, SketchCircle, SketchEntity, SketchLine
-from ..sketch.plane import SketchPlaneReference
+from ..sketch.plane import DerivedPlaneReference, RegionHint, SketchPlaneReference
 from ..sketch.sketch import SketchFeature
 from .feature import Feature
 from .part import Part
-from .references import AxisReference, FaceReference
+from .references import AxisReference, EdgeReference, EdgeSignature, FaceReference
 
 
 def plane_reference_to_dict(reference: SketchPlaneReference) -> dict[str, Any]:
-    return {
+    data = {
         "reference_type": reference.reference_type,
         "datum_plane": reference.datum_plane,
         "feature_id": reference.feature_id,
@@ -28,6 +30,15 @@ def plane_reference_to_dict(reference: SketchPlaneReference) -> dict[str, Any]:
         "offset": reference.offset,
         "face_reference": reference.face_reference.to_dict() if reference.face_reference else None,
     }
+    if reference.reference_type == "DERIVED_PLANE":
+        data.update(
+            producer_feature_id=reference.producer_feature_id,
+            local_normal=list(reference.local_normal or ()),
+            local_offset=reference.local_offset,
+            source_feature_ids=list(reference.source_feature_ids),
+            region_hint=reference.region_hint.to_dict() if reference.region_hint else None,
+        )
+    return data
 
 
 def plane_reference_from_dict(data: dict[str, Any] | None) -> SketchPlaneReference:
@@ -37,14 +48,62 @@ def plane_reference_from_dict(data: dict[str, Any] | None) -> SketchPlaneReferen
         value = data
     else:
         raise ValueError("Plane reference must be a JSON object.")
+    reference_type = str(value.get("reference_type", "DATUM"))
+    if reference_type == "DERIVED_PLANE":
+        return DerivedPlaneReference(
+            producer_feature_id=str(
+                value.get("producer_feature_id") or value.get("feature_id") or ""
+            ),
+            local_normal=tuple(float(item) for item in value.get("local_normal", ())),
+            local_offset=float(value.get("local_offset")),
+            source_feature_ids=tuple(value.get("source_feature_ids", ())),
+            region_hint=RegionHint.from_dict(value.get("region_hint")),
+            offset=float(value.get("offset", 0.0) or 0.0),
+        )
     return SketchPlaneReference(
-        reference_type=str(value.get("reference_type", "DATUM")),
+        reference_type=reference_type,
         datum_plane=value.get("datum_plane"),
         feature_id=value.get("feature_id"),
         role=value.get("role"),
         source_entity_id=value.get("source_entity_id"),
         offset=float(value.get("offset", 0.0) or 0.0),
         face_reference=FaceReference.from_dict(value["face_reference"]) if value.get("face_reference") else None,
+    )
+
+
+def edge_reference_to_dict(reference: EdgeReference) -> dict[str, Any]:
+    return {
+        "reference_type": reference.reference_type,
+        "producer_feature_id": reference.producer_feature_id,
+        "role": reference.role,
+        "adjacent_plane_refs": [
+            plane_reference_to_dict(item) if item is not None else None
+            for item in reference.adjacent_plane_refs
+        ],
+        "source_entity_ids": list(reference.source_entity_ids),
+        "local_signature": (
+            reference.local_signature.to_dict()
+            if reference.local_signature is not None
+            else None
+        ),
+    }
+
+
+def edge_reference_from_dict(data: dict[str, Any] | None) -> EdgeReference:
+    if not isinstance(data, dict):
+        raise ValueError("Edge reference must be a JSON object.")
+    if "mesh_edge_index" in data or "edge_index" in data:
+        raise ValueError("Persistent EdgeReference cannot contain a Blender edge index.")
+    planes = list(data.get("adjacent_plane_refs", ()))[:2]
+    planes.extend([None] * (2 - len(planes)))
+    return EdgeReference(
+        producer_feature_id=str(data.get("producer_feature_id") or data.get("feature_id") or ""),
+        role=data.get("role"),
+        adjacent_plane_refs=tuple(
+            plane_reference_from_dict(item) if item else None for item in planes
+        ),
+        source_entity_ids=tuple(data.get("source_entity_ids", ())),
+        local_signature=EdgeSignature.from_dict(data.get("local_signature")),
     )
 
 
@@ -144,6 +203,16 @@ def feature_to_dict(feature: Feature) -> dict[str, Any]:
             source_feature_id=feature.source_feature_id,
             mirror_plane=plane_reference_to_dict(feature.mirror_plane),
         )
+    elif isinstance(feature, ChamferFeature):
+        data.update(
+            edge_references=[edge_reference_to_dict(item) for item in feature.edge_references],
+            distance=feature.distance,
+        )
+    elif isinstance(feature, FilletFeature):
+        data.update(
+            edge_references=[edge_reference_to_dict(item) for item in feature.edge_references],
+            radius=feature.radius,
+        )
     else:
         raise ValueError(f"Unsupported CAD feature: {feature.feature_type}")
     return data
@@ -195,6 +264,24 @@ def feature_from_dict(data: dict[str, Any]) -> Feature:
             **common,
             source_feature_id=str(data.get("source_feature_id", "")),
             mirror_plane=plane_reference_from_dict(data.get("mirror_plane")),
+        )
+    if data["feature_type"] == "CHAMFER":
+        return ChamferFeature(
+            **common,
+            edge_references=[
+                edge_reference_from_dict(item)
+                for item in data.get("edge_references", [])
+            ],
+            distance=float(data.get("distance", 0.002)),
+        )
+    if data["feature_type"] == "FILLET":
+        return FilletFeature(
+            **common,
+            edge_references=[
+                edge_reference_from_dict(item)
+                for item in data.get("edge_references", [])
+            ],
+            radius=float(data.get("radius", 0.002)),
         )
     raise ValueError(f"Unsupported CAD feature type: {data['feature_type']}")
 

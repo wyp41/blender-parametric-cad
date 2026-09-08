@@ -32,6 +32,8 @@ class McpProtocolTests(unittest.TestCase):
         self.assertIn("cad_export_part", tool_names)
         self.assertIn("cad_create_transform", tool_names)
         self.assertIn("cad_create_mirror", tool_names)
+        self.assertIn("cad_create_chamfer", tool_names)
+        self.assertIn("cad_create_fillet", tool_names)
         self.assertIn("blender_execute_python", tool_names)
         self.assertIn("cad://api-reference", resource_uris)
 
@@ -45,8 +47,16 @@ class McpProtocolTests(unittest.TestCase):
         mirror_properties = tools["cad_create_mirror"]["inputSchema"]["properties"]
         self.assertIn("source_feature_id", mirror_properties)
         self.assertIn("mirror_plane", mirror_properties)
+        chamfer_schema = tools["cad_create_chamfer"]["inputSchema"]
+        self.assertEqual(chamfer_schema["required"], ["edge_references", "distance_mm"])
+        self.assertIn("edge_references", chamfer_schema["properties"])
+        fillet_schema = tools["cad_create_fillet"]["inputSchema"]
+        self.assertEqual(fillet_schema["required"], ["edge_references", "radius_mm"])
+        self.assertIn("edge_references", fillet_schema["properties"])
         update_properties = tools["cad_update_feature"]["inputSchema"]["properties"]
         self.assertIn("offset_mm", update_properties)
+        self.assertIn("edge_references", update_properties)
+        self.assertIn("radius_mm", update_properties)
         python_schema = tools["blender_execute_python"]["inputSchema"]
         self.assertEqual(python_schema["required"], ["code"])
         self.assertIn("code", python_schema["properties"])

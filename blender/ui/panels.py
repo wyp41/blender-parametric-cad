@@ -278,7 +278,7 @@ def _draw_next_feature(layout, selected, ui):
         tools = ("EXTRUDE", "REVOLVE")
     elif getattr(selected, "feature_type", None) in BODY_FEATURE_TYPES:
         title = "Next Body Feature"
-        tools = ("TRANSFORM", "MIRROR")
+        tools = ("TRANSFORM", "MIRROR", "CHAMFER", "FILLET")
     else:
         return
 
@@ -297,6 +297,8 @@ def _draw_next_feature(layout, selected, ui):
         ("REVOLVE", "Revolve", "MOD_SCREW"),
         ("TRANSFORM", "Transform", "OBJECT_ORIGIN"),
         ("MIRROR", "Mirror", "MOD_MIRROR"),
+        ("CHAMFER", "Chamfer", "MOD_BEVEL"),
+        ("FILLET", "Fillet", "MOD_BEVEL"),
     ):
         if kind not in tools:
             continue
@@ -317,7 +319,14 @@ def _draw_active_feature_editor(layout, context, selected, ui):
         getattr(ui, "feature_create_kind", "")
         or getattr(selected, "feature_type", "")
     ).upper()
-    if kind not in {"EXTRUDE", "REVOLVE", "TRANSFORM", "MIRROR"}:
+    if kind not in {
+        "EXTRUDE",
+        "REVOLVE",
+        "TRANSFORM",
+        "MIRROR",
+        "CHAMFER",
+        "FILLET",
+    }:
         return
     _draw_feature_settings(context, layout, kind)
 
@@ -423,6 +432,8 @@ def _draw_sketch_editor(layout, context):
         if reference.reference_type == "DATUM"
         else f"Face {reference.role.replace('_', ' ').title()}"
         if reference.reference_type == "FACE"
+        else "Derived Boolean Plane"
+        if reference.reference_type == "DERIVED_PLANE"
         else "Feature End Plane"
     )
     layout.label(text=f"Editing {sketch.name} ({plane_label})")

@@ -7,7 +7,14 @@ from dataclasses import dataclass, field
 from .feature import Feature, new_uuid
 
 
-BODY_FEATURE_TYPES = {"EXTRUDE", "REVOLVE", "TRANSFORM", "MIRROR"}
+BODY_FEATURE_TYPES = {
+    "EXTRUDE",
+    "REVOLVE",
+    "TRANSFORM",
+    "MIRROR",
+    "CHAMFER",
+    "FILLET",
+}
 
 
 @dataclass

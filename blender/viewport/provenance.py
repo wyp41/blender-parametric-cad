@@ -11,6 +11,7 @@ from ...core.references import TopoReference
 
 _PROVENANCE: dict[int, dict[int, TopoReference]] = {}
 _CANDIDATES: dict[int, dict] = {}
+_EDGE_CANDIDATES: dict[int, dict] = {}
 
 
 def set_face_candidates(obj, context):
@@ -28,6 +29,22 @@ def get_face_candidates(obj):
     return _CANDIDATES.get(obj.as_pointer(), {})
 
 
+def set_edge_candidates(obj, context) -> None:
+    from ...sketch.edges import PersistentEdgeResolver
+
+    _EDGE_CANDIDATES[obj.as_pointer()] = PersistentEdgeResolver().build_cache(context)
+
+
+def get_edge_candidate(obj, mesh_edge_index):
+    obj = getattr(obj, "original", obj)
+    return _EDGE_CANDIDATES.get(obj.as_pointer(), {}).get(mesh_edge_index)
+
+
+def get_edge_candidates(obj):
+    obj = getattr(obj, "original", obj)
+    return _EDGE_CANDIDATES.get(obj.as_pointer(), {})
+
+
 def set_face_provenance(obj, references: dict[int, TopoReference]) -> None:
     _PROVENANCE[obj.as_pointer()] = dict(references)
 
@@ -43,5 +60,6 @@ def clear_face_provenance(obj) -> None:
     try:
         _PROVENANCE.pop(obj.as_pointer(), None)
         _CANDIDATES.pop(obj.as_pointer(), None)
+        _EDGE_CANDIDATES.pop(obj.as_pointer(), None)
     except ReferenceError:
         pass

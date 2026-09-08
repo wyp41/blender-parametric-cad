@@ -37,6 +37,7 @@ def register() -> None:
         sketch_tools,
         history,
         transform,
+        edge_features,
         measure,
         mcp_service,
     )
@@ -53,6 +54,7 @@ def register() -> None:
         extrude.CLASSES,
         revolve.CLASSES,
         transform.CLASSES,
+        edge_features.CLASSES,
         history.CLASSES,
         measure.CLASSES,
         mcp_service.CLASSES,
@@ -80,6 +82,7 @@ def unregister() -> None:
         sketch_tools,
         history,
         transform,
+        edge_features,
         measure,
         mcp_service,
     )
@@ -100,6 +103,7 @@ def unregister() -> None:
         extrude.CLASSES,
         revolve.CLASSES,
         transform.CLASSES,
+        edge_features.CLASSES,
         history.CLASSES,
         measure.CLASSES,
         mcp_service.CLASSES,

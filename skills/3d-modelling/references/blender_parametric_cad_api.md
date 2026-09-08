@@ -1,10 +1,19 @@
 # Blender Parametric CAD API
 
 This reference describes the public API in the Blender Parametric CAD
-extension (current extension release 0.16.11). It covers both direct Python
+extension (current extension release 0.16.12). It covers both direct Python
 scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
 
 ## MCP bridge
+
+M6 source development: `PlaneReference` (also exported under the compatible
+`SketchPlaneReference` name) supports semantic Extrude START/END/SIDE planes,
+partial-Revolve START_CAP/END_CAP planes, surviving Boolean planes, and
+supported Transform/Mirror propagation.
+`FaceReference` uses a producer feature UUID and optional source SketchLine UUID.
+Use `PlaneResolver` for history resolution and `PlanarFaceResolver` for temporary
+polygon-to-plane matching; never persist polygon indices. The full implementation
+and validation scope is documented in `M6_PLANAR_REFERENCES.md` at repository root.
 
 Run `mcp/server.py` with Python as an MCP stdio server. The bridge first reads
 the shared CAD service endpoint and connects to an already-open Blender 5.1.2
@@ -594,8 +603,10 @@ from blender_parametric_cad.core.references import (
 ```
 
 `TopoReference(feature_id, role, source_entity_id=None, reference_type="FACE")`
-supports `START_FACE`, `END_FACE`, and line-based `SIDE_FACE` from a simple
-`NEW` Extrude. It provides `to_dict()` and `from_dict(data)`.
+supports `START_FACE`, `END_FACE`, and line-based `SIDE_FACE` from an Extrude,
+plus `START_CAP` and `END_CAP` from a partial Revolve or a full-turn Revolve
+profile SketchLine (the latter requires `source_entity_id`). It provides
+`to_dict()` and `from_dict(data)`.
 
 `AxisReference` fields:
 

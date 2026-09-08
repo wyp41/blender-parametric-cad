@@ -66,6 +66,9 @@ class GeometryBackend(ABC):
     ) -> None:
         """Record transient polygon-to-semantic-face provenance for a body."""
 
+    def register_revolve_provenance(self, body: Any, feature_id: str) -> None:
+        """Record transient START/END cap provenance for a partial Revolve."""
+
     def face_provenance(self, body: Any) -> dict[int, TopoReference]:
         """Return transient provenance for the current generated mesh."""
 

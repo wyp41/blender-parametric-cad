@@ -8,7 +8,7 @@ from math import isclose, pi
 import bpy
 
 from ...core.serialization import feature_from_dict, feature_to_dict
-from ...core.references import TopoReference
+from ...core.serialization import plane_reference_from_dict
 from ...sketch.entities import SketchCircle
 from ...sketch.numeric import (
     arc_parameters,
@@ -64,26 +64,15 @@ def mark_sketch_dirty(ui, sketch: SketchFeature) -> None:
 
 def _orient_to_plane(context, plane: ResolvedPlane) -> None:
     if context.area and context.area.type == "VIEW_3D":
-        normal = tuple(round(value) for value in plane.normal)
-        view_type = {
-            (0, 0, 1): "TOP",
-            (0, 0, -1): "BOTTOM",
-            (0, -1, 0): "FRONT",
-            (0, 1, 0): "BACK",
-            (1, 0, 0): "RIGHT",
-            (-1, 0, 0): "LEFT",
-        }.get(normal, "TOP")
-        window_region = next(
-            (region for region in context.area.regions if region.type == "WINDOW"), None
-        )
-        if window_region is None:
-            return
-        try:
-            with context.temp_override(area=context.area, region=window_region):
-                bpy.ops.view3d.view_axis(type=view_type, align_active=False)
-            context.space_data.region_3d.view_perspective = "ORTHO"
-        except RuntimeError:
-            pass
+        from mathutils import Matrix, Vector
+
+        region_3d = context.space_data.region_3d
+        if region_3d is not None:
+            region_3d.view_rotation = Matrix(
+                (plane.x_axis, plane.y_axis, plane.normal)
+            ).transposed().to_quaternion()
+            region_3d.view_location = Vector(plane.origin)
+            region_3d.view_perspective = "ORTHO"
 
 
 def _begin_edit(context, part, sketch: SketchFeature, is_new: bool) -> None:
@@ -165,12 +154,10 @@ class PARAMETRIC_CAD_OT_new_sketch(bpy.types.Operator):
         ui = context.scene.parametric_cad_ui
         if ui.selected_face_reference:
             try:
-                face = TopoReference.from_dict(json.loads(ui.selected_face_reference))
-                sketch = SketchFeature.on_face(
-                    part.next_feature_name("Sketch"),
-                    face,
-                    offset=ui.new_sketch_offset_mm / 1000.0,
-                )
+                reference = plane_reference_from_dict(json.loads(ui.selected_face_reference))
+                sketch = SketchFeature(name=part.next_feature_name("Sketch"),
+                                       plane_reference=reference)
+                sketch.set_plane_offset(ui.new_sketch_offset_mm / 1000.0)
             except (TypeError, ValueError, KeyError) as exc:
                 self.report({"ERROR"}, f"Invalid selected face: {exc}")
                 return {"CANCELLED"}

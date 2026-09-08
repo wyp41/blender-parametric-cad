@@ -7,7 +7,7 @@ import json
 import bpy
 from bpy_extras import view3d_utils
 
-from ...core.references import TopoReference
+from ...sketch.plane import PlaneReference
 from ..adapter import load_document_from_scene, rebuild_part, sync_active_part_from_object
 from ..viewport.sketch_overlay import (
     clear_face_selection,
@@ -15,7 +15,8 @@ from ..viewport.sketch_overlay import (
     set_face_selection,
     tag_redraw,
 )
-from ..viewport.provenance import get_face_provenance
+from ..viewport.provenance import get_face_candidate
+from ...core.serialization import plane_reference_to_dict
 
 
 def _window_region(context):
@@ -49,17 +50,18 @@ def _raycast(context, event):
     return obj, polygon_index, reference
 
 
-def _face_reference(obj, polygon_index: int) -> TopoReference | None:
+def _face_reference(obj, polygon_index: int) -> PlaneReference | None:
     if not obj.get("cad_generated"):
         return None
-    return get_face_provenance(obj).get(polygon_index)
+    candidate = get_face_candidate(obj, polygon_index)
+    return candidate.semantic_plane if candidate else None
 
 
 class PARAMETRIC_CAD_OT_select_face(bpy.types.Operator):
     bl_idname = "parametric_cad.select_face"
     bl_label = "Select Face"
     bl_description = (
-        "Select a semantic START/END face or a line-based SIDE face from a New Extrude"
+        "Select a persistent planar support on Extrude, Boolean, Transform or Mirror results"
     )
     bl_options = {"BLOCKING"}
 
@@ -76,7 +78,7 @@ class PARAMETRIC_CAD_OT_select_face(bpy.types.Operator):
         clear_face_selection()
         context.window_manager.modal_handler_add(self)
         context.area.header_text_set(
-            "CAD: click Extrude START/END or line SIDE face; Esc cancels"
+            "CAD: click a supported planar surface; Esc cancels"
         )
         return {"RUNNING_MODAL"}
 
@@ -96,7 +98,7 @@ class PARAMETRIC_CAD_OT_select_face(bpy.types.Operator):
         if reference is None:
             self.report(
                 {"WARNING"},
-                "This face cannot yet be used as a persistent CAD reference.",
+                "This face cannot yet be used as a persistent Sketch reference.",
             )
             set_face_hover(None)
             context.area.header_text_set(None)
@@ -104,7 +106,7 @@ class PARAMETRIC_CAD_OT_select_face(bpy.types.Operator):
 
         ui = context.scene.parametric_cad_ui
         ui.selected_face_reference = json.dumps(
-            reference.to_dict(), separators=(",", ":"), sort_keys=True
+            plane_reference_to_dict(reference), separators=(",", ":"), sort_keys=True
         )
         set_face_selection(hit)
         set_face_hover(None)

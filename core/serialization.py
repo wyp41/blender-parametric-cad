@@ -15,7 +15,7 @@ from ..sketch.plane import SketchPlaneReference
 from ..sketch.sketch import SketchFeature
 from .feature import Feature
 from .part import Part
-from .references import AxisReference
+from .references import AxisReference, FaceReference
 
 
 def plane_reference_to_dict(reference: SketchPlaneReference) -> dict[str, Any]:
@@ -26,6 +26,7 @@ def plane_reference_to_dict(reference: SketchPlaneReference) -> dict[str, Any]:
         "role": reference.role,
         "source_entity_id": reference.source_entity_id,
         "offset": reference.offset,
+        "face_reference": reference.face_reference.to_dict() if reference.face_reference else None,
     }
 
 
@@ -43,6 +44,7 @@ def plane_reference_from_dict(data: dict[str, Any] | None) -> SketchPlaneReferen
         role=value.get("role"),
         source_entity_id=value.get("source_entity_id"),
         offset=float(value.get("offset", 0.0) or 0.0),
+        face_reference=FaceReference.from_dict(value["face_reference"]) if value.get("face_reference") else None,
     )
 
 

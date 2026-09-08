@@ -18,7 +18,7 @@ from ...sketch.profile import ProfileDetector
 from ...sketch.snapping import snap_targets
 from ...sketch.sketch import SketchFeature, sketch_to_world
 from ..adapter import load_document_from_scene
-from .provenance import get_face_provenance
+from .provenance import get_face_candidates
 
 _draw_handle = None
 _pixel_draw_handle = None
@@ -405,9 +405,14 @@ def _draw_face_highlight(hit, color) -> None:
         ]
     except ReferenceError:
         return
-    triangles = []
-    for index in range(1, len(points) - 1):
-        triangles.extend((points[0], points[index], points[index + 1]))
+    # Boolean cuts can leave concave n-gons; a triangle fan would highlight
+    # removed material outside the surviving polygon.
+    from mathutils.geometry import tessellate_polygon
+    triangles = [tuple(point) for triangle in tessellate_polygon(
+        [[Vector(point) for point in points]]
+    ) for point in triangle]
+    if not triangles:
+        return
     shader = gpu.shader.from_builtin("UNIFORM_COLOR")
     batch = batch_for_shader(shader, "TRIS", {"pos": triangles})
     gpu.state.depth_test_set("LESS_EQUAL")
@@ -420,11 +425,11 @@ def _draw_face_highlight(hit, color) -> None:
 
 
 def _current_polygon_index(obj, fallback: int, reference) -> int | None:
-    data = get_face_provenance(obj)
-    if fallback in data and data[fallback] == reference:
+    data = get_face_candidates(obj)
+    if fallback in data and data[fallback].semantic_plane == reference:
         return fallback
     for index, candidate in data.items():
-        if candidate == reference:
+        if candidate.semantic_plane == reference:
             return index
     return None
 

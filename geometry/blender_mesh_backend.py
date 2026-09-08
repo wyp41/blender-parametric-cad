@@ -7,6 +7,7 @@ from math import ceil, cos, pi, sin, sqrt, tau
 import bpy
 
 from ..sketch.profile import SketchProfile
+from ..sketch.entities import SketchLine
 from ..sketch.sketch import SketchFeature, sketch_normal, sketch_to_world
 from ..core.references import TopoReference
 from ..core.transform import Transform
@@ -20,6 +21,7 @@ class BlenderMeshBackend(GeometryBackend):
 
     def __init__(self) -> None:
         self._face_provenance: dict[int, dict[int, TopoReference]] = {}
+        self._revolve_cap_roles: dict[int, dict[int, tuple[str, str | None]]] = {}
 
     def create_extrusion(
         self,
@@ -96,7 +98,9 @@ class BlenderMeshBackend(GeometryBackend):
         full_turn = abs(abs(angle) - tau) <= 1e-9
         vertices: list[tuple[float, float, float]] = []
         faces: list[tuple[int, ...]] = []
+        cap_roles: dict[int, tuple[str, str | None]] = {}
         axis_tolerance = 1e-9
+        profile_cap_roles: dict[str, str] = {}
 
         def axis_distance(point: tuple[float, float, float]) -> float:
             vector = tuple(point[index] - axis_origin[index] for index in range(3))
@@ -106,6 +110,42 @@ class BlenderMeshBackend(GeometryBackend):
                 direction[0] * vector[1] - direction[1] * vector[0],
             )
             return sqrt(sum(value * value for value in cross))
+
+        if full_turn:
+            sketch_entities = {entity.id: entity for entity in sketch.entities}
+            cap_entity_ids: set[str] = set()
+            for points, entity_ids in self._profile_loops_and_ids(profile):
+                base = [sketch_to_world(sketch, u, v) for u, v in points]
+                for index, entity_id in enumerate(entity_ids):
+                    if not entity_id or not isinstance(sketch_entities.get(entity_id), SketchLine):
+                        continue
+                    start = base[index]
+                    end = base[(index + 1) % len(base)]
+                    edge = tuple(end[item] - start[item] for item in range(3))
+                    edge_length = sqrt(sum(value * value for value in edge))
+                    if edge_length <= axis_tolerance:
+                        continue
+                    if abs(
+                        sum(edge[item] * direction[item] for item in range(3))
+                    ) > 1e-7 * edge_length:
+                        continue
+                    start_axial = sum(
+                        (start[item] - axis_origin[item]) * direction[item]
+                        for item in range(3)
+                    )
+                    end_axial = sum(
+                        (end[item] - axis_origin[item]) * direction[item]
+                        for item in range(3)
+                    )
+                    if abs(start_axial - end_axial) > 1e-7:
+                        continue
+                    if max(axis_distance(start), axis_distance(end)) <= axis_tolerance:
+                        continue
+                    cap_entity_ids.add(entity_id)
+            for index, entity_id in enumerate(sorted(cap_entity_ids)[:2]):
+                profile_cap_roles[entity_id] = (
+                    "START_CAP" if index == 0 else "END_CAP"
+                )
 
         def append_face(indices: tuple[int, ...]) -> None:
             # Axis poles are shared by every sweep ring.  Removing repeated
@@ -120,7 +160,7 @@ class BlenderMeshBackend(GeometryBackend):
             if len(compact) >= 3 and len(set(compact)) >= 3:
                 faces.append(tuple(compact))
 
-        for points, _entity_ids in self._profile_loops_and_ids(profile):
+        for points, entity_ids in self._profile_loops_and_ids(profile):
             base = [sketch_to_world(sketch, u, v) for u, v in points]
             if len(base) < 3:
                 raise ValueError("Revolve profile requires at least three points.")
@@ -158,6 +198,7 @@ class BlenderMeshBackend(GeometryBackend):
                 next_ring = (ring + 1) % segments if full_turn else ring + 1
                 for index in range(count):
                     next_index = (index + 1) % count
+                    face_count = len(faces)
                     append_face(
                         (
                             rings[ring][index],
@@ -166,9 +207,20 @@ class BlenderMeshBackend(GeometryBackend):
                             rings[next_ring][index],
                         )
                     )
+                    if full_turn and len(faces) > face_count:
+                        entity_id = entity_ids[index] if index < len(entity_ids) else None
+                        role = profile_cap_roles.get(entity_id)
+                        if role is not None:
+                            cap_roles[len(faces) - 1] = (role, entity_id)
             if not full_turn:
+                start_face_count = len(faces)
                 append_face(tuple(rings[0][index] for index in reversed(range(count))))
+                if len(faces) > start_face_count:
+                    cap_roles[len(faces) - 1] = ("START_CAP", None)
+                end_face_count = len(faces)
                 append_face(tuple(rings[-1][index] for index in range(count)))
+                if len(faces) > end_face_count:
+                    cap_roles[len(faces) - 1] = ("END_CAP", None)
 
         if not vertices or not faces:
             raise ValueError("Revolve produced no non-degenerate faces.")
@@ -185,6 +237,7 @@ class BlenderMeshBackend(GeometryBackend):
         mesh.from_pydata(vertices, [], faces)
         mesh.validate()
         mesh.update()
+        self._revolve_cap_roles[id(mesh)] = cap_roles
         return mesh
 
     @staticmethod
@@ -253,6 +306,15 @@ class BlenderMeshBackend(GeometryBackend):
     def face_provenance(self, body: bpy.types.Mesh) -> dict[int, TopoReference]:
         return dict(self._face_provenance.get(id(body), {}))
 
+    def register_revolve_provenance(
+        self, body: bpy.types.Mesh, feature_id: str
+    ) -> None:
+        roles = self._revolve_cap_roles.pop(id(body), {})
+        self._face_provenance[id(body)] = {
+            polygon_index: TopoReference(feature_id, role, source_entity_id)
+            for polygon_index, (role, source_entity_id) in roles.items()
+        }
+
     def boolean_difference(
         self, body: bpy.types.Mesh, tool: bpy.types.Mesh
     ) -> bpy.types.Mesh:
@@ -277,6 +339,7 @@ class BlenderMeshBackend(GeometryBackend):
             self._face_provenance[id(result)] = dict(provenance)
         if body.users == 0:
             self._face_provenance.pop(id(body), None)
+            self._revolve_cap_roles.pop(id(body), None)
             bpy.data.meshes.remove(body)
         return result
 
@@ -342,6 +405,7 @@ class BlenderMeshBackend(GeometryBackend):
             bpy.data.objects.remove(tool_object, do_unlink=True)
             internal.hide_viewport = was_hidden
             if tool.users == 0:
+                self._revolve_cap_roles.pop(id(tool), None)
                 bpy.data.meshes.remove(tool)
         if result is None:
             raise ValueError(f"Blender Boolean {operation.title()} failed.")

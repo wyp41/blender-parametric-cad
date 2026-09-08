@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from math import isfinite, sqrt, tau
+from math import isfinite, tau
 from typing import Any
 
 from ..features.extrude import ExtrudeFeature
@@ -15,14 +15,17 @@ from ..core.transform import (
     Matrix4,
     Transform,
     matrix_multiply,
-    transform_point,
-    transform_vector,
 )
 from ..geometry.backend import GeometryBackend
 from ..sketch.entities import SketchLine
-from ..sketch.plane import PlaneResolutionError, PlaneResolver, ResolvedPlane
+from ..sketch.plane import (
+    PlaneResolutionError,
+    PlaneResolver,
+    ResolvedPlane,
+    resolve_axis_reference,
+)
 from ..sketch.profile import ProfileDetector
-from ..sketch.sketch import SketchFeature, sketch_normal, sketch_to_world
+from ..sketch.sketch import SketchFeature, sketch_normal
 from ..sketch.solver import SketchSolver
 from .feature import Feature
 from .part import Part
@@ -45,6 +48,7 @@ class EvaluationContext:
     resolved_planes: dict[str, ResolvedPlane] = field(default_factory=dict)
     evaluated_features: dict[str, Feature] = field(default_factory=dict)
     face_provenance: dict[int, TopoReference] = field(default_factory=dict)
+    semantic_planes: dict[tuple, ResolvedPlane] = field(default_factory=dict)
     # Rigid transforms applied to the Part reference frame so downstream datum
     # Sketches resolve in the same parametric coordinate system as the body.
     frame_matrix: Matrix4 = IDENTITY_MATRIX
@@ -118,6 +122,7 @@ class PartEvaluator:
             previous_provenance = dict(context.face_provenance)
             previous_frame_matrix = context.frame_matrix
             previous_planes = dict(context.resolved_planes)
+            previous_semantic_planes = dict(context.semantic_planes)
             if isinstance(feature, SketchFeature):
                 blocked = not self._evaluate_sketch(feature, context, errors)
             elif isinstance(feature, ExtrudeFeature):
@@ -141,6 +146,7 @@ class PartEvaluator:
                 context.face_provenance = previous_provenance
                 context.frame_matrix = previous_frame_matrix
                 context.resolved_planes = previous_planes
+                context.semantic_planes = previous_semantic_planes
                 blocked_by = feature
 
         return EvaluationResult(not errors, context.current_body, errors, context)
@@ -332,6 +338,13 @@ class PartEvaluator:
             )
             if feature.operation == "NEW":
                 context.current_body = tool
+                self.geometry_backend.register_revolve_provenance(
+                    context.current_body, feature.id
+                )
+                context.face_provenance = self._supported_face_provenance(
+                    self.geometry_backend.face_provenance(context.current_body),
+                    source,
+                )
             elif feature.operation == "ADD":
                 context.current_body = self.geometry_backend.boolean_union(
                     context.current_body, tool
@@ -342,7 +355,8 @@ class PartEvaluator:
                 )
             if context.current_body is None:
                 raise ValueError(f"Boolean {feature.operation.title()} produced no result.")
-            context.face_provenance = {}
+            if feature.operation != "NEW":
+                context.face_provenance = {}
         except Exception as exc:
             self._record_error(feature, str(exc), errors)
             return False
@@ -497,61 +511,11 @@ class PartEvaluator:
 
     @staticmethod
     def _resolve_axis(reference, context, errors, feature):
-        datum_axes = {
-            "X": (1.0, 0.0, 0.0),
-            "Y": (0.0, 1.0, 0.0),
-            "Z": (0.0, 0.0, 1.0),
-        }
-        if reference.reference_type == "DATUM_AXIS":
-            if reference.axis not in datum_axes:
-                PartEvaluator._record_error(
-                    feature, f"Unsupported datum axis: {reference.axis}", errors
-                )
-                return None
-            direction = -1.0 if reference.direction < 0 else 1.0
-            origin = transform_point(context.frame_matrix, (0.0, 0.0, 0.0))
-            axis = transform_vector(
-                context.frame_matrix,
-                tuple(direction * value for value in datum_axes[reference.axis]),
-            )
-            length = sqrt(sum(value * value for value in axis))
-            if length <= 1e-12:
-                PartEvaluator._record_error(feature, "Transformed datum axis has zero length.", errors)
-                return None
-            return origin, tuple(value / length for value in axis)
-        if reference.reference_type != "SKETCH_LINE":
-            PartEvaluator._record_error(feature, "Axis is not resolved.", errors)
+        try:
+            return resolve_axis_reference(reference, context)
+        except PlaneResolutionError as exc:
+            PartEvaluator._record_error(feature, str(exc), errors)
             return None
-        sketch = context.evaluated_features.get(reference.sketch_id)
-        if not isinstance(sketch, SketchFeature):
-            PartEvaluator._record_error(
-                feature, "Axis source Sketch is missing or invalid.", errors
-            )
-            return None
-        line = next(
-            (
-                entity
-                for entity in sketch.entities
-                if isinstance(entity, SketchLine) and entity.id == reference.entity_id
-            ),
-            None,
-        )
-        if line is None:
-            PartEvaluator._record_error(
-                feature, "Referenced SketchLine axis is unavailable.", errors
-            )
-            return None
-        start = sketch_to_world(sketch, line.x1, line.y1)
-        end = sketch_to_world(sketch, line.x2, line.y2)
-        vector = tuple(end[index] - start[index] for index in range(3))
-        length = sqrt(sum(value * value for value in vector))
-        if length <= 1e-12:
-            PartEvaluator._record_error(
-                feature, "Referenced SketchLine axis has zero length.", errors
-            )
-            return None
-        direction = -1.0 if reference.direction < 0 else 1.0
-        return start, tuple(direction * value / length for value in vector)
 
     @staticmethod
     def _supported_face_provenance(provenance, sketch: SketchFeature):
@@ -578,6 +542,8 @@ class PartEvaluator:
         feature.status = "OK"
         feature.error_message = ""
         context.evaluated_features[feature.id] = feature
+        from ..sketch.planar_faces import propagate_planes
+        propagate_planes(feature, context)
 
     @staticmethod
     def _record_error(

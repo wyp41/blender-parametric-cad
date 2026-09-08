@@ -18,7 +18,7 @@ from ..core.document import CadDocument
 from ..core.evaluator import EvaluationResult, PartEvaluator
 from ..core.serialization import dumps, loads
 from ..geometry.blender_mesh_backend import BlenderMeshBackend
-from .viewport.provenance import clear_face_provenance, set_face_provenance
+from .viewport.provenance import clear_face_provenance, set_face_provenance, set_face_candidates
 
 
 CAD_ADDON_ID = "blender_parametric_cad"
@@ -170,7 +170,11 @@ def sync_active_part_from_object(scene: bpy.types.Scene, obj) -> str | None:
     if ui is not None:
         feature_id = obj.get("cad_feature_id")
         feature = document.get_part(part_id).get_feature(feature_id) if feature_id else None
-        if feature is not None and ui.active_feature_id != feature.id:
+        if (
+            feature is not None
+            and ui.mode != "SKETCH_EDIT"
+            and ui.active_feature_id != feature.id
+        ):
             # Result objects carry the terminal CAD feature UUID.  Reuse the
             # same hydration path as a history-row selection so Revolve,
             # Transform, and Mirror parameters cannot remain stale in the UI.
@@ -366,6 +370,7 @@ def _on_depsgraph_update_post(scene, _depsgraph) -> None:
 def _on_load_post(_dummy) -> None:
     """Validate and rehydrate generated meshes after opening a .blend file."""
 
+    _reactivate_mcp_service()
     scene = getattr(bpy.context, "scene", None)
     if scene is None:
         return
@@ -416,6 +421,25 @@ def unregister_handlers() -> None:
     ):
         if callback in collection:
             collection.remove(callback)
+
+
+def _reactivate_mcp_service() -> None:
+    """Re-arm the in-process MCP timer after Blender opens a .blend file."""
+
+    try:
+        from ..mcp.blender_worker import _EMBEDDED_SERVICE
+
+        service = _EMBEDDED_SERVICE
+        if service is None or service._closed:
+            return
+        timers = bpy.app.timers
+        is_registered = getattr(timers, "is_registered", None)
+        if is_registered is None or not is_registered(service.poll):
+            timers.register(service.poll, first_interval=0.0)
+    except (AttributeError, ImportError, ReferenceError, RuntimeError, TypeError, ValueError):
+        # Loading a file must not fail just because the optional MCP service
+        # is absent or Blender is still replacing the current scene.
+        pass
 
 
 def remove_part_geometry(part_id: str) -> None:
@@ -503,6 +527,8 @@ def rebuild_part(scene: bpy.types.Scene, part_id: str | None = None) -> Evaluati
             result_object["cad_source_sketch_id"] = source_sketch_id
     provenance = result.context.face_provenance if result.context else {}
     set_face_provenance(result_object, provenance)
+    if result.context:
+        set_face_candidates(result_object, result.context)
     result_object.update_tag()
     bpy.context.view_layer.update()
     return result

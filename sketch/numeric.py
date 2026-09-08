@@ -37,7 +37,12 @@ def _rectangle_entities(
                     endpoints.update(line_endpoints)
                     remaining.remove(line)
                     changed = True
-        entities = connected
+        # Keep the Sketch's original entity order.  The selected line only
+        # identifies the rectangle; it must not rotate the UUID-to-edge
+        # mapping when dimensions are edited.  Persistent face references may
+        # point at any one of those line UUIDs.
+        connected_ids = {entity.id for entity in connected}
+        entities = [entity for entity in entities if entity.id in connected_ids]
 
     result = ProfileDetector().detect_entities(entities)
     if (

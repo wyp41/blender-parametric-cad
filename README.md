@@ -1,7 +1,7 @@
 # Blender Parametric CAD
 
 An AI-first, history-based parametric CAD extension for Blender 5.1.2, designed
-for Codex, Claude, and other tool-using AI systems. Version 0.16.11 provides a
+for Codex, Claude, and other tool-using AI systems. Version 0.16.12 provides a
 real MCP interface and a Python API so an AI can create sketches, features,
 booleans, transforms, mirrors, and per-Part exports through normal CAD
 operations—not by spending tokens on mouse clicks or computer-use screenshots.
@@ -61,10 +61,15 @@ CAD UUIDs.
 ## Install
 
 Open **Edit → Preferences → Extensions**, use the upper-right menu, choose
-**Install from Disk**, and select `blender_parametric_cad-0.16.11.zip`. Enable
+**Install from Disk**, and select `blender_parametric_cad-0.16.12.zip`. Enable
 **Blender Parametric CAD** if needed.
 
 ## AI/API skill
+
+M6 development adds persistent planar supports on surviving Boolean surfaces,
+Revolve boundary/profile caps, Transform results, and supported Mirror results. See
+[M6 planar references](M6_PLANAR_REFERENCES.md) for the reference model,
+selection behavior, validation results, and current limitations.
 
 The repository includes the reusable [`3d-modelling` skill](skills/3d-modelling/SKILL.md)
 and its complete [Blender Parametric CAD API reference](skills/3d-modelling/references/blender_parametric_cad_api.md)
@@ -108,7 +113,7 @@ same Blender window.
 
 Warnings such as `Policy violation with top level module: blender_parametric_cad`
 come from Blender's extension namespace policy, not from another add-on and not
-from the MCP port. Version 0.16.11 loads the worker through Blender's qualified
+from the MCP port. Version 0.16.12 loads the worker through Blender's qualified
 `bl_ext.<repository>.blender_parametric_cad` namespace and keeps bundled modules
 out of the global Python namespace. It also keeps the staged native toolbar in
 sync with CAD mode and consumes the initial click for CAD Measure. After
@@ -120,7 +125,7 @@ can be resolved by using that service or selecting a free port.
 
 Upgrade note: windows left behind by releases before 0.15.0 used a private
 per-client socket and cannot be rediscovered after their MCP parent exits. Close
-those orphan windows once, install 0.16.11, and use the in-window service toggle
+those orphan windows once, install 0.16.12, and use the in-window service toggle
 for the window you want to keep.
 
 If a machine has no display, or if a CI job needs a background worker, pass
@@ -261,9 +266,12 @@ millimeters. Adjust **Snap Tolerance (px)** for the current zoom level, press
 when finished. Measurement is display-only and never changes CAD history.
 
 To attach a Sketch to generated geometry, press **Select Face**, click a
-supported planar face of a simple New Extrude, then press **New Sketch**. The
-support is stored as `START_FACE`, `END_FACE`, or `SIDE_FACE(source line UUID)`;
-the temporary Blender polygon hit is never part of the CAD history.
+supported planar face of an Extrude or Revolve, then press **New Sketch**. The
+support is stored as `START_FACE`, `END_FACE`, `SIDE_FACE(source line UUID)`,
+`START_CAP`, or `END_CAP`; the temporary Blender polygon hit is never part of
+the CAD history. Partial Revolve sweep-boundary caps and full-turn profile-line
+disk/annulus caps are supported. A Revolve's conical/cylindrical side is curved
+and remains unsupported.
 
 To create or edit a Revolve, select the Sketch or Revolve history item and use
 the **Revolve** icon in the left toolbar. Choose a datum X/Y/Z axis or a
@@ -294,12 +302,13 @@ part_id, filepath, file_format)`. Supported formats are `STL`, `OBJ`, and
 - `New + Blind`, `Add + Blind`, `Remove + Blind`, and
   `Remove + Through All`.
 - Existing saved `CUT` features remain compatible and evaluate as Remove.
-- Simple Extrude start/end faces and line-based side faces can be selected as
+- Simple Extrude start/end faces, line-based side faces, partial Revolve caps,
+  and full-turn Revolve profile-line disk/annulus caps can be selected as
   semantic Sketch supports.
-- Face selection is intentionally limited to the generated mesh of a simple
-  **New Extrude**: START_FACE, END_FACE, and SIDE_FACE(source SketchLine UUID).
-  Boolean and Revolve result faces, plus arc-based side faces, remain visible
-  but report that they cannot yet be persistent CAD references.
+- Face selection supports Extrude START_FACE/END_FACE/SIDE_FACE(source
+  SketchLine UUID) and Revolve START_CAP/END_CAP. Curved Revolve sides, arc
+  side faces, and arbitrary Boolean-created faces remain visible but report
+  that they cannot yet be persistent CAD references.
 - Revolve supports New, Add, and Remove with datum axes or SketchLine axes,
   including persistent positive/negative axis direction.
 - Full-turn Revolve tools are topologically closed at the seam, and their face

@@ -239,7 +239,10 @@ def _draw_sketch_section(layout, context, part, ui):
     support = layout.box()
     support.label(text="Viewport Selection", icon="RESTRICT_SELECT_OFF")
     support.label(
-        text="Supported: New Extrude START/END faces and line-based SIDE faces",
+        text=(
+            "Supported: Extrude START/END/SIDE faces and partial Revolve "
+            "START/END caps"
+        ),
         icon="INFO",
     )
     support.operator("parametric_cad.select_face", icon="FACESEL")

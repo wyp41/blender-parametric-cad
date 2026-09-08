@@ -7,6 +7,32 @@ from typing import Any
 
 
 @dataclass(frozen=True)
+class FaceReference:
+    """Semantic producer and source entity, independent of display topology."""
+
+    producer_feature_id: str
+    role: str
+    source_entity_id: str | None = None
+
+    @property
+    def reference_type(self) -> str:
+        return "FACE"
+
+    @property
+    def feature_id(self) -> str:
+        return self.producer_feature_id
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"producer_feature_id": self.producer_feature_id,
+                "role": self.role, "source_entity_id": self.source_entity_id}
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(data.get("producer_feature_id") or data["feature_id"],
+                   data["role"], data.get("source_entity_id"))
+
+
+@dataclass(frozen=True)
 class TopoReference:
     """A persistent reference to a supported generated face."""
 
@@ -28,7 +54,7 @@ class TopoReference:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "TopoReference":
         return cls(
-            feature_id=str(data["feature_id"]),
+            feature_id=str(data.get("producer_feature_id") or data["feature_id"]),
             role=str(data["role"]),
             source_entity_id=data.get("source_entity_id"),
             reference_type=str(data.get("reference_type", "FACE")),

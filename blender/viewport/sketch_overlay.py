@@ -192,8 +192,6 @@ def _draw_callback() -> None:
         if _hover_face is not None and _hover_face[2] is not None
         else (0.45, 0.45, 0.45, 0.16)
     )
-    _draw_face_highlight(_hover_face, hover_color)
-    _draw_face_highlight(_selected_face, (1.0, 0.65, 0.1, 0.30))
     _draw_measurement_geometry()
     try:
         document = load_document_from_scene(scene)
@@ -328,6 +326,17 @@ def _draw_pixel_callback() -> None:
     region_3d = getattr(space_data, "region_3d", None)
     if region is None or region_3d is None:
         return
+    hover_color = (
+        (0.15, 0.55, 1.0, 0.25)
+        if _hover_face is not None and _hover_face[2] is not None
+        else (0.45, 0.45, 0.45, 0.16)
+    )
+    _draw_face_highlight_2d(_hover_face, hover_color)
+    _draw_face_highlight_2d(
+        _selected_face,
+        (1.0, 0.45, 0.05, 0.42),
+        selected=True,
+    )
     if _measurement_pending is not None:
         first, second = _measurement_pending
         first_2d = _project_measurement_point(region, region_3d, first)
@@ -384,54 +393,98 @@ def _draw_measurement_text(position, text: str, color, size: int = 13) -> None:
         return
 
 
-def _draw_face_highlight(hit, color) -> None:
+def _draw_face_highlight_2d(hit, color, selected: bool = False) -> None:
+    """Draw a face selection above the solid viewport contents."""
+
     if hit is None:
+        return
+    region = getattr(bpy.context, "region", None)
+    space_data = getattr(bpy.context, "space_data", None)
+    region_3d = getattr(space_data, "region_3d", None)
+    if region is None or region_3d is None:
         return
     obj, polygon_index, reference = hit
     try:
         mesh = getattr(obj, "data", None)
-        if reference is not None:
-            polygon_index = _current_polygon_index(obj, polygon_index, reference)
-            if polygon_index is None:
-                return
-        if mesh is None or polygon_index < 0 or polygon_index >= len(mesh.polygons):
+        polygon_indices = (
+            _current_polygon_indices(obj, polygon_index, reference)
+            if reference is not None
+            else [polygon_index]
+        )
+        if mesh is None or not polygon_indices:
             return
-        polygon = mesh.polygons[polygon_index]
-        if len(polygon.vertices) < 3:
-            return
-        points = [
-            tuple(obj.matrix_world @ Vector(mesh.vertices[index].co))
-            for index in polygon.vertices
-        ]
-    except ReferenceError:
+        triangles: list[tuple[float, float, float]] = []
+        outlines: list[tuple[float, float, float]] = []
+        from mathutils.geometry import tessellate_polygon
+
+        for polygon_index in polygon_indices:
+            if polygon_index < 0 or polygon_index >= len(mesh.polygons):
+                continue
+            polygon = mesh.polygons[polygon_index]
+            if len(polygon.vertices) < 3:
+                continue
+            points = [
+                location_3d_to_region_2d(
+                    region,
+                    region_3d,
+                    tuple(obj.matrix_world @ Vector(mesh.vertices[index].co)),
+                )
+                for index in polygon.vertices
+            ]
+            if any(point is None for point in points):
+                continue
+            points_2d = [
+                (float(point.x), float(point.y)) for point in points
+            ]
+            for triangle in tessellate_polygon(
+                [[Vector(point) for point in points_2d]]
+            ):
+                for point in triangle:
+                    if isinstance(point, int):
+                        point = points_2d[point]
+                    triangles.append(
+                        (float(point[0]), float(point[1]), 0.0)
+                    )
+            if selected:
+                outlines.extend(
+                    (float(point[0]), float(point[1]), 0.0)
+                    for index, point in enumerate(points_2d)
+                    for point in (point, points_2d[(index + 1) % len(points_2d)])
+                )
+    except (ReferenceError, RuntimeError, TypeError, ValueError):
         return
-    # Boolean cuts can leave concave n-gons; a triangle fan would highlight
-    # removed material outside the surviving polygon.
-    from mathutils.geometry import tessellate_polygon
-    triangles = [tuple(point) for triangle in tessellate_polygon(
-        [[Vector(point) for point in points]]
-    ) for point in triangle]
     if not triangles:
         return
     shader = gpu.shader.from_builtin("UNIFORM_COLOR")
     batch = batch_for_shader(shader, "TRIS", {"pos": triangles})
-    gpu.state.depth_test_set("LESS_EQUAL")
+    gpu.state.depth_test_set("NONE")
     gpu.state.blend_set("ALPHA")
     shader.bind()
     shader.uniform_float("color", color)
     batch.draw(shader)
+    if selected and outlines:
+        outline_shader = gpu.shader.from_builtin("UNIFORM_COLOR")
+        outline_batch = batch_for_shader(outline_shader, "LINES", {"pos": outlines})
+        outline_shader.bind()
+        outline_shader.uniform_float("color", (1.0, 0.75, 0.1, 0.95))
+        gpu.state.line_width_set(2.5)
+        outline_batch.draw(outline_shader)
+        gpu.state.line_width_set(1.0)
     gpu.state.blend_set("NONE")
     gpu.state.depth_test_set("LESS_EQUAL")
 
 
-def _current_polygon_index(obj, fallback: int, reference) -> int | None:
+def _current_polygon_indices(obj, fallback: int, reference) -> list[int]:
     data = get_face_candidates(obj)
-    if fallback in data and data[fallback].semantic_plane == reference:
-        return fallback
-    for index, candidate in data.items():
-        if candidate.semantic_plane == reference:
-            return index
-    return None
+    matching = [
+        index
+        for index, candidate in data.items()
+        if candidate.semantic_plane == reference
+    ]
+    if fallback in matching:
+        matching.remove(fallback)
+        matching.insert(0, fallback)
+    return matching
 
 
 def _entity_segments(

@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import ast
 from contextlib import redirect_stderr, redirect_stdout
+from copy import deepcopy
 import errno
 import importlib
 from io import StringIO
@@ -147,7 +148,12 @@ def _endpoint_is_current_process(endpoint: dict[str, Any] | None) -> bool:
 
 
 class WorkerError(RuntimeError):
-    """A user-correctable CAD worker error."""
+    """A user-correctable CAD worker error with a machine-readable code."""
+
+    def __init__(self, message: str, code: str = "CAD_ERROR", details: Any = None):
+        super().__init__(message)
+        self.code = code
+        self.details = details
 
 
 class BlenderCadWorker:
@@ -202,6 +208,23 @@ class BlenderCadWorker:
             "cad_delete_part": self._delete_part,
             "cad_create_sketch": self._create_sketch,
             "cad_add_geometry": self._add_geometry,
+            "cad_sketch_add_line": self._sketch_add_line,
+            "cad_sketch_add_circle": self._sketch_add_circle,
+            "cad_sketch_add_rectangle": self._sketch_add_rectangle,
+            "cad_sketch_update_rectangle": self._sketch_update_rectangle,
+            "cad_sketch_add_constraint": self._sketch_add_constraint,
+            "cad_sketch_delete_constraint": self._sketch_delete_constraint,
+            "cad_sketch_add_dimension": self._sketch_add_dimension,
+            "cad_sketch_update_dimension": self._sketch_update_dimension,
+            "cad_sketch_delete_dimension": self._sketch_delete_dimension,
+            "cad_get_sketch": self._get_sketch,
+            "cad_get_history": self._get_history,
+            "cad_get_edges": self._get_edges,
+            "cad_list_references": self._list_references,
+            "cad_inspect_geometry": self._inspect_geometry,
+            "cad_get_document": self._get_document,
+            "cad_get_part_studio": self._get_part_studio,
+            "cad_get_feature": self._get_feature,
             "cad_update_geometry": self._update_geometry,
             "cad_delete_geometry": self._delete_geometry,
             "cad_profile": self._profile,
@@ -316,18 +339,21 @@ class BlenderCadWorker:
         part_id = arguments.get("part_id") or document.active_part_id
         part = document.get_part(part_id) if part_id else None
         if part is None:
-            raise WorkerError("Part Studio not found. Create one with cad_create_part.")
+            raise WorkerError(
+                "Part Studio not found. Create one with cad_create_part.",
+                "REFERENCE_MISSING",
+            )
         return part
 
     @staticmethod
     def _feature_location(document, feature_id: str):
         if not feature_id:
-            raise WorkerError("A feature_id is required.")
+            raise WorkerError("A feature_id is required.", "INVALID_REFERENCE")
         for part in document.parts:
             feature = part.get_feature(feature_id)
             if feature is not None:
                 return part, feature
-        raise WorkerError(f"Feature not found: {feature_id}")
+        raise WorkerError(f"Feature not found: {feature_id}", "REFERENCE_MISSING")
 
     @staticmethod
     def _sketch_location(document, sketch_id: str):
@@ -335,8 +361,62 @@ class BlenderCadWorker:
 
         part, feature = BlenderCadWorker._feature_location(document, sketch_id)
         if not isinstance(feature, SketchFeature):
-            raise WorkerError(f"Feature is not a Sketch: {sketch_id}")
+            raise WorkerError(
+                f"Feature is not a Sketch: {sketch_id}", "INVALID_REFERENCE"
+            )
         return part, feature
+
+    def _commit_sketch_candidate(self, previous, candidate, part_id: str):
+        """Save and rebuild a candidate, restoring the previous document on failure."""
+
+        self._save_document(candidate)
+        rebuild = self._rebuild_payload(part_id)
+        if rebuild["success"]:
+            return rebuild
+        self._save_document(previous)
+        self._rebuild_payload(part_id)
+        message = "; ".join(item["message"] for item in rebuild["errors"])
+        raise WorkerError(
+            message or "Sketch mutation could not rebuild the Part Studio.",
+            code="REBUILD_FAILED",
+            details={"rebuild": rebuild},
+        )
+
+    @staticmethod
+    def _sketch_reference(sketch_id: str, value: Any, default_sub_element: str | None = None):
+        from ..core.references import SketchEntityReference
+
+        if not isinstance(value, dict):
+            raise WorkerError("Each Sketch reference must be an object.", "INVALID_REFERENCE")
+        entity_id = str(value.get("entity_id") or "")
+        if not entity_id:
+            raise WorkerError("Sketch references require entity_id.", "INVALID_REFERENCE")
+        reference_sketch_id = str(value.get("sketch_id") or sketch_id)
+        sub_element = value.get("sub_element", default_sub_element)
+        try:
+            return SketchEntityReference(reference_sketch_id, entity_id, sub_element)
+        except (TypeError, ValueError) as exc:
+            raise WorkerError(str(exc), "INVALID_REFERENCE") from exc
+
+    def _sketch_references(self, sketch_id: str, values: Any):
+        if not isinstance(values, list) or not values:
+            raise WorkerError("entity_refs must be a non-empty array.", "INVALID_REFERENCE")
+        return [self._sketch_reference(sketch_id, value) for value in values]
+
+    @staticmethod
+    def _solver_failure(result):
+        from ..sketch.solver import CONFLICT, INVALID_REFERENCE
+
+        code = "CONSTRAINT_CONFLICT" if result.status == CONFLICT else "INVALID_REFERENCE"
+        return WorkerError(result.message or result.status, code=code)
+
+    def _solve_candidate(self, sketch):
+        from ..sketch.solver import SketchSolver
+
+        result = SketchSolver().solve(sketch)
+        if not result.success:
+            raise self._solver_failure(result)
+        return result
 
     def _status(self, _arguments: dict[str, Any]) -> dict[str, Any]:
         from ..core.serialization import document_to_dict
@@ -485,9 +565,14 @@ class BlenderCadWorker:
 
     def _add_geometry(self, arguments: dict[str, Any]) -> dict[str, Any]:
         from ..core.serialization import entity_to_dict
+        from ..core.references import SketchEntityReference
+        from ..sketch.constraints import SketchConstraint, constraint_to_dict
+        from ..sketch.dimensions import LENGTH, SketchDimension, dimension_to_dict
         from ..sketch.entities import SketchArc, SketchCircle, SketchLine
+        from ..sketch.primitives import RectangleDefinition
 
         document = self._document()
+        previous = deepcopy(document)
         _part, sketch = self._sketch_location(document, str(arguments.get("sketch_id") or ""))
         geometry = arguments.get("geometry")
         if not isinstance(geometry, dict):
@@ -538,8 +623,15 @@ class BlenderCadWorker:
             y = self._mm(geometry, "y_mm")
             width = self._mm(geometry, "width_mm")
             height = self._mm(geometry, "height_mm")
+            if not all(isfinite(value) for value in (x, y, width, height)):
+                raise WorkerError("Rectangle coordinates and dimensions must be finite.", "INVALID_RECTANGLE")
             if width <= 0.0 or height <= 0.0:
-                raise WorkerError("Rectangle width and height must be greater than zero.")
+                raise WorkerError("Rectangle width and height must be greater than zero.", "INVALID_RECTANGLE")
+            if any(not entity.construction for entity in sketch.entities):
+                raise WorkerError(
+                    "A semantic rectangle must be created in an otherwise empty Sketch.",
+                    "INVALID_RECTANGLE",
+                )
             corners = [(x, y), (x + width, y), (x + width, y + height), (x, y + height)]
             created = [
                 SketchLine(
@@ -554,20 +646,786 @@ class BlenderCadWorker:
         else:
             raise WorkerError("geometry.type must be LINE, CIRCLE, ARC, or RECTANGLE.")
         sketch.entities.extend(created)
+        auto_constraints = []
+        rectangle_definition = None
+        rectangle_dimensions = []
+        if kind == "RECTANGLE":
+            for index, entity in enumerate(created):
+                next_entity = created[(index + 1) % len(created)]
+                constraint = SketchConstraint(
+                    constraint_type="COINCIDENT",
+                    entity_refs=[
+                        SketchEntityReference(sketch.id, entity.id, "END"),
+                        SketchEntityReference(sketch.id, next_entity.id, "START"),
+                    ],
+                )
+                sketch.constraints.append(constraint)
+                auto_constraints.append(constraint)
+            width_dimension = SketchDimension(
+                dimension_type=LENGTH,
+                entity_refs=[SketchEntityReference(sketch.id, created[0].id)],
+                value=width,
+                driving=True,
+            )
+            height_dimension = SketchDimension(
+                dimension_type=LENGTH,
+                entity_refs=[SketchEntityReference(sketch.id, created[1].id)],
+                value=height,
+                driving=True,
+            )
+            sketch.dimensions.extend((width_dimension, height_dimension))
+            rectangle_dimensions.extend((width_dimension, height_dimension))
+            rectangle_definition = RectangleDefinition(
+                bottom_line_id=created[0].id,
+                right_line_id=created[1].id,
+                top_line_id=created[2].id,
+                left_line_id=created[3].id,
+                width_dimension_id=width_dimension.id,
+                height_dimension_id=height_dimension.id,
+            )
+            sketch.rectangles.append(rectangle_definition)
         sketch.deleted_regions.clear()
-        self._save_document(document)
+        solver = self._solve_candidate(sketch)
+        rebuild = self._commit_sketch_candidate(previous, document, _part.id)
         return {
+            "ok": True,
             "sketch_id": sketch.id,
             "entities": [entity_to_dict(item) for item in created],
-            "rebuild": self._rebuild_payload(_part.id),
+            "constraint_ids": [item.id for item in auto_constraints],
+            "constraints": [constraint_to_dict(item) for item in auto_constraints],
+            "dimensions": [dimension_to_dict(item) for item in rectangle_dimensions],
+            "rectangle_id": rectangle_definition.id if rectangle_definition else None,
+            "width_dimension_id": (
+                rectangle_definition.width_dimension_id
+                if rectangle_definition is not None else None
+            ),
+            "height_dimension_id": (
+                rectangle_definition.height_dimension_id
+                if rectangle_definition is not None else None
+            ),
+            "solver_status": solver.status,
+            "rebuild": rebuild,
+        }
+
+    def _sketch_add_line(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        result = self._add_geometry(
+            {
+                "sketch_id": arguments.get("sketch_id"),
+                "geometry": {
+                    "type": "LINE",
+                    "x1_mm": arguments.get("x1_mm"),
+                    "y1_mm": arguments.get("y1_mm"),
+                    "x2_mm": arguments.get("x2_mm"),
+                    "y2_mm": arguments.get("y2_mm"),
+                    "construction": arguments.get("construction", False),
+                },
+            }
+        )
+        entity = result["entities"][0]
+        return {
+            "ok": True,
+            "sketch_id": result["sketch_id"],
+            "entity_id": entity["id"],
+            "entity_type": entity["entity_type"],
+            "entity": entity,
+            "solver_status": result["solver_status"],
+            "rebuild_status": "OK",
+            "rebuild": result["rebuild"],
+        }
+
+    def _sketch_add_circle(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        geometry = {
+            "type": "CIRCLE",
+            "cx_mm": arguments.get("cx_mm"),
+            "cy_mm": arguments.get("cy_mm"),
+            "construction": arguments.get("construction", False),
+        }
+        if "diameter_mm" in arguments:
+            geometry["diameter_mm"] = arguments["diameter_mm"]
+        elif "radius_mm" in arguments:
+            geometry["radius_mm"] = arguments["radius_mm"]
+        else:
+            raise WorkerError("Provide diameter_mm or radius_mm.", "INVALID_GEOMETRY")
+        result = self._add_geometry(
+            {
+                "sketch_id": arguments.get("sketch_id"),
+                "geometry": geometry,
+            }
+        )
+        entity = result["entities"][0]
+        return {
+            "ok": True,
+            "sketch_id": result["sketch_id"],
+            "entity_id": entity["id"],
+            "entity_type": entity["entity_type"],
+            "entity": entity,
+            "solver_status": result["solver_status"],
+            "rebuild_status": "OK",
+            "rebuild": result["rebuild"],
+        }
+
+    def _sketch_add_rectangle(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        result = self._add_geometry(
+            {
+                "sketch_id": arguments.get("sketch_id"),
+                "geometry": {
+                    "type": "RECTANGLE",
+                    "x_mm": arguments.get("x_mm", 0.0),
+                    "y_mm": arguments.get("y_mm", 0.0),
+                    "width_mm": arguments.get("width_mm"),
+                    "height_mm": arguments.get("height_mm"),
+                    "construction": arguments.get("construction", False),
+                },
+            }
+        )
+        entities = result["entities"]
+        names = ("bottom", "right", "top", "left")
+        return {
+            "ok": True,
+            "sketch_id": result["sketch_id"],
+            "rectangle_id": result.get("rectangle_id"),
+            "entity_ids": {name: entity["id"] for name, entity in zip(names, entities)},
+            "entities": entities,
+            "constraint_ids": result.get("constraint_ids", []),
+            "width_dimension_id": result.get("width_dimension_id"),
+            "height_dimension_id": result.get("height_dimension_id"),
+            "solver_status": result["solver_status"],
+            "rebuild_status": "OK",
+            "rebuild": result["rebuild"],
+        }
+
+    def _sketch_update_rectangle(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Update a semantic rectangle without replacing any line UUIDs."""
+
+        from ..core.serialization import entity_to_dict
+        from ..sketch.numeric import (
+            rectangle_definition_for,
+            rectangle_parameters_by_id,
+            set_rectangle,
+        )
+
+        document = self._document()
+        previous = deepcopy(document)
+        part, sketch = self._sketch_location(
+            document, str(arguments.get("sketch_id") or "")
+        )
+        rectangle_id = str(arguments.get("rectangle_id") or "")
+        definition = rectangle_definition_for(sketch, rectangle_id=rectangle_id)
+        if definition is None:
+            raise WorkerError(
+                f"Rectangle not found: {rectangle_id}", "REFERENCE_MISSING"
+            )
+        current = rectangle_parameters_by_id(sketch, definition.id)
+        if current is None:
+            raise WorkerError(
+                "Rectangle geometry or semantic line references are missing.",
+                "INVALID_RECTANGLE",
+            )
+        values = list(current)
+        keys = ("x_mm", "y_mm", "width_mm", "height_mm")
+        for index, key in enumerate(keys):
+            if key not in arguments:
+                continue
+            try:
+                value = float(arguments[key]) / 1000.0
+            except (TypeError, ValueError) as exc:
+                raise WorkerError(f"{key} must be numeric.", "INVALID_RECTANGLE") from exc
+            if not isfinite(value):
+                raise WorkerError(f"{key} must be finite.", "INVALID_RECTANGLE")
+            values[index] = value
+        if values[2] <= 0.0 or values[3] <= 0.0:
+            raise WorkerError(
+                "Rectangle width and height must be greater than zero.",
+                "INVALID_RECTANGLE",
+            )
+        try:
+            set_rectangle(sketch, *values, entity_id=definition.bottom_line_id)
+        except (TypeError, ValueError) as exc:
+            raise WorkerError(str(exc), "INVALID_RECTANGLE") from exc
+        sketch.deleted_regions.clear()
+        solver = self._solve_candidate(sketch)
+        rebuild = self._commit_sketch_candidate(previous, document, part.id)
+        updated_definition = rectangle_definition_for(sketch, rectangle_id=definition.id)
+        return {
+            "ok": True,
+            "sketch_id": sketch.id,
+            "rectangle_id": definition.id,
+            "entity_ids": dict(
+                zip(
+                    ("bottom", "right", "top", "left"),
+                    definition.entity_ids,
+                )
+            ),
+            "entities": [
+                entity_to_dict(entity)
+                for entity in sketch.entities
+                if entity.id in definition.entity_ids
+            ],
+            "x_mm": values[0] * 1000.0,
+            "y_mm": values[1] * 1000.0,
+            "width_mm": values[2] * 1000.0,
+            "height_mm": values[3] * 1000.0,
+            "width_dimension_id": definition.width_dimension_id,
+            "height_dimension_id": definition.height_dimension_id,
+            "solver_status": solver.status,
+            "rebuild_status": "OK" if rebuild["success"] else "BLOCKED",
+            "rebuild": rebuild,
+        }
+
+    def _sketch_add_constraint(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        from ..sketch.constraints import SketchConstraint, constraint_to_dict, validate_constraint
+
+        document = self._document()
+        previous = deepcopy(document)
+        part, sketch = self._sketch_location(document, str(arguments.get("sketch_id") or ""))
+        refs = self._sketch_references(sketch.id, arguments.get("entity_refs"))
+        try:
+            constraint = SketchConstraint(
+                id=str(arguments.get("constraint_id") or "") or None,
+                constraint_type=str(arguments.get("constraint_type") or ""),
+                entity_refs=refs,
+                enabled=bool(arguments.get("enabled", True)),
+            )
+        except (TypeError, ValueError) as exc:
+            raise WorkerError(str(exc), "INVALID_REFERENCE") from exc
+        if any(item.id == constraint.id for item in sketch.constraints):
+            raise WorkerError(
+                f"Sketch constraint already exists: {constraint.id}",
+                "INVALID_REFERENCE",
+            )
+        try:
+            validate_constraint(sketch, constraint)
+        except Exception as exc:
+            raise WorkerError(str(exc), "INVALID_REFERENCE") from exc
+        sketch.constraints.append(constraint)
+        solver = self._solve_candidate(sketch)
+        rebuild = self._commit_sketch_candidate(previous, document, part.id)
+        return {
+            "ok": True,
+            "sketch_id": sketch.id,
+            "constraint_id": constraint.id,
+            "constraint": constraint_to_dict(constraint),
+            "status": solver.status,
+            "solver_status": solver.status,
+            "rebuild_status": "OK",
+            "rebuild": rebuild,
+        }
+
+    def _sketch_delete_constraint(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        from ..sketch.constraints import constraint_to_dict
+
+        document = self._document()
+        previous = deepcopy(document)
+        part, sketch = self._sketch_location(document, str(arguments.get("sketch_id") or ""))
+        constraint_id = str(arguments.get("constraint_id") or "")
+        index = next(
+            (index for index, item in enumerate(sketch.constraints) if item.id == constraint_id),
+            None,
+        )
+        if index is None:
+            raise WorkerError(f"Sketch constraint not found: {constraint_id}", "INVALID_REFERENCE")
+        deleted = sketch.constraints.pop(index)
+        solver = self._solve_candidate(sketch)
+        rebuild = self._commit_sketch_candidate(previous, document, part.id)
+        return {
+            "ok": True,
+            "sketch_id": sketch.id,
+            "deleted_constraint": constraint_to_dict(deleted),
+            "solver_status": solver.status,
+            "rebuild_status": "OK",
+            "rebuild": rebuild,
+        }
+
+    def _sketch_add_dimension(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        from ..sketch.dimensions import SketchDimension, dimension_to_dict, validate_dimension_conflicts
+
+        document = self._document()
+        previous = deepcopy(document)
+        part, sketch = self._sketch_location(document, str(arguments.get("sketch_id") or ""))
+        try:
+            value_mm = float(arguments["value_mm"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise WorkerError("value_mm must be numeric.", "INVALID_DIMENSION") from exc
+        refs = self._sketch_references(sketch.id, arguments.get("entity_refs"))
+        try:
+            dimension = SketchDimension(
+                id=str(arguments.get("dimension_id") or "") or None,
+                dimension_type=str(arguments.get("dimension_type") or ""),
+                entity_refs=refs,
+                value=value_mm / 1000.0,
+                driving=bool(arguments.get("driving", True)),
+            )
+        except (TypeError, ValueError) as exc:
+            raise WorkerError(str(exc), "INVALID_DIMENSION") from exc
+        if any(item.id == dimension.id for item in sketch.dimensions):
+            raise WorkerError(
+                f"Sketch dimension already exists: {dimension.id}",
+                "INVALID_DIMENSION",
+            )
+        try:
+            validate_dimension_conflicts(sketch, dimension)
+        except Exception as exc:
+            raise WorkerError(str(exc), "CONSTRAINT_CONFLICT") from exc
+        sketch.dimensions.append(dimension)
+        solver = self._solve_candidate(sketch)
+        rebuild = self._commit_sketch_candidate(previous, document, part.id)
+        return {
+            "ok": True,
+            "sketch_id": sketch.id,
+            "dimension_id": dimension.id,
+            "dimension": dimension_to_dict(dimension),
+            "value_mm": dimension.value * 1000.0,
+            "status": solver.status,
+            "solver_status": solver.status,
+            "rebuild_status": "OK",
+            "rebuild": rebuild,
+        }
+
+    def _sketch_update_dimension(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        from ..sketch.dimensions import dimension_to_dict
+
+        document = self._document()
+        previous = deepcopy(document)
+        part, sketch = self._sketch_location(document, str(arguments.get("sketch_id") or ""))
+        dimension_id = str(arguments.get("dimension_id") or "")
+        dimension = next((item for item in sketch.dimensions if item.id == dimension_id), None)
+        if dimension is None:
+            raise WorkerError(f"Sketch dimension not found: {dimension_id}", "INVALID_DIMENSION")
+        try:
+            dimension.value = float(arguments["value_mm"]) / 1000.0
+        except (KeyError, TypeError, ValueError) as exc:
+            raise WorkerError("value_mm must be numeric.", "INVALID_DIMENSION") from exc
+        solver = self._solve_candidate(sketch)
+        rebuild = self._commit_sketch_candidate(previous, document, part.id)
+        return {
+            "ok": True,
+            "sketch_id": sketch.id,
+            "dimension_id": dimension.id,
+            "dimension": dimension_to_dict(dimension),
+            "value_mm": dimension.value * 1000.0,
+            "status": solver.status,
+            "solver_status": solver.status,
+            "rebuild_status": "OK",
+            "rebuild": rebuild,
+        }
+
+    def _sketch_delete_dimension(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        from ..sketch.dimensions import dimension_to_dict
+
+        document = self._document()
+        previous = deepcopy(document)
+        part, sketch = self._sketch_location(document, str(arguments.get("sketch_id") or ""))
+        dimension_id = str(arguments.get("dimension_id") or "")
+        index = next(
+            (index for index, item in enumerate(sketch.dimensions) if item.id == dimension_id),
+            None,
+        )
+        if index is None:
+            raise WorkerError(f"Sketch dimension not found: {dimension_id}", "INVALID_DIMENSION")
+        deleted = sketch.dimensions.pop(index)
+        solver = self._solve_candidate(sketch)
+        rebuild = self._commit_sketch_candidate(previous, document, part.id)
+        return {
+            "ok": True,
+            "sketch_id": sketch.id,
+            "deleted_dimension": dimension_to_dict(deleted),
+            "solver_status": solver.status,
+            "rebuild_status": "OK",
+            "rebuild": rebuild,
+        }
+
+    @staticmethod
+    def _entity_payload_mm(entity) -> dict[str, Any]:
+        payload = {
+            "id": entity.id,
+            "type": entity.entity_type,
+            "construction": bool(entity.construction),
+        }
+        if entity.entity_type == "LINE":
+            payload.update(
+                start_mm=[entity.x1 * 1000.0, entity.y1 * 1000.0],
+                end_mm=[entity.x2 * 1000.0, entity.y2 * 1000.0],
+            )
+        elif entity.entity_type == "CIRCLE":
+            payload.update(
+                center_mm=[entity.cx * 1000.0, entity.cy * 1000.0],
+                radius_mm=entity.radius * 1000.0,
+                diameter_mm=entity.radius * 2000.0,
+            )
+        else:
+            payload.update(
+                center_mm=[entity.cx * 1000.0, entity.cy * 1000.0],
+                radius_mm=entity.radius * 1000.0,
+                start_deg=entity.start_angle * 180.0 / 3.141592653589793,
+                end_deg=entity.end_angle * 180.0 / 3.141592653589793,
+            )
+        return payload
+
+    def _get_sketch(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        from ..core.serialization import plane_reference_to_dict
+        from ..sketch.constraints import constraint_to_dict
+        from ..sketch.dimensions import dimension_to_dict
+        from ..sketch.numeric import rectangle_parameters_by_id
+        from ..sketch.solver import SketchSolver
+
+        document = self._document()
+        _part, sketch = self._sketch_location(document, str(arguments.get("sketch_id") or ""))
+        result = SketchSolver().solve(deepcopy(sketch))
+        dimensions = []
+        for dimension in sketch.dimensions:
+            item = dimension_to_dict(dimension)
+            item["value_mm"] = dimension.value * 1000.0
+            dimensions.append(item)
+        rectangles = []
+        for rectangle in sketch.rectangles:
+            parameters = rectangle_parameters_by_id(sketch, rectangle.id)
+            item = rectangle.to_dict()
+            item["x_mm"] = parameters[0] * 1000.0 if parameters else None
+            item["y_mm"] = parameters[1] * 1000.0 if parameters else None
+            item["width_mm"] = parameters[2] * 1000.0 if parameters else None
+            item["height_mm"] = parameters[3] * 1000.0 if parameters else None
+            rectangles.append(item)
+        return {
+            "ok": True,
+            "sketch_id": sketch.id,
+            "name": sketch.name,
+            "plane": plane_reference_to_dict(sketch.plane_reference),
+            "entities": [self._entity_payload_mm(entity) for entity in sketch.entities],
+            "dimensions": dimensions,
+            "constraints": [constraint_to_dict(item) for item in sketch.constraints],
+            "rectangles": rectangles,
+            "solver_status": result.status,
+            "solver_message": result.message,
+            "feature_status": sketch.status,
+        }
+
+    def _get_history(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        document = self._document()
+        part = self._part(document, arguments)
+        return {
+            "ok": True,
+            "part_id": part.id,
+            "part_name": part.name,
+            "features": [
+                {
+                    "id": feature.id,
+                    "name": feature.name,
+                    "feature_type": feature.feature_type,
+                    "status": feature.status,
+                    "error_message": feature.error_message,
+                    "dependencies": list(feature.dependencies),
+                }
+                for feature in part.features
+            ],
+        }
+
+    def _get_edges(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Return semantic straight edges without exposing runtime mesh indices."""
+
+        from ..blender.viewport.provenance import get_edge_candidates
+        from ..core.serialization import edge_reference_to_dict
+
+        document = self._document()
+        part = self._part(document, arguments)
+        result_object = next(
+            (
+                obj
+                for obj in self._bpy.data.objects
+                if obj.get("cad_generated") and obj.get("cad_part_id") == part.id
+            ),
+            None,
+        )
+        if result_object is None:
+            return {"ok": True, "part_id": part.id, "edges": []}
+        edges = []
+        seen: set[str] = set()
+        for candidate in get_edge_candidates(result_object).values():
+            reference = candidate.semantic_reference
+            if reference is None:
+                continue
+            key = json.dumps(edge_reference_to_dict(reference), sort_keys=True)
+            if key in seen:
+                continue
+            seen.add(key)
+            edges.append(
+                {
+                    "reference": edge_reference_to_dict(reference),
+                    "start_mm": [candidate.start[index] * 1000.0 for index in range(3)],
+                    "end_mm": [candidate.end[index] * 1000.0 for index in range(3)],
+                    "length_mm": candidate.length * 1000.0,
+                }
+            )
+        return {"ok": True, "part_id": part.id, "edges": edges}
+
+    @staticmethod
+    def _reference_key(value: Any) -> str:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+    def _list_references(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """List persistent semantic references discoverable after a rebuild."""
+
+        from ..blender.viewport.provenance import get_edge_candidates, get_face_candidates
+        from ..core.serialization import edge_reference_to_dict, plane_reference_to_dict
+        from ..sketch.plane import PlaneReference, get_runtime_evaluation
+
+        document = self._document()
+        part = self._part(document, arguments)
+        feature_id = str(arguments.get("feature_id") or "")
+        if feature_id:
+            if part.get_feature(feature_id) is None:
+                raise WorkerError(
+                    f"Feature {feature_id} is not in Part Studio {part.id}.",
+                    "REFERENCE_MISSING",
+                )
+        runtime = get_runtime_evaluation(part.id)
+        planes: list[dict[str, Any]] = []
+        faces: list[dict[str, Any]] = []
+        edges: list[dict[str, Any]] = []
+        seen_planes: set[str] = set()
+        seen_faces: set[str] = set()
+        seen_edges: set[str] = set()
+
+        if not feature_id:
+            for datum in ("XY", "XZ", "YZ"):
+                reference = {
+                    "reference_type": "DATUM",
+                    "datum_plane": datum,
+                    "feature_id": None,
+                    "role": None,
+                    "source_entity_id": None,
+                    "offset": 0.0,
+                    "face_reference": None,
+                }
+                planes.append({"role": datum, "reference": reference})
+
+        if runtime is not None:
+            for (producer, role, source_entity_id), _resolved in sorted(
+                getattr(runtime, "semantic_planes", {}).items(),
+                key=lambda item: tuple(str(value or "") for value in item[0]),
+            ):
+                if feature_id and str(producer) != feature_id:
+                    continue
+                reference_type = "FEATURE_PLANE" if role == "END_PLANE" else "FACE"
+                reference = plane_reference_to_dict(
+                    PlaneReference(
+                        reference_type=reference_type,
+                        datum_plane=None,
+                        feature_id=str(producer),
+                        role=role,
+                        source_entity_id=source_entity_id,
+                    )
+                )
+                key = self._reference_key(reference)
+                if key not in seen_planes:
+                    seen_planes.add(key)
+                    planes.append({"role": role, "reference": reference})
+            for candidate in getattr(runtime, "derived_plane_candidates", {}).get(
+                feature_id, ()
+            ):
+                reference = plane_reference_to_dict(candidate.to_reference())
+                key = self._reference_key(reference)
+                if key not in seen_planes:
+                    seen_planes.add(key)
+                    planes.append({"role": "DERIVED_PLANE", "reference": reference})
+
+        result_object = next(
+            (
+                obj
+                for obj in self._bpy.data.objects
+                if obj.get("cad_generated") and obj.get("cad_part_id") == part.id
+            ),
+            None,
+        )
+        if result_object is not None:
+            for candidate in get_face_candidates(result_object).values():
+                reference = candidate.semantic_plane
+                if reference is None:
+                    continue
+                producer = getattr(reference, "producer_feature_id", None) or getattr(
+                    reference, "feature_id", None
+                )
+                if feature_id and str(producer) != feature_id:
+                    continue
+                payload = plane_reference_to_dict(reference)
+                key = self._reference_key(payload)
+                if key not in seen_planes:
+                    seen_planes.add(key)
+                    planes.append({"role": getattr(reference, "role", None), "reference": payload})
+                face = candidate.semantic_face
+                if face is not None:
+                    face_payload = {"reference_type": "FACE", **face.to_dict()}
+                    face_key = self._reference_key(face_payload)
+                    if face_key not in seen_faces:
+                        seen_faces.add(face_key)
+                        faces.append({"role": face.role, "reference": face_payload})
+            for candidate in get_edge_candidates(result_object).values():
+                reference = candidate.semantic_reference
+                if reference is None:
+                    continue
+                if feature_id and reference.producer_feature_id != feature_id:
+                    continue
+                payload = edge_reference_to_dict(reference)
+                key = self._reference_key(payload)
+                if key not in seen_edges:
+                    seen_edges.add(key)
+                    edges.append({"role": reference.role, "reference": payload})
+
+        return {
+            "ok": True,
+            "part_id": part.id,
+            "feature_id": feature_id or None,
+            "planes": planes,
+            "faces": faces,
+            "edges": edges,
+            "persistent_only": True,
+        }
+
+    def _inspect_geometry(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Return compact, read-only geometry health metrics in millimeters."""
+
+        document = self._document()
+        part = self._part(document, arguments)
+        result_object = next(
+            (
+                obj
+                for obj in self._bpy.data.objects
+                if obj.get("cad_generated") and obj.get("cad_part_id") == part.id
+            ),
+            None,
+        )
+        if result_object is None or getattr(result_object, "data", None) is None:
+            return {
+                "ok": True,
+                "part_id": part.id,
+                "has_body": False,
+                "connected_components": 0,
+                "bbox_mm": None,
+                "manifold": False,
+                "volume_mm3": None,
+            }
+        mesh = result_object.data
+
+        def point(vertex):
+            value = vertex.co
+            try:
+                transformed = result_object.matrix_world @ value
+                return tuple(float(transformed[index]) * 1000.0 for index in range(3))
+            except (AttributeError, TypeError, ValueError):
+                return tuple(float(value[index]) * 1000.0 for index in range(3))
+
+        points = [point(vertex) for vertex in mesh.vertices]
+        bbox = None
+        if points:
+            bbox = {
+                "min_mm": [min(item[index] for item in points) for index in range(3)],
+                "max_mm": [max(item[index] for item in points) for index in range(3)],
+            }
+        edge_faces: dict[tuple[int, int], int] = {}
+        neighbors: dict[int, set[int]] = {}
+        for face_index, polygon in enumerate(mesh.polygons):
+            vertices = tuple(int(index) for index in polygon.vertices)
+            for index, vertex_index in enumerate(vertices):
+                edge = tuple(sorted((vertex_index, vertices[(index + 1) % len(vertices)])))
+                edge_faces[edge] = edge_faces.get(edge, 0) + 1
+                neighbors.setdefault(face_index, set())
+                for other_index, other_polygon in enumerate(mesh.polygons):
+                    if other_index == face_index:
+                        continue
+                    other_vertices = set(int(value) for value in other_polygon.vertices)
+                    if edge[0] in other_vertices and edge[1] in other_vertices:
+                        neighbors[face_index].add(other_index)
+        visited: set[int] = set()
+        components = 0
+        for start in range(len(mesh.polygons)):
+            if start in visited:
+                continue
+            components += 1
+            stack = [start]
+            visited.add(start)
+            while stack:
+                current = stack.pop()
+                for neighbor in neighbors.get(current, ()):
+                    if neighbor not in visited:
+                        visited.add(neighbor)
+                        stack.append(neighbor)
+        manifold = bool(mesh.polygons) and bool(edge_faces) and all(
+            count == 2 for count in edge_faces.values()
+        )
+        volume = 0.0
+        for polygon in mesh.polygons:
+            vertices = tuple(int(index) for index in polygon.vertices)
+            if len(vertices) < 3:
+                continue
+            origin = points[vertices[0]]
+            for index in range(1, len(vertices) - 1):
+                first = points[vertices[index]]
+                second = points[vertices[index + 1]]
+                cross = (
+                    first[1] * second[2] - first[2] * second[1],
+                    first[2] * second[0] - first[0] * second[2],
+                    first[0] * second[1] - first[1] * second[0],
+                )
+                volume += sum(origin[item] * cross[item] for item in range(3)) / 6.0
+        return {
+            "ok": True,
+            "part_id": part.id,
+            "has_body": True,
+            "vertices": len(mesh.vertices),
+            "edges": len(mesh.edges),
+            "polygons": len(mesh.polygons),
+            "connected_components": components,
+            "bbox_mm": bbox,
+            "manifold": manifold,
+            "volume_mm3": abs(volume),
+            "units": "mm",
+        }
+
+    def _get_document(self, _arguments: dict[str, Any]) -> dict[str, Any]:
+        from ..core.serialization import document_to_dict
+
+        return {"ok": True, "document": document_to_dict(self._document())}
+
+    def _get_part_studio(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        from ..core.serialization import feature_to_dict
+
+        document = self._document()
+        part = self._part(document, arguments)
+        return {
+            "ok": True,
+            "part": {
+                "id": part.id,
+                "name": part.name,
+                "rollback_index": part.rollback_index,
+                "features": [feature_to_dict(feature) for feature in part.features],
+            },
+        }
+
+    def _get_feature(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        from ..core.serialization import feature_to_dict
+
+        document = self._document()
+        part, feature = self._feature_location(
+            document, str(arguments.get("feature_id") or "")
+        )
+        return {
+            "ok": True,
+            "part_id": part.id,
+            "feature": feature_to_dict(feature),
         }
 
     def _update_geometry(self, arguments: dict[str, Any]) -> dict[str, Any]:
         from ..core.serialization import entity_to_dict
         from ..sketch.entities import SketchArc, SketchCircle, SketchLine
-        from ..sketch.numeric import set_arc, set_circle, set_rectangle
+        from ..sketch.numeric import (
+            rectangle_definition_for,
+            remove_rectangle_definitions_for_entities,
+            set_arc,
+            set_circle,
+            set_rectangle,
+        )
 
         document = self._document()
+        previous = deepcopy(document)
         _part, sketch = self._sketch_location(document, str(arguments.get("sketch_id") or ""))
         entity_id = str(arguments.get("entity_id") or "")
         entity = next((item for item in sketch.entities if item.id == entity_id), None)
@@ -578,6 +1436,22 @@ class BlenderCadWorker:
             raise WorkerError("geometry must be an object.")
         kind = str(geometry.get("type") or entity.entity_type).upper()
         if kind == "LINE" and isinstance(entity, SketchLine):
+            definition = rectangle_definition_for(sketch, entity_id=entity.id)
+            if definition is not None:
+                # A low-level side edit intentionally leaves the primitive
+                # layer rather than silently keeping stale width/height
+                # driving dimensions.  The ordinary line UUIDs survive.
+                dimension_ids = {
+                    item
+                    for item in (definition.width_dimension_id, definition.height_dimension_id)
+                    if item
+                }
+                sketch.dimensions = [
+                    item for item in sketch.dimensions if item.id not in dimension_ids
+                ]
+                remove_rectangle_definitions_for_entities(
+                    sketch, definition.entity_ids
+                )
             entity.x1 = self._mm(geometry, "x1_mm")
             entity.y1 = self._mm(geometry, "y1_mm")
             entity.x2 = self._mm(geometry, "x2_mm")
@@ -609,17 +1483,24 @@ class BlenderCadWorker:
         if "construction" in geometry:
             entity.construction = bool(geometry["construction"])
         sketch.deleted_regions.clear()
-        self._save_document(document)
+        solver = self._solve_candidate(sketch)
+        rebuild = self._commit_sketch_candidate(previous, document, _part.id)
         return {
+            "ok": True,
             "sketch_id": sketch.id,
             "entity": entity_to_dict(entity),
-            "rebuild": self._rebuild_payload(_part.id),
+            "solver_status": solver.status,
+            "rebuild": rebuild,
         }
 
     def _delete_geometry(self, arguments: dict[str, Any]) -> dict[str, Any]:
         from ..core.serialization import entity_to_dict
+        from ..sketch.constraints import remove_constraints_for_entity
+        from ..sketch.dimensions import remove_dimensions_for_entity
+        from ..sketch.numeric import remove_rectangle_definitions_for_entities
 
         document = self._document()
+        previous = deepcopy(document)
         _part, sketch = self._sketch_location(document, str(arguments.get("sketch_id") or ""))
         entity_ids = arguments.get("entity_ids")
         if not isinstance(entity_ids, list) or not entity_ids:
@@ -631,11 +1512,26 @@ class BlenderCadWorker:
             raise WorkerError(f"Sketch entity not found: {', '.join(missing)}")
         sketch.entities = [entity for entity in sketch.entities if entity.id not in wanted]
         sketch.deleted_regions.clear()
-        self._save_document(document)
+        removed_constraints = sum(
+            remove_constraints_for_entity(sketch, entity.id) for entity in removed
+        )
+        removed_dimensions = sum(
+            remove_dimensions_for_entity(sketch, entity.id) for entity in removed
+        )
+        removed_rectangles = remove_rectangle_definitions_for_entities(
+            sketch, wanted
+        )
+        solver = self._solve_candidate(sketch)
+        rebuild = self._commit_sketch_candidate(previous, document, _part.id)
         return {
+            "ok": True,
             "sketch_id": sketch.id,
             "deleted": [entity_to_dict(item) for item in removed],
-            "rebuild": self._rebuild_payload(_part.id),
+            "removed_constraints": removed_constraints,
+            "removed_dimensions": removed_dimensions,
+            "removed_rectangles": removed_rectangles,
+            "solver_status": solver.status,
+            "rebuild": rebuild,
         }
 
     @staticmethod
@@ -786,6 +1682,44 @@ class BlenderCadWorker:
             ],
         }
 
+    def _feature_result_response(
+        self,
+        part_id: str,
+        feature,
+        rebuild: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Return a stable, direct feature result alongside legacy payloads."""
+
+        from ..core.serialization import feature_to_dict
+
+        document = self._document()
+        part = document.get_part(part_id)
+        current = part.get_feature(feature.id) if part is not None else feature
+        status = next(
+            (
+                item["status"]
+                for item in rebuild.get("features", ())
+                if item.get("id") == feature.id
+            ),
+            getattr(current, "status", "NOT_EVALUATED"),
+        )
+        references = self._list_references(
+            {"part_id": part_id, "feature_id": feature.id}
+        )
+        return {
+            "part_id": part_id,
+            "feature_id": feature.id,
+            "feature_type": feature.feature_type,
+            "status": status,
+            "feature": feature_to_dict(current or feature),
+            "references": {
+                "planes": references.get("planes", []),
+                "faces": references.get("faces", []),
+                "edges": references.get("edges", []),
+            },
+            "rebuild": rebuild,
+        }
+
     def _create_extrude(self, arguments: dict[str, Any]) -> dict[str, Any]:
         from ..core.serialization import feature_to_dict
         from ..features.extrude import ExtrudeFeature
@@ -829,7 +1763,8 @@ class BlenderCadWorker:
         part.add_feature(feature)
         document.active_part_id = part.id
         self._save_document(document)
-        return {"part_id": part.id, "feature": feature_to_dict(feature), "rebuild": self._rebuild_payload(part.id)}
+        rebuild = self._rebuild_payload(part.id)
+        return self._feature_result_response(part.id, feature, rebuild)
 
     def _axis_reference(self, axis_data: Any, part, sketch, axis_reverse: bool):
         from ..core.references import AxisReference
@@ -909,7 +1844,8 @@ class BlenderCadWorker:
         part.add_feature(feature)
         document.active_part_id = part.id
         self._save_document(document)
-        return {"part_id": part.id, "feature": feature_to_dict(feature), "rebuild": self._rebuild_payload(part.id)}
+        rebuild = self._rebuild_payload(part.id)
+        return self._feature_result_response(part.id, feature, rebuild)
 
     @staticmethod
     def _mirror_plane_reference(value: Any):
@@ -984,11 +1920,8 @@ class BlenderCadWorker:
         part.add_feature(feature)
         document.active_part_id = part.id
         self._save_document(document)
-        return {
-            "part_id": part.id,
-            "feature": feature_to_dict(feature),
-            "rebuild": self._rebuild_payload(part.id),
-        }
+        rebuild = self._rebuild_payload(part.id)
+        return self._feature_result_response(part.id, feature, rebuild)
 
     def _create_mirror(self, arguments: dict[str, Any]) -> dict[str, Any]:
         from ..core.serialization import feature_to_dict
@@ -1020,11 +1953,8 @@ class BlenderCadWorker:
         part.add_feature(feature)
         document.active_part_id = part.id
         self._save_document(document)
-        return {
-            "part_id": part.id,
-            "feature": feature_to_dict(feature),
-            "rebuild": self._rebuild_payload(part.id),
-        }
+        rebuild = self._rebuild_payload(part.id)
+        return self._feature_result_response(part.id, feature, rebuild)
 
     def _edge_references(self, values: Any):
         from ..core.serialization import edge_reference_from_dict
@@ -1082,11 +2012,8 @@ class BlenderCadWorker:
         part.add_feature(feature)
         document.active_part_id = part.id
         self._save_document(document)
-        return {
-            "part_id": part.id,
-            "feature": feature_to_dict(feature),
-            "rebuild": self._rebuild_payload(part.id),
-        }
+        rebuild = self._rebuild_payload(part.id)
+        return self._feature_result_response(part.id, feature, rebuild)
 
     def _create_chamfer(self, arguments: dict[str, Any]) -> dict[str, Any]:
         return self._create_edge_feature(arguments, "CHAMFER")
@@ -1401,13 +2328,16 @@ class _VisibleSocketSession:
             )
             self._queue({"id": request.get("id"), "ok": True, "result": result})
         except Exception as exc:
-            self._queue(
-                {
-                    "id": request.get("id") if isinstance(request, dict) else None,
-                    "ok": False,
-                    "error": str(exc),
-                }
-            )
+            code = getattr(exc, "code", "CAD_ERROR")
+            error = {"code": code, "error_code": code, "message": str(exc)}
+            details = getattr(exc, "details", None)
+            if details is not None:
+                error["details"] = details
+            self._queue({
+                "id": request.get("id") if isinstance(request, dict) else None,
+                "ok": False,
+                "error": error,
+            })
 
     def _queue(self, message: dict[str, Any]) -> None:
         self._outgoing.extend(_message_bytes(message))
@@ -1688,12 +2618,17 @@ def _run_blocking_service(worker: BlenderCadWorker, args) -> int:
                             {"id": request.get("id"), "ok": True, "result": result},
                         )
                     except Exception as exc:
+                        code = getattr(exc, "code", "CAD_ERROR")
+                        error = {"code": code, "error_code": code, "message": str(exc)}
+                        details = getattr(exc, "details", None)
+                        if details is not None:
+                            error["details"] = details
                         _send(
                             writer,
                             {
                                 "id": request.get("id") if isinstance(request, dict) else None,
                                 "ok": False,
-                                "error": str(exc),
+                                "error": error,
                             },
                         )
             finally:

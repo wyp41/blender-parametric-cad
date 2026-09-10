@@ -12,6 +12,14 @@ from gpu_extras.batch import batch_for_shader
 from mathutils import Vector
 
 from ...sketch.entities import SketchArc, SketchCircle, SketchLine
+from ...sketch.constraints import ConstraintError
+from ...sketch.dimensions import (
+    DimensionError,
+    dimension_label,
+    dimension_label_point,
+    dimension_measure_points,
+    dimension_value,
+)
 from ...sketch.numeric import rectangle_entity_ids
 from ...sketch.plane import PlaneResolutionError, resolve_sketch_plane_from_history
 from ...sketch.profile import ProfileDetector
@@ -19,6 +27,7 @@ from ...sketch.snapping import snap_targets
 from ...sketch.sketch import SketchFeature, sketch_to_world
 from ..adapter import load_document_from_scene
 from .provenance import get_face_candidates
+from .sketch_selection import reference_local_point, selected_references
 
 _draw_handle = None
 _pixel_draw_handle = None
@@ -33,6 +42,8 @@ _hover_face = None
 _selected_face = None
 _hover_edge = None
 _selected_edges = []
+_hover_sketch_candidate = None
+_selected_sketch_references = []
 _measurement_pending: tuple[
     tuple[float, float, float], tuple[float, float, float] | None
 ] | None = None
@@ -121,6 +132,25 @@ def clear_edge_selection() -> None:
     tag_redraw()
 
 
+def set_sketch_hover(candidate) -> None:
+    global _hover_sketch_candidate
+    _hover_sketch_candidate = candidate
+    tag_redraw()
+
+
+def set_sketch_selection(references) -> None:
+    global _selected_sketch_references
+    _selected_sketch_references = list(references or [])
+    tag_redraw()
+
+
+def clear_sketch_selection() -> None:
+    global _hover_sketch_candidate, _selected_sketch_references
+    _hover_sketch_candidate = None
+    _selected_sketch_references = []
+    tag_redraw()
+
+
 def set_measurement_pending(
     first: tuple[float, float, float],
     second: tuple[float, float, float] | None = None,
@@ -202,6 +232,7 @@ def stop() -> None:
     clear_preview()
     clear_measurement()
     clear_edge_selection()
+    clear_sketch_selection()
 
 
 def _draw_callback() -> None:
@@ -247,12 +278,24 @@ def _draw_callback() -> None:
             if sketch.id == ui.active_feature_id
             else (0.55, 0.65, 0.72, 0.8)
         )
-        selected_ids: set[str] = set()
-        if editing and sketch.id == ui.active_sketch_id and ui.active_sketch_entity_id:
+        selected_refs = (
+            selected_references(ui)
+            if editing and sketch.id == ui.active_sketch_id
+            else []
+        )
+        selected_ids: set[str] = {reference.entity_id for reference in selected_refs}
+        if editing and sketch.id == ui.active_sketch_id and not selected_ids and ui.active_sketch_entity_id:
             selected_ids = set(
                 rectangle_entity_ids(sketch, ui.active_sketch_entity_id)
                 or (ui.active_sketch_entity_id,)
             )
+        hover_ids = set()
+        if (
+            editing
+            and _hover_sketch_candidate is not None
+            and _hover_sketch_candidate.reference.sketch_id == sketch.id
+        ):
+            hover_ids.add(_hover_sketch_candidate.reference.entity_id)
         hidden_ids = _deleted_region_entity_ids(sketch)
         _draw_segments(
             _entity_segments(sketch, exclude=selected_ids | hidden_ids),
@@ -265,7 +308,23 @@ def _draw_callback() -> None:
             (1.0, 0.65, 0.1, 1.0),
             6.0,
         )
+        if hover_ids - selected_ids:
+            _draw_segments(
+                _entity_segments(sketch, include=hover_ids - selected_ids),
+                (0.15, 0.75, 1.0, 1.0),
+                6.0,
+            )
         if editing and sketch.id == ui.active_sketch_id:
+            for reference in selected_refs:
+                point = reference_local_point(sketch, reference)
+                if point is not None:
+                    _draw_sketch_marker(sketch, point, (1.0, 0.65, 0.1, 1.0))
+            if _hover_sketch_candidate is not None and _hover_sketch_candidate.reference.sketch_id == sketch.id:
+                _draw_sketch_marker(
+                    sketch,
+                    _hover_sketch_candidate.local_point,
+                    (0.15, 0.75, 1.0, 1.0),
+                )
             _draw_intersection_markers(sketch, hidden_ids)
             origin = sketch.origin
             axis_length = 0.02
@@ -369,6 +428,8 @@ def _draw_pixel_callback() -> None:
         (1.0, 0.45, 0.05, 0.42),
         selected=True,
     )
+    _draw_dimension_annotations(region, region_3d)
+    _draw_constraint_annotations(region, region_3d)
     if _measurement_pending is not None:
         first, second = _measurement_pending
         first_2d = _project_measurement_point(region, region_3d, first)
@@ -421,6 +482,141 @@ def _draw_measurement_text(position, text: str, color, size: int = 13) -> None:
         blf.color(font_id, *color)
         blf.position(font_id, x + 8.0, y + 8.0, 0.0)
         blf.draw(font_id, text)
+    except (AttributeError, RuntimeError, TypeError, ValueError):
+        return
+
+
+def _draw_dimension_annotations(region, region_3d) -> None:
+    """Draw readable M9 labels and extension lines in the Sketch plane."""
+
+    scene = getattr(bpy.context, "scene", None)
+    ui = getattr(scene, "parametric_cad_ui", None)
+    if ui is None or ui.mode != "SKETCH_EDIT" or not ui.active_sketch_id:
+        return
+    try:
+        document = load_document_from_scene(scene)
+        part = document.active_part
+        sketch = part.get_feature(ui.active_sketch_id) if part else None
+        if not isinstance(sketch, SketchFeature):
+            return
+        for dimension in sketch.dimensions:
+            try:
+                first, second = dimension_measure_points(sketch, dimension)
+                first_2d = location_3d_to_region_2d(
+                    region, region_3d, sketch_to_world(sketch, *first)
+                )
+                second_2d = location_3d_to_region_2d(
+                    region, region_3d, sketch_to_world(sketch, *second)
+                )
+                label_2d = location_3d_to_region_2d(
+                    region,
+                    region_3d,
+                    sketch_to_world(sketch, *dimension_label_point(sketch, dimension)),
+                )
+                if first_2d is None or second_2d is None or label_2d is None:
+                    continue
+                color = (
+                    (1.0, 0.55, 0.1, 1.0)
+                    if dimension.id == ui.active_sketch_dimension_id
+                    else (0.75, 0.85, 1.0, 1.0)
+                )
+                _draw_2d_line(first_2d, second_2d, color, 1.5)
+                measured = dimension_value(sketch, dimension)
+                _draw_measurement_text(
+                    label_2d,
+                    f"{dimension_label(dimension, measured)}"
+                    if dimension.status == "OK"
+                    else "INVALID",
+                    color,
+                    size=12,
+                )
+            except (DimensionError, RuntimeError, TypeError, ValueError):
+                continue
+    except (AttributeError, ReferenceError, RuntimeError, TypeError, ValueError):
+        return
+
+
+def _constraint_marker_point(sketch, constraint):
+    from .sketch_selection import reference_local_point
+
+    reference = constraint.entity_refs[0]
+    point = reference_local_point(sketch, reference)
+    if point is not None:
+        return point
+    entity = next((item for item in sketch.entities if item.id == reference.entity_id), None)
+    if isinstance(entity, SketchLine):
+        return ((entity.x1 + entity.x2) * 0.5, (entity.y1 + entity.y2) * 0.5)
+    if isinstance(entity, SketchCircle):
+        return entity.cx, entity.cy
+    if isinstance(entity, SketchArc):
+        return entity.point((entity.start_angle + entity.end_angle) * 0.5)
+    return None
+
+
+def _draw_constraint_annotations(region, region_3d) -> None:
+    """Draw compact constraint labels; solving remains MCP/core-first."""
+
+    scene = getattr(bpy.context, "scene", None)
+    ui = getattr(scene, "parametric_cad_ui", None)
+    if ui is None or ui.mode != "SKETCH_EDIT" or not ui.active_sketch_id:
+        return
+    try:
+        document = load_document_from_scene(scene)
+        part = document.active_part
+        sketch = part.get_feature(ui.active_sketch_id) if part else None
+        if not isinstance(sketch, SketchFeature):
+            return
+        labels = {
+            "HORIZONTAL": "H",
+            "VERTICAL": "V",
+            "COINCIDENT": "●",
+            "PARALLEL": "//",
+            "PERPENDICULAR": "⊥",
+            "EQUAL": "=",
+        }
+        for constraint in sketch.constraints:
+            if not constraint.enabled or not constraint.entity_refs:
+                continue
+            point = _constraint_marker_point(sketch, constraint)
+            if point is None:
+                continue
+            position = location_3d_to_region_2d(
+                region, region_3d, sketch_to_world(sketch, *point)
+            )
+            if position is not None:
+                _draw_measurement_text(
+                    position,
+                    labels.get(constraint.constraint_type, "?")
+                    + ("" if constraint.constraint_type != "COINCIDENT" else " "),
+                    (0.3, 1.0, 0.55, 1.0),
+                    size=11,
+                )
+    except (AttributeError, ConstraintError, ReferenceError, RuntimeError, TypeError, ValueError):
+        return
+
+
+def _draw_2d_line(first, second, color, width: float = 1.5) -> None:
+    try:
+        shader = gpu.shader.from_builtin("UNIFORM_COLOR")
+        batch = batch_for_shader(
+            shader,
+            "LINES",
+            {
+                "pos": [
+                    (float(first.x), float(first.y), 0.0),
+                    (float(second.x), float(second.y), 0.0),
+                ]
+            },
+        )
+        gpu.state.depth_test_set("NONE")
+        gpu.state.blend_set("ALPHA")
+        gpu.state.line_width_set(width)
+        shader.bind()
+        shader.uniform_float("color", color)
+        batch.draw(shader)
+        gpu.state.line_width_set(1.0)
+        gpu.state.blend_set("NONE")
+        gpu.state.depth_test_set("LESS_EQUAL")
     except (AttributeError, RuntimeError, TypeError, ValueError):
         return
 
@@ -663,6 +859,22 @@ def _draw_intersection_markers(sketch: SketchFeature, hidden_ids: set[str]) -> N
             ]
         )
     _draw_segments(segments, (1.0, 0.85, 0.1, 1.0), 5.0)
+
+
+def _draw_sketch_marker(sketch: SketchFeature, point: tuple[float, float], color) -> None:
+    """Draw a small cross at a selected or hovered Sketch sub-element."""
+
+    size = 0.0022
+    center = sketch_to_world(sketch, *point)
+    x_axis = tuple(sketch.x_axis[index] * size for index in range(3))
+    y_axis = tuple(sketch.y_axis[index] * size for index in range(3))
+    segments = [
+        tuple(center[index] - x_axis[index] for index in range(3)),
+        tuple(center[index] + x_axis[index] for index in range(3)),
+        tuple(center[index] - y_axis[index] for index in range(3)),
+        tuple(center[index] + y_axis[index] for index in range(3)),
+    ]
+    _draw_segments(segments, color, 7.0)
 
 
 def _draw_snap_preview() -> None:

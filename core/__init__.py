@@ -10,6 +10,7 @@ from .references import (
     EdgeSignature,
     FaceReference,
     SelectionReference,
+    SketchEntityReference,
     TopoReference,
 )
 from .transform import Matrix4, Transform, Vector3
@@ -20,6 +21,7 @@ __all__ = [
     "EdgeSignature",
     "FaceReference",
     "SelectionReference",
+    "SketchEntityReference",
     "TopoReference",
     "Matrix4",
     "Transform",

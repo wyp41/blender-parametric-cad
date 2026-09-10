@@ -19,6 +19,7 @@ from ..core.evaluator import EvaluationResult, PartEvaluator
 from ..core.serialization import dumps, loads
 from ..geometry.blender_mesh_backend import BlenderMeshBackend
 from .viewport.provenance import (
+    clear_runtime_caches,
     clear_face_provenance,
     set_edge_candidates,
     set_face_candidates,
@@ -394,6 +395,19 @@ def _on_load_post(_dummy) -> None:
     if scene is None:
         return
     try:
+        clear_runtime_caches()
+        try:
+            from .viewport.sketch_overlay import (
+                clear_edge_selection,
+                clear_face_selection,
+                clear_sketch_selection,
+            )
+
+            clear_edge_selection()
+            clear_face_selection()
+            clear_sketch_selection()
+        except (ImportError, ReferenceError, RuntimeError, TypeError):
+            pass
         document = load_document_from_scene(scene)
         ui = getattr(scene, "parametric_cad_ui", None)
         if ui is not None:
@@ -423,10 +437,10 @@ def _on_load_post(_dummy) -> None:
 
 def register_handlers() -> None:
     handlers = bpy.app.handlers
-    if _on_load_post not in handlers.load_post:
-        handlers.load_post.append(_on_load_post)
-    if _on_depsgraph_update_post not in handlers.depsgraph_update_post:
-        handlers.depsgraph_update_post.append(_on_depsgraph_update_post)
+    _remove_stale_handler(handlers.load_post, _on_load_post)
+    _remove_stale_handler(handlers.depsgraph_update_post, _on_depsgraph_update_post)
+    handlers.load_post.append(_on_load_post)
+    handlers.depsgraph_update_post.append(_on_depsgraph_update_post)
     scene = getattr(bpy.context, "scene", None)
     if scene is not None:
         _on_load_post(None)
@@ -438,8 +452,18 @@ def unregister_handlers() -> None:
         (handlers.load_post, _on_load_post),
         (handlers.depsgraph_update_post, _on_depsgraph_update_post),
     ):
-        if callback in collection:
-            collection.remove(callback)
+        _remove_stale_handler(collection, callback)
+
+
+def _remove_stale_handler(collection, callback) -> None:
+    """Remove this add-on's previous module instance after a code reload."""
+
+    for registered in list(collection):
+        if registered is callback or (
+            getattr(registered, "__module__", None) == callback.__module__
+            and getattr(registered, "__name__", None) == callback.__name__
+        ):
+            collection.remove(registered)
 
 
 def _reactivate_mcp_service() -> None:

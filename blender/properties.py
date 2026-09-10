@@ -104,6 +104,8 @@ def _active_part_changed(self, context):
     self.active_sketch_id = ""
     self.active_sketch_entity_id = ""
     self.active_sketch_entity_ids = "[]"
+    self.active_sketch_references = "[]"
+    self.active_sketch_dimension_id = ""
     self.revolve_axis_sketch_id = ""
     self.selected_face_reference = ""
     self.selected_edge_references = "[]"
@@ -355,6 +357,44 @@ class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
         description="JSON list of selected sketch entity IDs for group edits",
         default="[]",
         options={"HIDDEN"},
+    )
+    active_sketch_references: StringProperty(
+        name="Selected Sketch References",
+        description="JSON list of persistent SketchEntityReferences; runtime hit candidates are not stored",
+        default="[]",
+        options={"HIDDEN"},
+    )
+    active_sketch_dimension_id: StringProperty(
+        name="Active Sketch Dimension",
+        description="Persistent SketchDimension UUID selected for editing",
+        default="",
+        options={"HIDDEN"},
+    )
+    sketch_selection_radius_px: FloatProperty(
+        name="Selection Radius",
+        description="Screen-space radius used for Sketch endpoints, centers, and entities",
+        default=12.0,
+        min=3.0,
+        max=40.0,
+    )
+    sketch_dimension_type: EnumProperty(
+        name="Dimension Type",
+        items=[
+            ("LENGTH", "Length", "Drive a line's total length"),
+            ("HORIZONTAL_DISTANCE", "Horizontal", "Drive the X distance between two points"),
+            ("VERTICAL_DISTANCE", "Vertical", "Drive the Y distance between two points"),
+            ("DISTANCE", "Distance", "Drive the direct distance between two points"),
+            ("RADIUS", "Radius", "Drive a circle radius"),
+            ("DIAMETER", "Diameter", "Drive a circle diameter"),
+        ],
+        default="DISTANCE",
+    )
+    sketch_dimension_value_mm: FloatProperty(
+        name="Dimension Value",
+        description="Driving Sketch dimension value in millimeters",
+        default=10.0,
+        soft_min=-100000.0,
+        soft_max=100000.0,
     )
     sketch_dirty: BoolProperty(
         name="Sketch Has Unapplied Changes",
@@ -654,6 +694,8 @@ def _ensure_ui_state_registered() -> None:
     registered = _registered_class(cls)
     is_current_and_complete = (
         registered is cls and _class_has_rna_property(registered, "panel_tab")
+        and _class_has_rna_property(registered, "active_sketch_references")
+        and _class_has_rna_property(registered, "sketch_dimension_value_mm")
     )
     if is_current_and_complete:
         return

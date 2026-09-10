@@ -128,11 +128,18 @@ session can use the same override when the system Metal backend is unstable.
 
 MCP tool groups:
 
-- Document: `cad_status`, `cad_create_part`, `cad_set_active_part`,
+- Document: `cad_status`, `cad_get_document`, `cad_create_part`,
+  `cad_get_part_studio`, `cad_get_feature`, `cad_set_active_part`,
   `cad_delete_part`, `cad_validate_document`, `cad_save_scene`.
-- Sketch: `cad_create_sketch`, `cad_add_geometry`, `cad_update_geometry`,
-  `cad_delete_geometry`, `cad_profile`, `cad_delete_region`,
-  `cad_restore_region`.
+- Sketch: `cad_create_sketch`, `cad_add_geometry`, `cad_sketch_add_line`,
+  `cad_sketch_add_circle`, `cad_sketch_add_rectangle`,
+  `cad_sketch_update_rectangle`, `cad_update_geometry`, `cad_delete_geometry`,
+  `cad_profile`, `cad_delete_region`, `cad_restore_region`.
+- Sketch authoring: `cad_sketch_add_constraint`,
+  `cad_sketch_delete_constraint`, `cad_sketch_add_dimension`,
+  `cad_sketch_update_dimension`, `cad_sketch_delete_dimension`.
+- Inspection: `cad_get_sketch`, `cad_get_history`, `cad_get_edges`,
+  `cad_list_references`, and `cad_inspect_geometry`.
 - Features: `cad_create_extrude`, `cad_create_revolve`, `cad_create_transform`,
   `cad_create_mirror`, `cad_create_chamfer`, `cad_create_fillet`, `cad_update_feature`,
   `cad_delete_feature`, `cad_suppress_feature`, `cad_rollback`,
@@ -140,6 +147,18 @@ MCP tool groups:
 - Output: `cad_export_part` (isolated STL, OBJ, or PLY export by `part_id`).
 - Runtime: `blender_execute_python` (trusted direct Python/`bpy` execution in
   the connected Blender process).
+
+For AI-driven Sketch authoring, prefer the dedicated `cad_sketch_*` calls over
+raw geometry mutation. They use local coordinates and millimeters, return
+stable UUIDs, solve dimensions plus the six basic constraints
+(`COINCIDENT`, `HORIZONTAL`, `VERTICAL`, `PARALLEL`, `PERPENDICULAR`, and
+`EQUAL`), rebuild downstream history, and roll back failed mutations. Use
+`cad_get_sketch` and `cad_get_history` to inspect semantic state; use
+`cad_sketch_update_rectangle` for high-level rectangle edits so its four line
+UUIDs remain stable. Use `cad_get_edges` or `cad_list_references` when chaining
+a straight persistent edge into Chamfer or Fillet. Constraint failures are
+reported as `CONSTRAINT_CONFLICT` or `INVALID_REFERENCE` and never commit a
+partial Sketch.
 
 Viewport measurement is intentionally interactive and display-only; it does not
 modify the persistent CAD document and therefore is not an MCP modeling

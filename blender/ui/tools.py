@@ -276,6 +276,16 @@ class PARAMETRIC_CAD_WST_select(_CADSketchTool):
     )
 
 
+class PARAMETRIC_CAD_WST_dimension(_CADSketchTool):
+    bl_idname = "parametric_cad.sketch_dimension"
+    bl_label = "CAD Sketch Dimension"
+    bl_description = "Add a driving dimension from the selected Sketch entity or points"
+    bl_icon = "ops.transform.resize"
+    bl_keymap = (
+        ("parametric_cad.add_dimension", {"type": "LEFTMOUSE", "value": "PRESS"}, None),
+    )
+
+
 class PARAMETRIC_CAD_WST_line(_CADSketchTool):
     bl_idname = "parametric_cad.sketch_line"
     bl_label = "CAD Sketch Line"
@@ -455,6 +465,7 @@ class PARAMETRIC_CAD_WST_fillet(_CADFeatureTool):
 TOOL_CLASSES = (
     PARAMETRIC_CAD_WST_measure,
     PARAMETRIC_CAD_WST_select,
+    PARAMETRIC_CAD_WST_dimension,
     PARAMETRIC_CAD_WST_line,
     PARAMETRIC_CAD_WST_rectangle,
     PARAMETRIC_CAD_WST_circle,
@@ -480,6 +491,7 @@ FEATURE_TOOL_CLASSES = (
 
 SKETCH_TOOL_CLASSES = (
     PARAMETRIC_CAD_WST_select,
+    PARAMETRIC_CAD_WST_dimension,
     PARAMETRIC_CAD_WST_line,
     PARAMETRIC_CAD_WST_rectangle,
     PARAMETRIC_CAD_WST_circle,

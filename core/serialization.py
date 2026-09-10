@@ -13,7 +13,10 @@ from ..features.mirror import MirrorFeature
 from ..features.revolve import RevolveFeature
 from ..features.transform import TransformFeature
 from ..sketch.entities import SketchArc, SketchCircle, SketchEntity, SketchLine
+from ..sketch.constraints import SketchConstraint, constraint_from_dict, constraint_to_dict
+from ..sketch.dimensions import SketchDimension, dimension_from_dict, dimension_to_dict
 from ..sketch.plane import DerivedPlaneReference, RegionHint, SketchPlaneReference
+from ..sketch.primitives import RectangleDefinition
 from ..sketch.sketch import SketchFeature
 from .feature import Feature
 from .part import Part
@@ -177,6 +180,9 @@ def feature_to_dict(feature: Feature) -> dict[str, Any]:
             plane_reference=plane_reference_to_dict(feature.plane_reference),
             entities=[entity_to_dict(item) for item in feature.entities],
             deleted_regions=list(feature.deleted_regions),
+            dimensions=[dimension_to_dict(item) for item in feature.dimensions],
+            constraints=[constraint_to_dict(item) for item in feature.constraints],
+            rectangles=[item.to_dict() for item in feature.rectangles],
         )
     elif isinstance(feature, ExtrudeFeature):
         data.update(
@@ -233,6 +239,9 @@ def feature_from_dict(data: dict[str, Any]) -> Feature:
             plane_reference=plane_reference_from_dict(data.get("plane_reference")),
             entities=[entity_from_dict(item) for item in data.get("entities", [])],
             deleted_regions=list(data.get("deleted_regions", [])),
+            dimensions=[dimension_from_dict(item) for item in data.get("dimensions", [])],
+            constraints=[constraint_from_dict(item) for item in data.get("constraints", [])],
+            rectangles=[RectangleDefinition.from_dict(item) for item in data.get("rectangles", [])],
         )
     if data["feature_type"] == "EXTRUDE":
         return ExtrudeFeature(

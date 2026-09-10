@@ -18,7 +18,7 @@ from typing import Any
 PROTOCOL_VERSION = "2025-06-18"
 SUPPORTED_PROTOCOL_VERSIONS = {"2024-11-05", "2025-03-26", PROTOCOL_VERSION}
 SERVER_NAME = "blender-parametric-cad"
-SERVER_VERSION = "0.16.12"
+SERVER_VERSION = "0.17.0"
 
 
 def _object(properties: dict[str, Any] | None = None, required: list[str] | None = None) -> dict[str, Any]:
@@ -48,6 +48,30 @@ def _integer(description: str) -> dict[str, Any]:
 _PART_ID = _string("Part Studio UUID. Omit to use the active Part Studio.")
 _SKETCH_ID = _string("Sketch feature UUID.")
 _FEATURE_ID = _string("Feature UUID.")
+_SKETCH_REF = {
+    "type": "object",
+    "description": "Persistent Sketch reference. sketch_id may be omitted inside its Sketch.",
+    "additionalProperties": False,
+    "properties": {
+        "sketch_id": _SKETCH_ID,
+        "entity_id": _string("Sketch entity UUID."),
+        "sub_element": _string("ENTITY, START, END, or CENTER.", ["ENTITY", "START", "END", "CENTER"]),
+    },
+    "required": ["entity_id"],
+}
+_SKETCH_REF_ARRAY = {
+    "type": "array",
+    "items": _SKETCH_REF,
+    "minItems": 1,
+}
+_CONSTRAINT_TYPE = _string(
+    "Basic Sketch constraint type.",
+    ["COINCIDENT", "HORIZONTAL", "VERTICAL", "PARALLEL", "PERPENDICULAR", "EQUAL"],
+)
+_DIMENSION_TYPE = _string(
+    "Driving Sketch dimension type.",
+    ["LENGTH", "HORIZONTAL_DISTANCE", "VERTICAL_DISTANCE", "DISTANCE", "RADIUS", "DIAMETER"],
+)
 _VECTOR3 = {
     "type": "object",
     "description": "Object with numeric x, y, and z fields.",
@@ -152,6 +176,169 @@ TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
             },
             ["sketch_id", "geometry"],
         ),
+    },
+    {
+        "name": "cad_sketch_add_line",
+        "description": "Create one SketchLine and return its stable UUID. Coordinates are Sketch-local millimeters.",
+        "inputSchema": _object(
+            {
+                "sketch_id": _SKETCH_ID,
+                "x1_mm": _number("Start U coordinate in millimeters."),
+                "y1_mm": _number("Start V coordinate in millimeters."),
+                "x2_mm": _number("End U coordinate in millimeters."),
+                "y2_mm": _number("End V coordinate in millimeters."),
+                "construction": {"type": "boolean", "description": "Construction geometry flag."},
+            },
+            ["sketch_id", "x1_mm", "y1_mm", "x2_mm", "y2_mm"],
+        ),
+    },
+    {
+        "name": "cad_sketch_add_circle",
+        "description": "Create one SketchCircle and return its stable UUID. Coordinates and radius/diameter are millimeters.",
+        "inputSchema": {
+            **_object(
+                {
+                    "sketch_id": _SKETCH_ID,
+                    "cx_mm": _number("Center U coordinate in millimeters."),
+                    "cy_mm": _number("Center V coordinate in millimeters."),
+                    "diameter_mm": _number("Circle diameter in millimeters."),
+                    "radius_mm": _number("Circle radius in millimeters."),
+                    "construction": {"type": "boolean", "description": "Construction geometry flag."},
+                },
+                ["sketch_id", "cx_mm", "cy_mm"],
+            ),
+            "anyOf": [
+                {"required": ["diameter_mm"]},
+                {"required": ["radius_mm"]},
+            ],
+        },
+    },
+    {
+        "name": "cad_sketch_add_rectangle",
+        "description": "Create one semantic rectangle backed by four ordinary SketchLines, two driving dimensions, and stable UUIDs.",
+        "inputSchema": _object(
+            {
+                "sketch_id": _SKETCH_ID,
+                "x_mm": _number("Lower-left U coordinate in millimeters."),
+                "y_mm": _number("Lower-left V coordinate in millimeters."),
+                "width_mm": _number("Rectangle width in millimeters."),
+                "height_mm": _number("Rectangle height in millimeters."),
+                "construction": {"type": "boolean", "description": "Construction geometry flag."},
+            },
+            ["sketch_id", "width_mm", "height_mm"],
+        ),
+    },
+    {
+        "name": "cad_sketch_update_rectangle",
+        "description": "Update a semantic rectangle by UUID while preserving its four SketchLine UUIDs and downstream references.",
+        "inputSchema": _object(
+            {
+                "sketch_id": _SKETCH_ID,
+                "rectangle_id": _string("Persistent rectangle UUID."),
+                "x_mm": _number("Lower-left U coordinate in millimeters."),
+                "y_mm": _number("Lower-left V coordinate in millimeters."),
+                "width_mm": _number("Rectangle width in millimeters."),
+                "height_mm": _number("Rectangle height in millimeters."),
+            },
+            ["sketch_id", "rectangle_id"],
+        ),
+    },
+    {
+        "name": "cad_sketch_add_constraint",
+        "description": "Add one basic Sketch constraint transactionally and solve the Sketch.",
+        "inputSchema": _object(
+            {
+                "sketch_id": _SKETCH_ID,
+                "constraint_type": _CONSTRAINT_TYPE,
+                "entity_refs": _SKETCH_REF_ARRAY,
+                "constraint_id": _string("Optional caller-supplied constraint UUID."),
+                "enabled": {"type": "boolean", "description": "Whether the constraint participates in solving."},
+            },
+            ["sketch_id", "constraint_type", "entity_refs"],
+        ),
+    },
+    {
+        "name": "cad_sketch_delete_constraint",
+        "description": "Delete a Sketch constraint by UUID and solve remaining equations.",
+        "inputSchema": _object(
+            {"sketch_id": _SKETCH_ID, "constraint_id": _string("Constraint UUID.")},
+            ["sketch_id", "constraint_id"],
+        ),
+    },
+    {
+        "name": "cad_sketch_add_dimension",
+        "description": "Add a driving Sketch dimension transactionally. Values are millimeters.",
+        "inputSchema": _object(
+            {
+                "sketch_id": _SKETCH_ID,
+                "dimension_type": _DIMENSION_TYPE,
+                "entity_refs": _SKETCH_REF_ARRAY,
+                "value_mm": _number("Driving dimension value in millimeters."),
+                "dimension_id": _string("Optional caller-supplied dimension UUID."),
+                "driving": {"type": "boolean", "description": "Whether the dimension drives geometry."},
+            },
+            ["sketch_id", "dimension_type", "entity_refs", "value_mm"],
+        ),
+    },
+    {
+        "name": "cad_sketch_update_dimension",
+        "description": "Update a driving Sketch dimension, solve, and rebuild downstream features.",
+        "inputSchema": _object(
+            {
+                "sketch_id": _SKETCH_ID,
+                "dimension_id": _string("Dimension UUID."),
+                "value_mm": _number("New dimension value in millimeters."),
+            },
+            ["sketch_id", "dimension_id", "value_mm"],
+        ),
+    },
+    {
+        "name": "cad_sketch_delete_dimension",
+        "description": "Delete a Sketch dimension by UUID and solve remaining equations.",
+        "inputSchema": _object(
+            {"sketch_id": _SKETCH_ID, "dimension_id": _string("Dimension UUID.")},
+            ["sketch_id", "dimension_id"],
+        ),
+    },
+    {
+        "name": "cad_get_sketch",
+        "description": "Inspect Sketch-local entities, semantic rectangles, dimensions, constraints, and solver status in millimeters.",
+        "inputSchema": _object({"sketch_id": _SKETCH_ID}, ["sketch_id"]),
+    },
+    {
+        "name": "cad_get_history",
+        "description": "Inspect one Part Studio's feature UUIDs, types, dependencies, and statuses.",
+        "inputSchema": _object({"part_id": _PART_ID}),
+    },
+    {
+        "name": "cad_get_edges",
+        "description": "List current semantic straight-edge references without exposing Blender mesh edge indices.",
+        "inputSchema": _object({"part_id": _PART_ID}),
+    },
+    {
+        "name": "cad_list_references",
+        "description": "List persistent planes, faces, and straight edges for a Part Studio or one feature. Runtime Blender indices are omitted.",
+        "inputSchema": _object({"part_id": _PART_ID, "feature_id": _FEATURE_ID}),
+    },
+    {
+        "name": "cad_inspect_geometry",
+        "description": "Inspect the generated Part Studio mesh: connected components, bounding box, manifold status, and volume.",
+        "inputSchema": _object({"part_id": _PART_ID}),
+    },
+    {
+        "name": "cad_get_document",
+        "description": "Return the complete persistent CAD document as JSON.",
+        "inputSchema": _object(),
+    },
+    {
+        "name": "cad_get_part_studio",
+        "description": "Return one Part Studio and its complete feature history as JSON.",
+        "inputSchema": _object({"part_id": _PART_ID}),
+    },
+    {
+        "name": "cad_get_feature",
+        "description": "Return one persistent feature, including Sketch primitive metadata when applicable.",
+        "inputSchema": _object({"feature_id": _FEATURE_ID}, ["feature_id"]),
     },
     {
         "name": "cad_update_geometry",

@@ -55,6 +55,11 @@ except ImportError:  # Running the checked-out file directly from an MCP config.
 class BridgeError(RuntimeError):
     """A recoverable Blender worker or bridge failure."""
 
+    def __init__(self, message: str, code: str = "BRIDGE_ERROR", details: Any = None):
+        super().__init__(message)
+        self.code = code
+        self.details = details
+
 
 class BlenderBridge:
     """Start one Blender worker and proxy newline-delimited JSON requests."""
@@ -225,7 +230,14 @@ class BlenderBridge:
         if response.get("id") != request_id:
             raise BridgeError("Blender worker returned an out-of-order response.")
         if not response.get("ok", False):
-            raise BridgeError(str(response.get("error", "Blender worker failed.")))
+            error = response.get("error", "Blender worker failed.")
+            if isinstance(error, dict):
+                raise BridgeError(
+                    str(error.get("message", "Blender worker failed.")),
+                    code=str(error.get("code", "CAD_ERROR")),
+                    details=error.get("details"),
+                )
+            raise BridgeError(str(error))
         return response.get("result")
 
     def close(self, terminate_visible: bool = False) -> None:
@@ -560,7 +572,14 @@ class StdioMcpServer:
                 {"content": text_content(value), "structuredContent": value, "isError": False},
             )
         except (BridgeError, OSError, ValueError, TypeError) as exc:
-            error = {"error": str(exc), "tool": name}
+            error = {
+                "error": str(exc),
+                "error_code": getattr(exc, "code", "BRIDGE_ERROR"),
+                "tool": name,
+            }
+            details = getattr(exc, "details", None)
+            if details is not None:
+                error["details"] = details
             return self._result(
                 request_id,
                 {"content": text_content(error), "structuredContent": error, "isError": True},

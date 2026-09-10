@@ -85,17 +85,46 @@ Edge matching tolerances are centralized in `EdgeMatchTolerance`:
 No feature-specific edge epsilon is introduced. The existing centralized
 `PlaneMatchTolerance` remains responsible for adjacent planar-face matching.
 
-## Verification status
+## M8.1 verification status
 
-The Blender-independent M8 tests cover canonical direction, runtime cache
-construction, semantic resolution, Chamfer/Fillet evaluator calls,
-missing/ambiguous blocking, semantic-only serialization, and MCP schemas.
-The complete repository Python test suite and compile check pass.
+Validated against Blender `5.1.2` / Python `3.13.9` through the connected CAD
+MCP service. The trusted `blender_execute_python` path was verified directly
+against the running Blender process, so the validation did not require
+Computer Use for script execution.
 
-Per the development instruction for this iteration, Blender was not launched.
-Consequently the Blender 5.1.2 GUI hover/click path and live BMesh bevel output
-still require a later in-Blender smoke test. This is intentional and is not
-reported as completed real-GUI validation.
+The real Blender validation covers:
+
+- Chamfer and Fillet on persistent straight edges;
+- multi-edge Chamfer;
+- Transform edits with edge-reference re-resolution;
+- Boolean-derived straight edges;
+- missing and ambiguous references becoming `BLOCKED`;
+- suppression, rollback, roll-forward, and cascade delete;
+- repeated rebuilds without duplicate result objects or leaked Boolean helpers;
+- semantic-only save data with no mesh edge index; and
+- save, `open_mainfile`, runtime-cache rebuild, and post-reload resolution.
+
+Results:
+
+- `BLENDER_PARAMETRIC_CAD_M8_1_CORE_VALIDATION_OK`;
+- `BLENDER_PARAMETRIC_CAD_M8_1_RELOAD_OK`;
+- repository regression suite: `96` tests passed;
+- `cad_validate_document`: valid with no diagnostics; and
+- changed Python files compile cleanly with `git diff --check` passing.
+
+The edge-selection operator and CAD scene properties are registered in the
+live Blender process. In the unlocked Blender window, the modal was entered,
+a supported straight edge highlighted blue on hover, changed to orange after
+click, showed `Edges selected: 1`, and returned to the feature editor after
+`Enter`. An unsupported edge produced an explicit warning. Shift multi-select
+is covered by the real multi-edge rebuild path and the selection code, but a
+separate pointer-level Shift-click was not automated in this pass.
+
+A standalone Blender 5.1.2 process also ran the core script and a second
+process reopened the saved file; both completed successfully. This particular
+Blender build reports only `metal` as an accepted `--gpu-backend` value, so an
+attempted OpenGL override printed a startup warning but did not prevent either
+validation script from running.
 
 ## Known limitations / next milestone
 

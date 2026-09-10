@@ -34,6 +34,11 @@ class McpProtocolTests(unittest.TestCase):
         self.assertIn("cad_create_mirror", tool_names)
         self.assertIn("cad_create_chamfer", tool_names)
         self.assertIn("cad_create_fillet", tool_names)
+        self.assertIn("cad_sketch_add_constraint", tool_names)
+        self.assertIn("cad_sketch_add_dimension", tool_names)
+        self.assertIn("cad_get_sketch", tool_names)
+        self.assertIn("cad_get_history", tool_names)
+        self.assertIn("cad_get_edges", tool_names)
         self.assertIn("blender_execute_python", tool_names)
         self.assertIn("cad://api-reference", resource_uris)
 
@@ -60,6 +65,24 @@ class McpProtocolTests(unittest.TestCase):
         python_schema = tools["blender_execute_python"]["inputSchema"]
         self.assertEqual(python_schema["required"], ["code"])
         self.assertIn("code", python_schema["properties"])
+
+    def test_m9c_schemas_are_machine_chainable(self):
+        tools = {item["name"]: item for item in TOOL_DEFINITIONS}
+        rectangle = tools["cad_sketch_add_rectangle"]["inputSchema"]
+        self.assertIn("width_mm", rectangle["properties"])
+        self.assertIn("height_mm", rectangle["properties"])
+        circle = tools["cad_sketch_add_circle"]["inputSchema"]
+        self.assertEqual(
+            circle["anyOf"],
+            [{"required": ["diameter_mm"]}, {"required": ["radius_mm"]}],
+        )
+        constraint = tools["cad_sketch_add_constraint"]["inputSchema"]
+        self.assertIn("constraint_type", constraint["properties"])
+        self.assertIn("entity_refs", constraint["properties"])
+        self.assertIn("COINCIDENT", constraint["properties"]["constraint_type"]["enum"])
+        dimension = tools["cad_sketch_add_dimension"]["inputSchema"]
+        self.assertIn("value_mm", dimension["properties"])
+        self.assertIn("LENGTH", dimension["properties"]["dimension_type"]["enum"])
 
     def test_initialize_and_tool_list(self):
         server = StdioMcpServer(_FakeBridge())

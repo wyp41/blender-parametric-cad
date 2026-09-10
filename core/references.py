@@ -180,6 +180,56 @@ class EdgeReference:
 
 
 @dataclass(frozen=True)
+class SketchEntityReference:
+    """Persistent reference to a Sketch entity or one of its sub-elements.
+
+    The UUIDs belong to the CAD Sketch model.  They are deliberately
+    independent of Blender curve/mesh elements and therefore remain valid
+    after a rebuild or a ``.blend`` reload.
+    """
+
+    sketch_id: str
+    entity_id: str
+    sub_element: str | None = None
+
+    _SUB_ELEMENTS = frozenset({None, "START", "END", "CENTER", "ENTITY"})
+
+    def __post_init__(self) -> None:
+        sketch_id = str(self.sketch_id)
+        entity_id = str(self.entity_id)
+        sub_element = None if self.sub_element in {None, ""} else str(self.sub_element).upper()
+        if not sketch_id or not entity_id:
+            raise ValueError("Sketch entity references require Sketch and entity UUIDs.")
+        if sub_element not in self._SUB_ELEMENTS:
+            raise ValueError(f"Unsupported Sketch entity sub-element: {sub_element!r}")
+        object.__setattr__(self, "sketch_id", sketch_id)
+        object.__setattr__(self, "entity_id", entity_id)
+        object.__setattr__(self, "sub_element", sub_element)
+
+    @property
+    def reference_type(self) -> str:
+        return "SKETCH_ENTITY"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "reference_type": self.reference_type,
+            "sketch_id": self.sketch_id,
+            "entity_id": self.entity_id,
+            "sub_element": self.sub_element,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "SketchEntityReference":
+        if not isinstance(data, dict):
+            raise ValueError("Sketch entity reference must be a JSON object.")
+        return cls(
+            sketch_id=str(data.get("sketch_id") or ""),
+            entity_id=str(data.get("entity_id") or ""),
+            sub_element=data.get("sub_element"),
+        )
+
+
+@dataclass(frozen=True)
 class TopoReference:
     """A persistent reference to a supported generated face."""
 

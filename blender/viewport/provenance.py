@@ -14,6 +14,14 @@ _CANDIDATES: dict[int, dict] = {}
 _EDGE_CANDIDATES: dict[int, dict] = {}
 
 
+def clear_runtime_caches() -> None:
+    """Drop disposable viewport provenance and candidate caches."""
+
+    _PROVENANCE.clear()
+    _CANDIDATES.clear()
+    _EDGE_CANDIDATES.clear()
+
+
 def set_face_candidates(obj, context):
     from ...sketch.planar_faces import PlanarFaceResolver
     _CANDIDATES[obj.as_pointer()] = PlanarFaceResolver().build_cache(context)

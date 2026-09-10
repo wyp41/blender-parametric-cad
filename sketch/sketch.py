@@ -6,8 +6,11 @@ from dataclasses import dataclass, field, replace
 
 from ..core.feature import Feature
 from .entities import SketchEntity
+from .constraints import SketchConstraint
 from .plane import PLANE_AXES, ResolvedPlane, SketchPlaneReference
 from ..core.references import TopoReference
+from .dimensions import SketchDimension
+from .primitives import RectangleDefinition
 
 Vector3 = tuple[float, float, float]
 
@@ -24,6 +27,11 @@ class SketchFeature(Feature):
     # Region IDs are derived from the boundary entity UUIDs.  They are
     # persistent sketch edits, not Blender mesh/polygon indices.
     deleted_regions: list[str] = field(default_factory=list)
+    dimensions: list[SketchDimension] = field(default_factory=list)
+    constraints: list[SketchConstraint] = field(default_factory=list)
+    # Semantic primitive metadata.  The referenced entities remain ordinary
+    # SketchLine objects and are the source of truth for profile geometry.
+    rectangles: list[RectangleDefinition] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.plane_reference.reference_type == "DATUM":

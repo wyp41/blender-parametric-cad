@@ -38,6 +38,12 @@ def clear_runtime_evaluation(part_id: str) -> None:
     _RUNTIME_EVALUATIONS.pop(str(part_id), None)
 
 
+def get_runtime_evaluation(part_id: str) -> Any | None:
+    """Return the disposable last-rebuild context for inspection tools."""
+
+    return _RUNTIME_EVALUATIONS.get(str(part_id))
+
+
 @dataclass(frozen=True)
 class RegionHint:
     """Geometric disambiguation data for one connected planar region."""

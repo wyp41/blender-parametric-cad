@@ -63,6 +63,18 @@ class EdgeCandidate:
     def end(self):
         return self.resolved_edge.end
 
+    @property
+    def midpoint(self):
+        return self.resolved_edge.midpoint
+
+    @property
+    def direction(self):
+        return self.resolved_edge.direction
+
+    @property
+    def length(self):
+        return self.resolved_edge.length
+
 
 class EdgeResolutionError(ValueError):
     """A persistent edge is missing, ambiguous, or unsupported."""
@@ -605,4 +617,3 @@ def _subtract(first, second):
 
 def _length(vector):
     return sqrt(sum(value * value for value in vector))
-

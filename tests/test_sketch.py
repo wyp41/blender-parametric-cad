@@ -55,6 +55,21 @@ class ProfileDetectionTests(unittest.TestCase):
         self.assertTrue(result.success)
         self.assertEqual(result.profile.kind, "RECTANGLE")
 
+    def test_solver_tolerance_does_not_break_nearly_closed_profile(self) -> None:
+        # These endpoint gaps are below the profile tolerance but straddle the
+        # old quantization grid boundary.  They are representative of the
+        # small drift introduced by repeated Sketch constraint projection.
+        sketch = SketchFeature.on_plane("Solved Rectangle", "XY")
+        sketch.entities = [
+            SketchLine(x1=0.0, y1=0.0, x2=0.1, y2=0.0),
+            SketchLine(x1=0.099999954086, y1=0.0, x2=0.099999954086, y2=0.05),
+            SketchLine(x1=0.099999935068, y1=0.05, x2=0.0, y2=0.05),
+            SketchLine(x1=0.0, y1=0.05, x2=0.0, y2=0.0),
+        ]
+        result = ProfileDetector().detect(sketch)
+        self.assertTrue(result.success, result.message)
+        self.assertEqual(result.profile.kind, "RECTANGLE")
+
     def test_circle_is_valid(self) -> None:
         sketch = rectangle_sketch()
         sketch.entities = [SketchCircle(cx=0.0, cy=0.0, radius=0.02)]

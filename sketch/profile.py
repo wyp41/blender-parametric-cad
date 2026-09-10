@@ -69,6 +69,12 @@ class ProfileDetector:
     tolerance = 1e-7
     arc_segments_per_radian = 12.0 / pi
 
+    def __init__(self) -> None:
+        # Point keys are normally a cheap quantization.  During loop detection
+        # we temporarily replace it with tolerance-aware clustering so solver
+        # noise cannot put two coincident endpoints on opposite grid cells.
+        self._point_representatives: list[Point2D] | None = None
+
     def detect(self, sketch: SketchFeature) -> ProfileResult:
         entities = [item for item in sketch.entities if not item.construction]
         return self.detect_entities(entities, sketch.deleted_regions)
@@ -209,48 +215,52 @@ class ProfileDetector:
             return None
         curves = self._split_line_t_junctions(curves)
 
-        adjacency: dict[tuple[int, int], list[int]] = {}
-        for index, curve in enumerate(curves):
-            adjacency.setdefault(self._point_key(curve.start), []).append(index)
-            adjacency.setdefault(self._point_key(curve.end), []).append(index)
+        self._point_representatives = []
+        try:
+            adjacency: dict[tuple[int, int], list[int]] = {}
+            for index, curve in enumerate(curves):
+                adjacency.setdefault(self._point_key(curve.start), []).append(index)
+                adjacency.setdefault(self._point_key(curve.end), []).append(index)
 
-        components = self._components(curves, adjacency)
-        all_loops: list[ProfileLoop] = []
-        used_edges: set[int] = set()
-        for component_nodes, component_edges in components:
-            cycles = self._cycles(curves, adjacency, component_nodes, component_edges)
-            if not cycles:
-                return None
-            if any(len(adjacency[node]) != 2 for node in component_nodes):
-                # A connected split graph has one exterior cycle.  Only the
-                # bounded cycles are profiles; the largest-area cycle is the
-                # exterior boundary and is discarded.
-                if len(cycles) > 1:
-                    exterior = max(
-                        cycles,
-                        key=lambda cycle: abs(self._cycle_area(curves, cycle)),
-                    )
-                    cycles = [cycle for cycle in cycles if cycle != exterior]
-            if not cycles:
-                return None
-            valid_loops: list[tuple[list[tuple[int, tuple[int, int], tuple[int, int]]], ProfileLoop]] = []
-            for cycle in cycles:
-                loop = self._loop_from_cycle(curves, cycle)
-                if loop is None:
-                    continue
-                valid_loops.append((cycle, loop))
-            if not valid_loops:
-                return None
-            for cycle, loop in valid_loops:
-                all_loops.append(loop)
-                used_edges.update(edge for edge, _start, _end in cycle)
+            components = self._components(curves, adjacency)
+            all_loops: list[ProfileLoop] = []
+            used_edges: set[int] = set()
+            for component_nodes, component_edges in components:
+                cycles = self._cycles(curves, adjacency, component_nodes, component_edges)
+                if not cycles:
+                    return None
+                if any(len(adjacency[node]) != 2 for node in component_nodes):
+                    # A connected split graph has one exterior cycle.  Only the
+                    # bounded cycles are profiles; the largest-area cycle is the
+                    # exterior boundary and is discarded.
+                    if len(cycles) > 1:
+                        exterior = max(
+                            cycles,
+                            key=lambda cycle: abs(self._cycle_area(curves, cycle)),
+                        )
+                        cycles = [cycle for cycle in cycles if cycle != exterior]
+                if not cycles:
+                    return None
+                valid_loops: list[tuple[list[tuple[int, tuple[int, int], tuple[int, int]]], ProfileLoop]] = []
+                for cycle in cycles:
+                    loop = self._loop_from_cycle(curves, cycle)
+                    if loop is None:
+                        continue
+                    valid_loops.append((cycle, loop))
+                if not valid_loops:
+                    return None
+                for cycle, loop in valid_loops:
+                    all_loops.append(loop)
+                    used_edges.update(edge for edge, _start, _end in cycle)
 
-        # A dangling non-construction entity must not silently disappear from
-        # the profile.  This keeps the old open/branching validation behavior
-        # while allowing lines that genuinely split a closed boundary.
-        if used_edges != set(range(len(curves))):
-            return None
-        return tuple(all_loops)
+            # A dangling non-construction entity must not silently disappear from
+            # the profile.  This keeps the old open/branching validation behavior
+            # while allowing lines that genuinely split a closed boundary.
+            if used_edges != set(range(len(curves))):
+                return None
+            return tuple(all_loops)
+        finally:
+            self._point_representatives = None
 
     def _split_line_t_junctions(self, curves: list[_Curve]) -> list[_Curve]:
         """Split a boundary line when another line ends on its interior.
@@ -456,6 +466,12 @@ class ProfileDetector:
         )
 
     def _point_key(self, point: Point2D) -> tuple[int, int]:
+        if self._point_representatives is not None:
+            for index, representative in enumerate(self._point_representatives):
+                if self._same_point(point, representative):
+                    return (index, 0)
+            self._point_representatives.append(point)
+            return (len(self._point_representatives) - 1, 0)
         return (round(point[0] / self.tolerance), round(point[1] / self.tolerance))
 
     def _is_rectangle(self, points: list[Point2D]) -> bool:

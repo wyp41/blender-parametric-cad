@@ -12,9 +12,13 @@ references, MCP, and Python.
 - Part Studio with single-body parametric history.
 - Sketches on datum planes, Extrude faces, Revolve caps, Transform faces, and
   supported Mirror faces.
-- Rectangle, Circle, Line, Arc, mixed loops, multiple regions, and region
-  deletion.
+- Semantic rectangles backed by four editable SketchLines, stable rectangle and
+  line UUIDs, and width/height dimensions.
+- Circle, Line, Arc, mixed loops, multiple regions, and region deletion.
 - Numeric Sketch editing with millimeter dimensions and UUID preservation.
+- Sketch constraints: Horizontal, Vertical, Coincident, Parallel,
+  Perpendicular, and Equal.
+- Lightweight transactional Sketch solver for dimensions and constraints.
 - Extrude: `New`, `Add`, `Remove`, Blind, and Through All.
 - Revolve: `New`, `Add`, `Remove`, datum axes, SketchLine axes, angle, and
   reverse direction.
@@ -43,6 +47,7 @@ references, MCP, and Python.
   folded into Blender's **Add Cube** group.
 - Hover and click selection for planar faces and straight edges.
 - Shift-click multi-edge selection.
+- Sketch endpoint/center selection with hover highlighting and constraint markers.
 - Feature parameters stay beside the selected toolbar tool.
 - Sketch Edit and Feature Edit show their relevant tools only.
 
@@ -56,6 +61,12 @@ references, MCP, and Python.
 ### MCP and Python
 
 - Semantic MCP tools for sketches, features, rebuilds, validation, and export.
+- MCP Sketch authoring for lines, circles, rectangles, dimensions, and basic
+  constraints, rectangle updates, and document/feature inspection by UUID.
+- MCP reference listing and generated-geometry inspection (components, bounds,
+  manifold status, and volume).
+- MCP mutations return stable IDs, solver/rebuild status, and structured error
+  codes; failed Sketch mutations are rolled back.
 - `blender_execute_python` for trusted Python in the connected Blender process.
 - Direct Python API for automation and per-Part export.
 - Blender UI and MCP can edit the same CAD history.
@@ -64,7 +75,7 @@ references, MCP, and Python.
 
 1. Open **Edit → Preferences → Extensions** in Blender.
 2. Open the upper-right menu and choose **Install from Disk**.
-3. Select `blender_parametric_cad-0.16.12.zip`.
+3. Select `blender_parametric_cad-0.17.0.zip`.
 4. Enable **Blender Parametric CAD**.
 
 ## Quick start
@@ -104,6 +115,20 @@ already-running Blender service.
 MCP inputs use millimeters and degrees. The direct Python API uses its documented
 meter and radian units.
 
+Common AI workflow:
+
+```text
+cad_create_part
+→ cad_create_sketch
+→ cad_sketch_add_rectangle
+→ cad_sketch_add_constraint / cad_sketch_add_dimension
+→ cad_create_extrude
+→ cad_get_sketch / cad_get_history
+```
+
+See [the MCP API reference](skills/3d-modelling/references/blender_parametric_cad_api.md)
+for schemas, units, return values, and a complete plate example.
+
 ## Python examples
 
 Run trusted Python in Blender through MCP:
@@ -136,3 +161,5 @@ Supported formats: `STL`, `OBJ`, and `PLY`.
 - Curved edges, tangent chains, variable-radius Fillets, and asymmetric
   Chamfers are not supported.
 - Multiple Bodies and full general topological naming are not implemented.
+- M9C does not include DOF analysis or advanced constraints such as Tangent,
+  Symmetric, Midpoint, Concentric, or Fix.

@@ -40,6 +40,8 @@ def register() -> None:
         edge_features,
         measure,
         mcp_service,
+        sketch_dimensions,
+        sketch_constraints,
     )
     from .blender.ui import panels, tools
     from .blender.viewport import sketch_overlay
@@ -51,6 +53,8 @@ def register() -> None:
         export.CLASSES,
         sketch.CLASSES,
         sketch_tools.CLASSES,
+        sketch_dimensions.CLASSES,
+        sketch_constraints.CLASSES,
         extrude.CLASSES,
         revolve.CLASSES,
         transform.CLASSES,
@@ -72,6 +76,7 @@ def unregister() -> None:
 
     from .blender import adapter
     from .blender import properties
+    from .blender.viewport.provenance import clear_runtime_caches
     from .blender.operators import (
         export,
         extrude,
@@ -85,11 +90,14 @@ def unregister() -> None:
         edge_features,
         measure,
         mcp_service,
+        sketch_dimensions,
+        sketch_constraints,
     )
     from .blender.ui import panels, tools
     from .blender.viewport import sketch_overlay
 
     adapter.unregister_handlers()
+    clear_runtime_caches()
     tools.unregister()
     mcp_service.stop_embedded_service()
     history.unregister_keymaps()
@@ -100,6 +108,8 @@ def unregister() -> None:
         export.CLASSES,
         sketch.CLASSES,
         sketch_tools.CLASSES,
+        sketch_dimensions.CLASSES,
+        sketch_constraints.CLASSES,
         extrude.CLASSES,
         revolve.CLASSES,
         transform.CLASSES,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .entities import SketchArc, SketchCircle, SketchLine
+from .primitives import RectangleDefinition
 from .profile import ProfileDetector
 from .sketch import SketchFeature
 
@@ -10,6 +11,12 @@ from .sketch import SketchFeature
 def _rectangle_entities(
     sketch: SketchFeature, entity_id: str | None = None
 ) -> list[SketchLine] | None:
+    definition = rectangle_definition_for(sketch, entity_id)
+    if definition is not None:
+        by_id = {entity.id: entity for entity in sketch.entities}
+        ordered = [by_id.get(item_id) for item_id in definition.entity_ids]
+        if all(isinstance(item, SketchLine) and not item.construction for item in ordered):
+            return [item for item in ordered if isinstance(item, SketchLine)]
     entities = [entity for entity in sketch.entities if not entity.construction]
     if entity_id is not None:
         selected = next((entity for entity in entities if entity.id == entity_id), None)
@@ -56,6 +63,60 @@ def _rectangle_entities(
     return entities
 
 
+def rectangle_definition_for(
+    sketch: SketchFeature, entity_id: str | None = None, rectangle_id: str | None = None
+) -> RectangleDefinition | None:
+    """Return the persistent rectangle containing an entity or matching UUID."""
+
+    if rectangle_id:
+        return next(
+            (item for item in sketch.rectangles if item.id == str(rectangle_id)),
+            None,
+        )
+    if entity_id:
+        return next(
+            (item for item in sketch.rectangles if item.contains_entity(str(entity_id))),
+            None,
+        )
+    return sketch.rectangles[0] if len(sketch.rectangles) == 1 else None
+
+
+def _ensure_rectangle_definition(
+    sketch: SketchFeature, entities: list[SketchLine]
+) -> RectangleDefinition:
+    existing = next(
+        (
+            item
+            for item in sketch.rectangles
+            if tuple(item.entity_ids) == tuple(entity.id for entity in entities)
+        ),
+        None,
+    )
+    if existing is not None:
+        return existing
+    definition = RectangleDefinition(
+        bottom_line_id=entities[0].id,
+        right_line_id=entities[1].id,
+        top_line_id=entities[2].id,
+        left_line_id=entities[3].id,
+    )
+    sketch.rectangles.append(definition)
+    return definition
+
+
+def remove_rectangle_definitions_for_entities(
+    sketch: SketchFeature, entity_ids: set[str] | list[str] | tuple[str, ...]
+) -> int:
+    """Remove semantic rectangles that would retain deleted line UUIDs."""
+
+    wanted = {str(item) for item in entity_ids}
+    before = len(sketch.rectangles)
+    sketch.rectangles = [
+        item for item in sketch.rectangles if not wanted.intersection(item.entity_ids)
+    ]
+    return before - len(sketch.rectangles)
+
+
 def rectangle_entity_ids(
     sketch: SketchFeature, entity_id: str | None = None
 ) -> tuple[str, ...]:
@@ -70,6 +131,31 @@ def rectangle_parameters(
     if entities is None:
         return None
     result = ProfileDetector().detect_entities(entities)
+    points = result.profile.points
+    left = min(point[0] for point in points)
+    bottom = min(point[1] for point in points)
+    return (
+        left,
+        bottom,
+        max(point[0] for point in points) - left,
+        max(point[1] for point in points) - bottom,
+    )
+
+
+def rectangle_parameters_by_id(
+    sketch: SketchFeature, rectangle_id: str
+) -> tuple[float, float, float, float] | None:
+    """Read corner-origin parameters for one persistent rectangle UUID."""
+
+    definition = rectangle_definition_for(sketch, rectangle_id=rectangle_id)
+    if definition is None:
+        return None
+    entities = _rectangle_entities(sketch, definition.bottom_line_id)
+    if entities is None:
+        return None
+    result = ProfileDetector().detect_entities(entities)
+    if not result.success or result.profile is None:
+        return None
     points = result.profile.points
     left = min(point[0] for point in points)
     bottom = min(point[1] for point in points)
@@ -99,9 +185,26 @@ def set_rectangle(
     if not entities:
         rectangle = [SketchLine() for _index in range(4)]
         sketch.entities.extend(rectangle)
+    if rectangle is None or len(rectangle) != 4:
+        raise ValueError("Select an existing Rectangle to edit its dimensions.")
     for index, line in enumerate(rectangle):
         start, end = corners[index], corners[(index + 1) % 4]
         line.x1, line.y1, line.x2, line.y2 = *start, *end
+    definition = _ensure_rectangle_definition(sketch, rectangle)
+    if definition.width_dimension_id:
+        dimension = next(
+            (item for item in sketch.dimensions if item.id == definition.width_dimension_id),
+            None,
+        )
+        if dimension is not None:
+            dimension.value = float(width)
+    if definition.height_dimension_id:
+        dimension = next(
+            (item for item in sketch.dimensions if item.id == definition.height_dimension_id),
+            None,
+        )
+        if dimension is not None:
+            dimension.value = float(height)
 
 
 def circle_parameters(

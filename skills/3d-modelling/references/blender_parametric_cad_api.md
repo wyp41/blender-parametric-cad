@@ -1,7 +1,7 @@
 # Blender Parametric CAD API
 
 This reference describes the public API in the Blender Parametric CAD
-extension (current extension release 0.16.12). It covers both direct Python
+extension (current extension release 0.17.0). It covers both direct Python
 scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
 
 ## MCP bridge
@@ -86,8 +86,9 @@ The MCP tools are:
 
 | Group | Tools |
 | --- | --- |
-| Document | `cad_status`, `cad_create_part`, `cad_set_active_part`, `cad_delete_part`, `cad_validate_document`, `cad_save_scene` |
-| Sketch | `cad_create_sketch`, `cad_add_geometry`, `cad_update_geometry`, `cad_delete_geometry`, `cad_profile`, `cad_delete_region`, `cad_restore_region` |
+| Document | `cad_status`, `cad_get_document`, `cad_create_part`, `cad_get_part_studio`, `cad_set_active_part`, `cad_delete_part`, `cad_validate_document`, `cad_save_scene` |
+| Sketch | `cad_create_sketch`, `cad_add_geometry`, `cad_sketch_add_line`, `cad_sketch_add_circle`, `cad_sketch_add_rectangle`, `cad_sketch_update_rectangle`, `cad_update_geometry`, `cad_delete_geometry`, `cad_get_sketch`, `cad_get_feature`, `cad_get_history`, `cad_get_edges`, `cad_list_references`, `cad_inspect_geometry`, `cad_profile`, `cad_delete_region`, `cad_restore_region` |
+| Sketch constraints | `cad_sketch_add_constraint`, `cad_sketch_delete_constraint`, `cad_sketch_add_dimension`, `cad_sketch_update_dimension`, `cad_sketch_delete_dimension` |
 | Features | `cad_create_extrude`, `cad_create_revolve`, `cad_create_transform`, `cad_create_mirror`, `cad_create_chamfer`, `cad_create_fillet`, `cad_update_feature`, `cad_delete_feature`, `cad_suppress_feature`, `cad_rollback`, `cad_rebuild` |
 | Output | `cad_export_part` |
 | Runtime | `blender_execute_python` |
@@ -200,9 +201,100 @@ M5 MCP feature calls use these fields:
 
 For example, a six-line closed guide profile can be appended with six `LINE`
 entities in exact local millimeter coordinates, followed by `cad_create_extrude`
-with `operation: "ADD"`; the generic detector does not special-case rectangles.
+with `operation: "ADD"`. Use `cad_sketch_add_rectangle` when the profile is a
+rectangle so its semantic primitive metadata and width/height dimensions are
+also persisted.
 Two independent `CIRCLE` entities in one Sketch are emitted as two loops and
 can be used by `REMOVE` + `THROUGH_ALL` to cut both holes in one feature.
+
+### M9C AI Sketch authoring
+
+The MCP Sketch authoring calls are the preferred path for an AI agent. They use
+Sketch-local coordinates, millimeters, stable UUIDs, and no Blender mesh indices.
+
+Geometry calls:
+
+- `cad_sketch_add_line(sketch_id, x1_mm, y1_mm, x2_mm, y2_mm)` returns
+  `entity_id`.
+- `cad_sketch_add_circle(sketch_id, cx_mm, cy_mm, diameter_mm)` (or
+  `radius_mm`) returns `entity_id`.
+- `cad_sketch_add_rectangle(sketch_id, x_mm, y_mm, width_mm, height_mm)` returns
+  `rectangle_id`, `entity_ids.bottom/right/top/left`, and associated driving
+  `width_dimension_id`/`height_dimension_id` values. The four sides remain
+  ordinary `SketchLine` entities.
+- `cad_sketch_update_rectangle(sketch_id, rectangle_id, x_mm?, y_mm?, width_mm?,
+  height_mm?)` edits the high-level rectangle while preserving all four line
+  UUIDs and rebuilding downstream history.
+
+Constraint calls accept references such as
+`{"entity_id": "...", "sub_element": "END"}`. The `sketch_id` inside each
+reference is optional when it matches the command's Sketch.
+
+Supported constraint types are `HORIZONTAL`, `VERTICAL`, `COINCIDENT`,
+`PARALLEL`, `PERPENDICULAR`, and `EQUAL`. `COINCIDENT` accepts line `START` or
+`END` and circle `CENTER`; directional constraints accept whole lines; `EQUAL`
+accepts line+line or circle+circle. A failed solve returns a structured error
+with `CONSTRAINT_CONFLICT` or `INVALID_REFERENCE` and does not commit the
+constraint or geometry.
+
+Dimensions use `LENGTH`, `HORIZONTAL_DISTANCE`, `VERTICAL_DISTANCE`, `DISTANCE`,
+`RADIUS`, or `DIAMETER`. Add/update calls solve and rebuild downstream history;
+deletion solves the remaining equations. Solver responses use `SOLVED`,
+`CONFLICT`, or `INVALID_REFERENCE`.
+
+Inspection calls:
+
+- `cad_get_sketch` returns local entities, dimensions, constraints, semantic
+  rectangles, plane reference, solver status, and feature status in
+  AI-readable millimeters.
+- `cad_get_history` returns feature UUIDs, types, dependencies, and statuses.
+- `cad_get_edges` returns current persistent straight-edge references for
+  Chamfer/Fillet without returning Blender edge indices.
+- `cad_list_references` lists persistent planes, faces, and edges for a Part
+  Studio or feature; it never returns runtime polygon/edge indices.
+- `cad_inspect_geometry` reports connected components, bounding box, manifold
+  status, and volume for the generated result mesh.
+- `cad_get_document`, `cad_get_part_studio`, and `cad_get_feature` provide
+  machine-readable document inspection without relying on Blender names.
+
+Example sequence for an 80 × 50 × 20 mm plate:
+
+```text
+part = cad_create_part({"name": "Plate"})
+sketch = cad_create_sketch({"name": "Base", "part_id": part.part.id, "plane": "XY"})
+rect = cad_sketch_add_rectangle({"sketch_id": sketch.sketch.id,
+                                 "x_mm": 0, "y_mm": 0,
+                                 "width_mm": 80, "height_mm": 50})
+cad_sketch_add_constraint({"sketch_id": sketch.sketch.id,
+                           "constraint_type": "HORIZONTAL",
+                           "entity_refs": [{"entity_id": rect.entity_ids.bottom}]})
+width = cad_sketch_add_dimension({"sketch_id": sketch.sketch.id,
+                                  "dimension_type": "LENGTH",
+                                  "entity_refs": [{"entity_id": rect.entity_ids.bottom}],
+                                  "value_mm": 80})
+height = cad_sketch_add_dimension({"sketch_id": sketch.sketch.id,
+                                   "dimension_type": "LENGTH",
+                                   "entity_refs": [{"entity_id": rect.entity_ids.left}],
+                                   "value_mm": 50})
+plate = cad_create_extrude({"sketch_id": sketch.sketch.id,
+                            "distance_mm": 20, "operation": "NEW",
+                            "depth_mode": "BLIND"})
+hole_sketch = cad_create_sketch({"name": "Hole", "feature_id": plate.feature.id,
+                                 "role": "END_PLANE"})
+cad_sketch_add_circle({"sketch_id": hole_sketch.sketch.id,
+                       "cx_mm": 40, "cy_mm": 25, "diameter_mm": 10})
+cad_create_extrude({"sketch_id": hole_sketch.sketch.id,
+                    "distance_mm": 0, "operation": "REMOVE",
+                    "depth_mode": "THROUGH_ALL"})
+cad_sketch_update_dimension({"sketch_id": sketch.sketch.id,
+                             "dimension_id": width.dimension_id, "value_mm": 100})
+cad_get_sketch({"sketch_id": sketch.sketch.id})
+cad_get_history({"part_id": part.part.id})
+```
+
+Mutation responses include `ok`, stable IDs, `solver_status` when a Sketch
+equation changed, and a `rebuild` payload. Use `cad_get_history` rather than
+Blender object names to chain later feature calls.
 
 ## Fast path: build without UI
 
@@ -457,8 +549,8 @@ clockwise sweep.
 from blender_parametric_cad.sketch.sketch import SketchFeature
 ```
 
-Fields include `plane_reference`, `origin`, `x_axis`, `y_axis`, `entities`, and
-`deleted_regions`.
+Fields include `plane_reference`, `origin`, `x_axis`, `y_axis`, `entities`,
+`dimensions`, `constraints`, and `deleted_regions`.
 
 Constructors:
 
@@ -748,9 +840,10 @@ from blender_parametric_cad.core.evaluator import (
 exact-kernel backend can implement the same interface without changing the
 persistent document model.
 
-`SketchSolver().solve(sketch) -> SolverResult` currently performs basic
-zero-length and non-positive-radius validation; it is not yet a constraint
-solver.
+`SketchSolver().solve(sketch) -> SolverResult` runs the lightweight M9C
+transactional projection solver. It preserves under-constrained coordinates as
+closely as possible and returns `SOLVED`, `CONFLICT`, or `INVALID_REFERENCE`.
+It intentionally does not provide DOF analysis or a general symbolic solver.
 
 ## Serialization schema
 
@@ -786,8 +879,8 @@ shape is:
 }
 ```
 
-Sketch feature records contain `plane_reference`, `entities`, and
-`deleted_regions`; `plane_reference.offset` stores a support-plane offset in
+Sketch feature records contain `plane_reference`, `entities`, `dimensions`,
+`constraints`, and `deleted_regions`; `plane_reference.offset` stores a support-plane offset in
 meters. Entity records use `entity_type` values `LINE`, `CIRCLE`, or `ARC`.
 Extrude records contain `sketch_id`, `distance`, `direction`, `operation`, and
 `depth_mode`. Revolve records contain `sketch_id`, `axis_reference`, `angle`,

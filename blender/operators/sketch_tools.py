@@ -14,6 +14,9 @@ from ...sketch.plane import PlaneResolutionError, resolve_sketch_plane_from_hist
 from ...sketch.profile import ProfileDetector
 from ...sketch.snapping import snap_point
 from ...sketch.sketch import SketchFeature, sketch_to_world
+from ...sketch.constraints import remove_constraints_for_entity
+from ...sketch.dimensions import remove_dimensions_for_entity
+from ...core.references import SketchEntityReference
 from ..adapter import load_document_from_scene, save_document_to_scene
 from .sketch import mark_sketch_dirty
 from ..viewport.projection import screen_to_sketch
@@ -22,7 +25,16 @@ from ..viewport.sketch_overlay import (
     clear_snap_preview,
     set_preview,
     set_snap_preview,
+    set_sketch_hover,
+    set_sketch_selection,
+    clear_sketch_selection,
     tag_redraw,
+)
+from ..viewport.sketch_selection import (
+    nearest_candidate,
+    nearest_dimension,
+    selected_references,
+    set_selected_references,
 )
 
 
@@ -98,6 +110,8 @@ class _ModalSketchTool:
                     ui = context.scene.parametric_cad_ui
                     ui.active_sketch_entity_id = ""
                     ui.active_sketch_entity_ids = "[]"
+                    ui.active_sketch_references = "[]"
+                    ui.active_sketch_dimension_id = ""
                     mark_sketch_dirty(ui, stored)
                     save_document_to_scene(context.scene, document)
             self._finish(context)
@@ -291,6 +305,8 @@ class PARAMETRIC_CAD_OT_draw_arc(_ModalSketchTool, bpy.types.Operator):
                     ui = context.scene.parametric_cad_ui
                     ui.active_sketch_entity_id = ""
                     ui.active_sketch_entity_ids = "[]"
+                    ui.active_sketch_references = "[]"
+                    ui.active_sketch_dimension_id = ""
                     mark_sketch_dirty(ui, stored)
                     save_document_to_scene(context.scene, document)
             self._finish(context)
@@ -330,7 +346,8 @@ class PARAMETRIC_CAD_OT_select_tool(bpy.types.Operator):
         if context.area.type != "VIEW_3D" or ui.mode != "SKETCH_EDIT":
             return {"CANCELLED"}
         clear_preview()
-        context.area.header_text_set("CAD: click a Rectangle, Circle, or Arc; Esc cancels")
+        set_sketch_hover(None)
+        context.area.header_text_set("CAD: hover to highlight; click entity/point; Shift-click adds; Esc cancels")
         in_viewport = getattr(getattr(context, "region", None), "type", None) == "WINDOW"
         if (
             in_viewport
@@ -345,8 +362,12 @@ class PARAMETRIC_CAD_OT_select_tool(bpy.types.Operator):
 
     def modal(self, context, event):
         if event.type in {"ESC", "RIGHTMOUSE"}:
+            set_sketch_hover(None)
             context.area.header_text_set(None)
             return {"CANCELLED"}
+        if event.type == "MOUSEMOVE":
+            self._update_hover(context, event)
+            return {"RUNNING_MODAL"}
         if event.type != "LEFTMOUSE" or event.value != "PRESS":
             return {"RUNNING_MODAL"}
 
@@ -365,18 +386,72 @@ class PARAMETRIC_CAD_OT_select_tool(bpy.types.Operator):
         point = screen_to_sketch(context, event, sketch)
         if point is None:
             return {"RUNNING_MODAL"}
-        entity = _nearest_entity(sketch, point)
-        if entity is None or self._distance(entity, point) > _selection_tolerance(
-            context, event, sketch
-        ):
+        radius_px = float(getattr(ui, "sketch_selection_radius_px", 12.0))
+        candidate = nearest_candidate(context, event, sketch, point, radius_px)
+        if candidate is None:
+            dimension = nearest_dimension(context, event, sketch, sketch.dimensions, radius_px)
+            if dimension is not None:
+                ui.active_sketch_dimension_id = dimension.id
+                ui.sketch_dimension_type = dimension.dimension_type
+                try:
+                    from ...sketch.dimensions import dimension_value
+
+                    ui.sketch_dimension_value_mm = dimension_value(sketch, dimension) * 1000.0
+                except (TypeError, ValueError):
+                    ui.sketch_dimension_value_mm = dimension.value * 1000.0
+                set_sketch_hover(None)
+                context.area.header_text_set(None)
+                tag_redraw()
+                return {"FINISHED"}
             return {"RUNNING_MODAL"}
-        if not _select_entity_dimensions(
-            ui, sketch, entity, extend=getattr(event, "shift", False)
-        ):
+        entity = next((item for item in sketch.entities if item.id == candidate.entity_id), None)
+        if entity is None:
             return {"RUNNING_MODAL"}
+        extend = bool(getattr(event, "shift", False))
+        references = selected_references(ui)
+        if extend:
+            if candidate.reference in references:
+                references = [reference for reference in references if reference != candidate.reference]
+            else:
+                references.append(candidate.reference)
+        else:
+            references = [candidate.reference]
+        if not _select_entity_dimensions(ui, sketch, entity, extend=False):
+            return {"RUNNING_MODAL"}
+        set_selected_references(ui, references)
+        set_sketch_selection(references)
+        set_sketch_hover(None)
         context.area.header_text_set(None)
         tag_redraw()
         return {"FINISHED"}
+
+    @staticmethod
+    def _update_hover(context, event):
+        ui = context.scene.parametric_cad_ui
+        document = load_document_from_scene(context.scene)
+        part = document.active_part
+        sketch = part.get_feature(ui.active_sketch_id) if part else None
+        if not isinstance(sketch, SketchFeature):
+            set_sketch_hover(None)
+            return
+        try:
+            sketch.apply_resolved_plane(resolve_sketch_plane_from_history(part, sketch.id))
+        except PlaneResolutionError:
+            set_sketch_hover(None)
+            return
+        point = screen_to_sketch(context, event, sketch)
+        candidate = (
+            nearest_candidate(
+                context,
+                event,
+                sketch,
+                point,
+                float(getattr(ui, "sketch_selection_radius_px", 12.0)),
+            )
+            if point is not None
+            else None
+        )
+        set_sketch_hover(candidate)
 
     @staticmethod
     def _distance(entity, point):
@@ -428,6 +503,11 @@ class PARAMETRIC_CAD_OT_edit_sketch_geometry(bpy.types.Operator):
             return {"CANCELLED"}
         if not _select_entity_dimensions(ui, sketch, entity, extend=False):
             return {"CANCELLED"}
+        set_selected_references(
+            ui,
+            [SketchEntityReference(sketch.id, entity.id, "ENTITY")],
+        )
+        set_sketch_selection(selected_references(ui))
         context.area.header_text_set(None)
         tag_redraw()
         return {"FINISHED"}
@@ -479,6 +559,8 @@ class PARAMETRIC_CAD_OT_delete_region(_ModalSketchTool, bpy.types.Operator):
         ui = context.scene.parametric_cad_ui
         ui.active_sketch_entity_id = ""
         ui.active_sketch_entity_ids = "[]"
+        ui.active_sketch_references = "[]"
+        ui.active_sketch_dimension_id = ""
         mark_sketch_dirty(ui, stored)
         save_document_to_scene(context.scene, document)
         self.report({"INFO"}, "Sketch region deleted from Extrude/Revolve profiles.")
@@ -523,6 +605,8 @@ class PARAMETRIC_CAD_OT_delete_geometry(_ModalSketchTool, bpy.types.Operator):
             _remove_entity(stored, entity.id)
             ui.active_sketch_entity_id = ""
             ui.active_sketch_entity_ids = "[]"
+            ui.active_sketch_references = "[]"
+            ui.active_sketch_dimension_id = ""
             mark_sketch_dirty(ui, stored)
             save_document_to_scene(context.scene, document)
             self.report({"INFO"}, f"Deleted {entity.entity_type.title()} geometry.")
@@ -560,6 +644,8 @@ class PARAMETRIC_CAD_OT_delete_geometry(_ModalSketchTool, bpy.types.Operator):
         ui = context.scene.parametric_cad_ui
         ui.active_sketch_entity_id = ""
         ui.active_sketch_entity_ids = "[]"
+        ui.active_sketch_references = "[]"
+        ui.active_sketch_dimension_id = ""
         mark_sketch_dirty(ui, stored)
         save_document_to_scene(context.scene, document)
         self.report({"INFO"}, f"Deleted {entity.entity_type.title()} geometry.")
@@ -723,6 +809,8 @@ def _selection_tolerance(context, event, sketch) -> float:
 
 def _remove_entity(sketch: SketchFeature, entity_id: str) -> None:
     sketch.entities = [item for item in sketch.entities if item.id != entity_id]
+    remove_constraints_for_entity(sketch, entity_id)
+    remove_dimensions_for_entity(sketch, entity_id)
     # Region IDs contain boundary UUIDs, so any geometry edit invalidates old
     # exclusions. They must be reselected from the new profile graph.
     sketch.deleted_regions.clear()

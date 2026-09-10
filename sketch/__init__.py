@@ -1,6 +1,35 @@
 """Planar sketch data and profile detection."""
 
 from .entities import SketchArc, SketchCircle, SketchEntity, SketchLine
+from .constraints import (
+    CONSTRAINT_TYPES,
+    ConstraintError,
+    SketchConstraint,
+    constraint_from_dict,
+    constraint_to_dict,
+    remove_constraints_for_entity,
+)
+from .dimensions import (
+    DIAMETER,
+    DISTANCE,
+    HORIZONTAL_DISTANCE,
+    LENGTH,
+    RADIUS,
+    VERTICAL_DISTANCE,
+    DimensionError,
+    SketchDimension,
+    apply_dimension,
+    dimension_from_dict,
+    dimension_label,
+    dimension_label_point,
+    dimension_measure_points,
+    dimension_to_dict,
+    dimension_value,
+    remove_dimensions_for_entity,
+    validate_dimension,
+    validate_dimension_conflicts,
+)
+from ..core.references import SketchEntityReference
 from .edges import (
     EdgeCandidate,
     EdgeMatchTolerance,
@@ -17,8 +46,10 @@ from .plane import (
     SketchPlaneReference,
 )
 from .profile import ProfileDetector, ProfileLoop, SketchProfile
+from .primitives import RectangleDefinition
 from .snapping import intersection_points, reference_points, snap_point, snap_targets
 from .sketch import SketchFeature, sketch_normal, sketch_to_world
+from .solver import CONFLICT, INVALID_REFERENCE, SOLVED, SketchSolver, SolverResult
 
 __all__ = [
     "ProfileDetector",
@@ -32,7 +63,38 @@ __all__ = [
     "SketchCircle",
     "SketchEntity",
     "SketchFeature",
+    "RectangleDefinition",
     "SketchLine",
+    "SketchConstraint",
+    "ConstraintError",
+    "CONSTRAINT_TYPES",
+    "constraint_to_dict",
+    "constraint_from_dict",
+    "remove_constraints_for_entity",
+    "SketchSolver",
+    "SolverResult",
+    "SOLVED",
+    "CONFLICT",
+    "INVALID_REFERENCE",
+    "SketchEntityReference",
+    "SketchDimension",
+    "DimensionError",
+    "LENGTH",
+    "HORIZONTAL_DISTANCE",
+    "VERTICAL_DISTANCE",
+    "DISTANCE",
+    "RADIUS",
+    "DIAMETER",
+    "apply_dimension",
+    "dimension_value",
+    "dimension_to_dict",
+    "dimension_from_dict",
+    "dimension_label",
+    "dimension_label_point",
+    "dimension_measure_points",
+    "validate_dimension",
+    "validate_dimension_conflicts",
+    "remove_dimensions_for_entity",
     "SketchPlaneReference",
     "SketchProfile",
     "EdgeCandidate",

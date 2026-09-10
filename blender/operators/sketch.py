@@ -26,7 +26,12 @@ from ...sketch.plane import (
 from ...sketch.sketch import SketchFeature
 from ..adapter import load_document_from_scene, rebuild_part, save_document_to_scene
 from ..viewport.projection import screen_to_sketch
-from ..viewport.sketch_overlay import clear_face_selection, clear_preview, tag_redraw
+from ..viewport.sketch_overlay import (
+    clear_face_selection,
+    clear_preview,
+    clear_sketch_selection,
+    tag_redraw,
+)
 
 
 def _same_parameters(before, after) -> bool:
@@ -49,6 +54,8 @@ def sketch_signature(sketch: SketchFeature) -> str:
             "plane_reference": data["plane_reference"],
             "entities": data["entities"],
             "deleted_regions": data["deleted_regions"],
+            "dimensions": data.get("dimensions", []),
+            "constraints": data.get("constraints", []),
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -87,12 +94,15 @@ def _begin_edit(context, part, sketch: SketchFeature, is_new: bool) -> None:
     ui.active_sketch_id = sketch.id
     ui.active_sketch_entity_id = ""
     ui.active_sketch_entity_ids = "[]"
+    ui.active_sketch_references = "[]"
+    ui.active_sketch_dimension_id = ""
     ui.sketch_dirty = False
     ui.sketch_plane_offset_mm = sketch.plane_offset * 1000.0
     ui.sketch_session_new = is_new
     ui.sketch_session_backup = "" if is_new else json.dumps(feature_to_dict(sketch))
     ui.sketch_applied_signature = sketch_signature(sketch)
     clear_preview()
+    clear_sketch_selection()
     _orient_to_plane(context, plane)
     if context.area and context.area.type == "VIEW_3D":
         window_region = next(
@@ -250,6 +260,7 @@ class PARAMETRIC_CAD_OT_finish_sketch(bpy.types.Operator):
             sketch.set_plane_offset(ui.sketch_plane_offset_mm / 1000.0)
         save_document_to_scene(context.scene, document)
         clear_preview()
+        clear_sketch_selection()
         part = document.active_part
         result = None
         if part:
@@ -265,6 +276,8 @@ class PARAMETRIC_CAD_OT_finish_sketch(bpy.types.Operator):
             ui.feature_create_kind = ""
             ui.active_sketch_entity_id = ""
             ui.active_sketch_entity_ids = "[]"
+            ui.active_sketch_references = "[]"
+            ui.active_sketch_dimension_id = ""
             ui.sketch_session_new = False
             ui.sketch_session_backup = ""
             ui.sketch_dirty = False
@@ -343,11 +356,14 @@ class PARAMETRIC_CAD_OT_cancel_sketch(bpy.types.Operator):
         ui.feature_name = ""
         ui.active_sketch_entity_id = ""
         ui.active_sketch_entity_ids = "[]"
+        ui.active_sketch_references = "[]"
+        ui.active_sketch_dimension_id = ""
         ui.sketch_session_new = False
         ui.sketch_session_backup = ""
         ui.sketch_dirty = False
         ui.sketch_applied_signature = ""
         clear_preview()
+        clear_sketch_selection()
         tag_redraw()
         return {"FINISHED"}
 
@@ -365,14 +381,25 @@ class PARAMETRIC_CAD_OT_clear_sketch(bpy.types.Operator):
         sketch = part.get_feature(ui.active_sketch_id) if part else None
         if not isinstance(sketch, SketchFeature):
             return {"CANCELLED"}
-        changed = bool(sketch.entities or sketch.deleted_regions)
+        changed = bool(
+            sketch.entities
+            or sketch.deleted_regions
+            or sketch.dimensions
+            or sketch.constraints
+            or sketch.rectangles
+        )
         if not changed:
             self.report({"INFO"}, "Sketch already has no geometry.")
             return {"FINISHED"}
         sketch.entities.clear()
         sketch.deleted_regions.clear()
+        sketch.dimensions.clear()
+        sketch.constraints.clear()
+        sketch.rectangles.clear()
         ui.active_sketch_entity_id = ""
         ui.active_sketch_entity_ids = "[]"
+        ui.active_sketch_references = "[]"
+        ui.active_sketch_dimension_id = ""
         save_document_to_scene(context.scene, document)
         mark_sketch_dirty(ui, sketch)
         tag_redraw()

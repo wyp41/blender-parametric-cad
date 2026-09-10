@@ -9,8 +9,15 @@ import bpy
 from ...core.references import TopoReference
 from ...core.part import BODY_FEATURE_TYPES
 from ...sketch.sketch import SketchFeature
-from ...sketch.numeric import arc_parameters, circle_parameters, rectangle_parameters
+from ...sketch.numeric import (
+    arc_parameters,
+    circle_parameters,
+    rectangle_definition_for,
+    rectangle_parameters,
+)
+from ...sketch.dimensions import DimensionError, dimension_value
 from ..adapter import CadDocumentError, load_document_from_scene
+from ..viewport.sketch_selection import selected_references
 from .feature_tree import (
     draw_feature_actions,
     draw_feature_tree,
@@ -452,6 +459,71 @@ def _draw_sketch_editor(layout, context):
     row = tools.row(align=True)
     row.operator("parametric_cad.draw_arc", text="Arc", icon="CURVE_BEZCURVE")
 
+    selection = layout.box()
+    selection.label(text="Sketch Selection", icon="RESTRICT_SELECT_OFF")
+    selection.prop(ui, "sketch_selection_radius_px", text="Pick Radius (px)")
+    references = selected_references(ui)
+    if references:
+        selection.label(text=f"Selected references: {len(references)}", icon="DOT")
+        for reference in references[:6]:
+            suffix = f" · {reference.sub_element}" if reference.sub_element else ""
+            selection.label(text=f"{reference.entity_id[:8]}{suffix}")
+        if len(references) > 6:
+            selection.label(text=f"… and {len(references) - 6} more")
+    else:
+        selection.label(text="Hover to highlight; click endpoints, centers, or entities.", icon="INFO")
+    selection.operator("parametric_cad.add_dimension", text="Add Driving Dimension", icon="DRIVER_DISTANCE")
+
+    dimension_box = layout.box()
+    dimension_box.label(text="Driving Dimensions", icon="DRIVER_DISTANCE")
+    dimension_box.prop(ui, "sketch_dimension_type", text="Type")
+    active_dimension = next(
+        (item for item in sketch.dimensions if item.id == ui.active_sketch_dimension_id),
+        None,
+    )
+    if active_dimension is not None:
+        dimension_box.prop(ui, "sketch_dimension_value_mm", text="Value (mm)")
+        row = dimension_box.row(align=True)
+        row.operator("parametric_cad.apply_dimension", text="Apply & Rebuild", icon="FILE_REFRESH")
+        delete = row.operator("parametric_cad.delete_dimension", text="Delete", icon="TRASH")
+        delete.dimension_id = active_dimension.id
+    for dimension in sketch.dimensions:
+        row = dimension_box.row(align=True)
+        select = row.operator(
+            "parametric_cad.select_dimension",
+            text="●" if dimension.id == ui.active_sketch_dimension_id else "○",
+            icon="DRIVER_DISTANCE",
+        )
+        select.dimension_id = dimension.id
+        try:
+            value = dimension_value(sketch, dimension) * 1000.0
+            label = f"{dimension.dimension_type.replace('_', ' ').title()}  {value:.2f} mm"
+        except DimensionError:
+            label = f"{dimension.dimension_type.replace('_', ' ').title()}  INVALID"
+        row.label(text=label, icon="ERROR" if dimension.status != "OK" else "NONE")
+    if not sketch.dimensions:
+        dimension_box.label(text="No driving dimensions yet.", icon="INFO")
+
+    constraint_box = layout.box()
+    constraint_box.label(text="Sketch Constraints", icon="CONSTRAINT")
+    for constraint in sketch.constraints:
+        row = constraint_box.row(align=True)
+        toggle = row.operator(
+            "parametric_cad.toggle_constraint",
+            text="On" if constraint.enabled else "Off",
+            icon="CHECKBOX_HLT" if constraint.enabled else "CHECKBOX_DEHLT",
+        )
+        toggle.constraint_id = constraint.id
+        toggle.enabled = not constraint.enabled
+        row.label(text=constraint.constraint_type.title())
+        delete = row.operator("parametric_cad.delete_constraint", text="", icon="TRASH")
+        delete.constraint_id = constraint.id
+        if constraint.entity_refs:
+            refs = ", ".join(reference.entity_id[:6] for reference in constraint.entity_refs)
+            constraint_box.label(text=f"  {refs}")
+    if not sketch.constraints:
+        constraint_box.label(text="No constraints yet. Add them through CAD MCP.", icon="INFO")
+
     cleanup = layout.box()
     cleanup.label(text="Geometry Cleanup", icon="X")
     row = cleanup.row(align=True)
@@ -497,6 +569,9 @@ def _draw_sketch_editor(layout, context):
             )
     if rectangle_parameters(sketch, entity_id) is not None:
         dimensions.label(text="Rectangle Dimensions")
+        rectangle = rectangle_definition_for(sketch, entity_id=entity_id)
+        if rectangle is not None:
+            dimensions.label(text=f"Rectangle: {rectangle.id[:8]}", icon="MESH_CUBE")
         dimensions.prop(ui, "rectangle_x_mm", text="X (mm)")
         dimensions.prop(ui, "rectangle_y_mm", text="Y (mm)")
         dimensions.prop(ui, "rectangle_width_mm", text="Width (mm)")

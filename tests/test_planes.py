@@ -37,7 +37,7 @@ class SemanticPlaneTests(unittest.TestCase):
 
 
 class SchemaMigrationTests(unittest.TestCase):
-    def test_schema_v1_migrates_to_v2(self) -> None:
+    def test_schema_v1_migrates_to_v3(self) -> None:
         legacy = {
             "schema_version": 1,
             "active_part_id": "part-id",
@@ -73,12 +73,12 @@ class SchemaMigrationTests(unittest.TestCase):
         migrated = migrate_document_data(legacy)
         document = CadDocument.from_dict(legacy)
 
-        self.assertEqual(migrated["schema_version"], 2)
+        self.assertEqual(migrated["schema_version"], 3)
         self.assertEqual(
             migrated["parts"][0]["features"][0]["plane_reference"]["datum_plane"],
             "XY",
         )
-        self.assertEqual(document.schema_version, 2)
+        self.assertEqual(document.schema_version, 3)
         self.assertEqual(document.parts[0].features[1].dependencies, ["sketch-id"])
         self.assertIsNone(document.parts[0].rollback_index)
 

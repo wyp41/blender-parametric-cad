@@ -43,7 +43,7 @@ def main() -> None:
         if obj.get("cad_generated") and obj.get("cad_part_id") == part.id
     )
     _check(get_edge_candidates(result_object), "Runtime edge cache was not rebuilt after reload.")
-    raw = bpy.context.scene.parametric_cad_document
+    raw = bpy.data.texts["CAD_DOCUMENT.json"].as_string()
     json.loads(raw)
     _check("mesh_edge_index" not in raw and "edge_index" not in raw, "Runtime index persisted after reload.")
     print("BLENDER_PARAMETRIC_CAD_M9_RELOAD_OK")

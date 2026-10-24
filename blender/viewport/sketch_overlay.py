@@ -237,6 +237,8 @@ def stop() -> None:
 
 def _draw_callback() -> None:
     scene = bpy.context.scene
+    if scene.get("cad_scene_role") == "ASSEMBLY":
+        return
     if not hasattr(scene, "parametric_cad_ui"):
         return
     ui = scene.parametric_cad_ui
@@ -402,6 +404,8 @@ def _draw_measurement_marker(point, color) -> None:
 
 
 def _draw_pixel_callback() -> None:
+    if bpy.context.scene.get("cad_scene_role") == "ASSEMBLY":
+        return
     region = getattr(bpy.context, "region", None)
     space_data = getattr(bpy.context, "space_data", None)
     region_3d = getattr(space_data, "region_3d", None)

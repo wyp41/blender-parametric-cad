@@ -112,7 +112,7 @@ provenance = get_face_provenance(base_object)
 assert provenance[0].role == "START_FACE"
 assert provenance[1].role == "END_FACE"
 side_source_id = provenance[2].source_entity_id
-assert _face_reference(base_object, 1).role == "END_FACE"
+assert _face_reference(base_object, 1).role == "END_PLANE"
 assert _face_reference(base_object, 2).source_entity_id == side_source_id
 
 set_face_reference(base_extrude.id, "END_FACE")

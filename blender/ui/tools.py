@@ -547,82 +547,74 @@ def _ungroup_cad_tools() -> None:
             tools[index:index + 1] = expanded
 
 
-def register() -> None:
-    """Register only the tools for the current CAD editing stage."""
-
-    global _registered_tools, _toolbar_registered
-    _registered_tools = []
-    _toolbar_registered = True
-    refresh_toolbar()
-    bpy.app.timers.register(_ensure_view3d_regions_visible, first_interval=0.5)
+_dynamic_slots = []
+_tool_definitions = {}
 
 
-def refresh_toolbar(context=None) -> None:
-    """Swap Sketch and body tools when the CAD mode changes.
-
-    Blender 5.1 copies a WorkSpaceTool class into a static ToolDef and does
-    not call a class-level ``poll`` while drawing the toolbar.  Re-registering
-    the small stage-specific tool set is therefore the reliable way to keep
-    Sketch tools out of the finished-body workflow (and vice versa).
-    """
-
-    global _registered_tools
-    if not _toolbar_registered:
-        return
-    scene = getattr(context, "scene", None) if context is not None else getattr(bpy.context, "scene", None)
-    ui = getattr(scene, "parametric_cad_ui", None)
-    stage = getattr(ui, "mode", "IDLE") if ui is not None else "IDLE"
+def _context_tools(context):
+    """Native dynamic toolbar entries isolate each window's Scene and edit stage."""
+    if context is None:
+        return tuple(_tool_definitions.values())
+    if context.scene.get("cad_scene_role") == "ASSEMBLY":
+        return ()
+    ui = getattr(context.scene, "parametric_cad_ui", None)
+    stage = getattr(ui, "mode", "IDLE")
     desired = [PARAMETRIC_CAD_WST_measure]
     if stage == "SKETCH_EDIT":
         desired.extend(SKETCH_TOOL_CLASSES)
     elif stage == "FEATURE_EDIT":
         desired.extend(FEATURE_TOOL_CLASSES)
+    result = []
+    for tool in desired:
+        definition = _tool_definitions.get(tool.bl_idname)
+        if definition is not None:
+            if result:
+                result.append(None)
+            result.append(definition)
+    return tuple(result)
 
-    for tool in reversed(list(_registered_tools)):
-        if tool in desired:
-            continue
-        try:
-            bpy.utils.unregister_tool(tool)
-        except (RuntimeError, TypeError, AttributeError):
-            pass
-        _registered_tools.remove(tool)
 
-    for index, tool in enumerate(desired):
-        if tool in _registered_tools:
-            continue
-        try:
-            if index == 0:
-                after = {"builtin.primitive_cube_add"}
-            else:
-                previous = next(
-                    (
-                        candidate
-                        for candidate in reversed(desired[:index])
-                        if candidate in _registered_tools
-                    ),
-                    None,
-                )
-                after = {previous.bl_idname} if previous is not None else None
-            bpy.utils.register_tool(
-                tool,
-                after=after,
-                separator=True,
-                group=index == 0,
-            )
-        except Exception as exc:  # Blender version/reload may already own a tool.
-            print(f"Parametric CAD toolbar tool {tool.bl_idname!r} unavailable: {exc}")
-            continue
+def register() -> None:
+    """Register tools once and let Blender resolve visibility per draw context."""
+    global _toolbar_registered
+    from bl_ui.space_toolsystem_common import ToolSelectPanelHelper
+
+    _toolbar_registered = True
+    for tool in TOOL_CLASSES:
+        bpy.utils.register_tool(tool, after={"builtin.primitive_cube_add"}, separator=True)
         _registered_tools.append(tool)
-
     _ungroup_cad_tools()
+    toolbar = ToolSelectPanelHelper._tool_class_from_space_type("VIEW_3D")
+    cad_ids = {tool.bl_idname for tool in _registered_tools}
+    for items in toolbar._tools.values():
+        indices = [index for index, item in enumerate(items) if getattr(item, "idname", None) in cad_ids]
+        if not indices:
+            continue
+        definitions = [items[index] for index in indices]
+        _tool_definitions.update({item.idname: item for item in definitions})
+        for index in reversed(indices):
+            del items[index]
+        items.insert(indices[0], _context_tools)
+        _dynamic_slots.append((items, definitions))
+    bpy.app.timers.register(_ensure_view3d_regions_visible, first_interval=0.5)
+
+
+def refresh_toolbar(context=None) -> None:
+    """Redraw only; a mode change must never unregister another window's tools."""
+    from ..environments import redraw_all
+    if _toolbar_registered:
+        redraw_all()
 
 
 def unregister() -> None:
     global _toolbar_registered
+    for items, definitions in _dynamic_slots:
+        if _context_tools in items:
+            index = items.index(_context_tools)
+            items[index:index + 1] = definitions
+    _dynamic_slots.clear()
     for tool in reversed(_registered_tools):
-        try:
-            bpy.utils.unregister_tool(tool)
-        except (RuntimeError, TypeError, AttributeError):
-            pass
+        bpy.utils.unregister_tool(tool)
     _registered_tools.clear()
+    _tool_definitions.clear()
     _toolbar_registered = False

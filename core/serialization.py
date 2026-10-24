@@ -20,6 +20,7 @@ from ..sketch.primitives import RectangleDefinition
 from ..sketch.sketch import SketchFeature
 from .feature import Feature
 from .part import Part
+from .assembly import Assembly, AssemblyInstance
 from .references import AxisReference, EdgeReference, EdgeSignature, FaceReference
 
 
@@ -297,7 +298,8 @@ def feature_from_dict(data: dict[str, Any]) -> Feature:
 
 def document_to_dict(document: "CadDocument") -> dict[str, Any]:
     return {
-        "schema_version": 2,
+        "schema_version": 3,
+        "assemblies": [assembly_to_dict(item) for item in document.assemblies],
         "active_part_id": document.active_part_id,
         "parts": [
             {
@@ -316,7 +318,12 @@ def document_from_dict(data: dict[str, Any]) -> "CadDocument":
 
     data = migrate_document_data(data)
     return CadDocument(
-        schema_version=2,
+        schema_version=3,
+        assemblies=[
+            Assembly(id=item["id"], name=item["name"], instances=[
+                AssemblyInstance(**instance) for instance in item.get("instances", [])
+            ]) for item in data.get("assemblies", [])
+        ],
         active_part_id=data.get("active_part_id"),
         parts=[
             Part(
@@ -331,10 +338,10 @@ def document_from_dict(data: dict[str, Any]) -> "CadDocument":
 
 
 def migrate_document_data(data: dict[str, Any]) -> dict[str, Any]:
-    """Return schema-v2 data while preserving milestone-1 documents."""
+    """Migrate v1/v2 without changing any existing model or reference UUID."""
 
     version = int(data.get("schema_version", 1))
-    if version not in {1, 2}:
+    if version not in {1, 2, 3}:
         raise ValueError(f"Unsupported CAD schema version: {version}")
     migrated = deepcopy(data)
     if version == 1:
@@ -353,7 +360,20 @@ def migrate_document_data(data: dict[str, Any]) -> dict[str, Any]:
                     feature["dependencies"] = [feature["sketch_id"]]
                     feature["depth_mode"] = "BLIND"
         migrated["schema_version"] = 2
+    if version < 3:
+        migrated["assemblies"] = []
+        migrated["schema_version"] = 3
     return migrated
+
+
+def assembly_to_dict(assembly: Assembly) -> dict[str, Any]:
+    """Serialize placements without embedding source geometry or history."""
+
+    return {"id": assembly.id, "name": assembly.name, "instances": [
+        {"id": item.id, "name": item.name, "part_studio_id": item.part_studio_id,
+         "transform": [list(row) for row in item.transform], "suppressed": item.suppressed}
+        for item in assembly.instances
+    ]}
 
 
 def dumps(document: "CadDocument") -> str:

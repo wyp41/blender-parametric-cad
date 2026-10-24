@@ -185,7 +185,7 @@ bpy.ops.wm.save_as_mainfile(filepath=blend_path)
 bpy.ops.wm.open_mainfile(filepath=blend_path)
 restored = load_document_from_scene(bpy.context.scene)
 restored_part = restored.active_part
-assert restored.schema_version == 2
+assert restored.schema_version == 3
 assert [feature.id for feature in restored_part.features] == feature_ids
 assert restored_part.rollback_index == 1
 assert restored_part.features[3].suppressed

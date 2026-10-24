@@ -150,7 +150,7 @@ class PersistentEdgeTests(unittest.TestCase):
     def test_feature_document_contains_semantics_only(self):
         part, _extrude, _backend, references = self._base()
         part.add_feature(ChamferFeature(edge_references=references[:2], distance=0.002))
-        data = document_to_dict(type("Document", (), {"active_part_id": part.id, "parts": [part]})())
+        data = document_to_dict(type("Document", (), {"active_part_id": part.id, "parts": [part], "assemblies": []})())
         serialized = str(data)
         self.assertNotIn("mesh_edge_index", serialized)
         self.assertNotIn("edge_index", serialized)

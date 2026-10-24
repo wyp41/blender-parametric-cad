@@ -18,7 +18,7 @@ from typing import Any
 PROTOCOL_VERSION = "2025-06-18"
 SUPPORTED_PROTOCOL_VERSIONS = {"2024-11-05", "2025-03-26", PROTOCOL_VERSION}
 SERVER_NAME = "blender-parametric-cad"
-SERVER_VERSION = "0.17.0"
+SERVER_VERSION = "0.18.0"
 
 
 def _object(properties: dict[str, Any] | None = None, required: list[str] | None = None) -> dict[str, Any]:
@@ -573,6 +573,37 @@ TOOL_DEFINITIONS: tuple[dict[str, Any], ...] = (
         "description": "Save the current Blender scene to a .blend file and make it the MCP worker autosave target.",
         "inputSchema": _object({"filepath": _string("Output .blend path; omit to save the current file path.")}),
     },
+)
+
+
+_ASSEMBLY_ID = _string("Assembly UUID.")
+_INSTANCE_ID = _string("Assembly Instance UUID.")
+_INSTANCE_VECTOR = {"oneOf": [_VECTOR3, {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3}]}
+_INSTANCE_PROPERTIES = {
+    "assembly_id": _ASSEMBLY_ID,
+    "name": _string("Instance display name."),
+    "translation_mm": _INSTANCE_VECTOR,
+    "rotation_deg": _INSTANCE_VECTOR,
+    "suppressed": {"type": "boolean"},
+}
+TOOL_DEFINITIONS += (
+    {"name": "cad_create_assembly", "description": "Create a flat linked Assembly.",
+     "inputSchema": _object({"name": _string("Assembly name.")})},
+    {"name": "cad_list_assemblies", "description": "List Assemblies and linked placements.",
+     "inputSchema": _object()},
+    {"name": "cad_get_assembly", "description": "Inspect an Assembly, placements, and source diagnostics.",
+     "inputSchema": _object({"assembly_id": _ASSEMBLY_ID}, ["assembly_id"])},
+    {"name": "cad_update_assembly", "description": "Rename an Assembly.",
+     "inputSchema": _object({"assembly_id": _ASSEMBLY_ID, "name": _string("Assembly name.")}, ["assembly_id", "name"])},
+    {"name": "cad_delete_assembly", "description": "Delete an Assembly without deleting source Parts.",
+     "inputSchema": _object({"assembly_id": _ASSEMBLY_ID}, ["assembly_id"])},
+    {"name": "cad_add_assembly_instance", "description": "Place an existing Part; translation in mm, XYZ rotation in degrees.",
+     "inputSchema": {**_object({**_INSTANCE_PROPERTIES, "part_id": _PART_ID, "part_studio_id": _PART_ID}, ["assembly_id"]),
+                     "anyOf": [{"required": ["part_studio_id"]}, {"required": ["part_id"]}]}},
+    {"name": "cad_update_assembly_instance", "description": "Edit placement, name, or suppression without modifying source history.",
+     "inputSchema": _object({**_INSTANCE_PROPERTIES, "instance_id": _INSTANCE_ID}, ["assembly_id", "instance_id"])},
+    {"name": "cad_remove_assembly_instance", "description": "Remove only this linked placement.",
+     "inputSchema": _object({"assembly_id": _ASSEMBLY_ID, "instance_id": _INSTANCE_ID}, ["assembly_id", "instance_id"])},
 )
 
 

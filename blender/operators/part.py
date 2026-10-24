@@ -195,7 +195,11 @@ class PARAMETRIC_CAD_OT_delete_part(bpy.types.Operator):
 
     def execute(self, context):
         document = load_document_from_scene(context.scene)
-        removed = document.remove_part(self.part_id)
+        try:
+            removed = document.remove_part(self.part_id)
+        except ValueError as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
         if removed is None:
             return {"CANCELLED"}
         save_document_to_scene(context.scene, document)

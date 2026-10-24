@@ -178,7 +178,7 @@ def main() -> None:
         part = document.active_part
         _check(part.features[-1].status == "OK", "Downstream Chamfer did not rebuild after dimension edit.")
 
-        raw = bpy.context.scene.parametric_cad_document
+        raw = bpy.data.texts["CAD_DOCUMENT.json"].as_string()
         json.loads(raw)
         _check("mesh_edge_index" not in raw and "edge_index" not in raw, "Runtime mesh index leaked into CAD JSON.")
         path = str(Path(tempfile.gettempdir()) / "blender_parametric_cad_m9.blend")

@@ -1,7 +1,7 @@
 # Blender Parametric CAD API
 
 This reference describes the public API in the Blender Parametric CAD
-extension (current extension release 0.17.0). It covers both direct Python
+extension (current extension release 0.18.0). It covers both direct Python
 scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
 
 ## MCP bridge
@@ -1055,3 +1055,49 @@ data:
 
 The provenance registry is rebuilt after each evaluation and must not be used
 as a persistent face identity.
+
+
+## Linked Assembly operations (M11A)
+
+All tools use the same Blender service and file-level `CAD_DOCUMENT.json`.
+Part authoring resolves the Part Studio Scene even while an Assembly window
+is active. `cad_get_document` retains its existing `ok` and `document` fields;
+`document` now includes `assemblies` and `schema_version: 3`.
+
+| Tool | Inputs |
+| --- | --- |
+| `cad_create_assembly` | Optional `name` |
+| `cad_list_assemblies` | None |
+| `cad_get_assembly` | `assembly_id` |
+| `cad_update_assembly` | `assembly_id`, `name` |
+| `cad_delete_assembly` | `assembly_id` |
+| `cad_add_assembly_instance` | `assembly_id`, `part_studio_id` (or `part_id`), optional `name`, `translation_mm`, `rotation_deg`, `suppressed` |
+| `cad_update_assembly_instance` | `assembly_id`, `instance_id`, optional `name`, `translation_mm`, `rotation_deg`, `suppressed` |
+| `cad_remove_assembly_instance` | `assembly_id`, `instance_id` |
+
+Vectors accept `[x, y, z]` or `{"x": x, "y": y, "z": z}`. Rotation uses
+`Rz @ Ry @ Rx`. Persistent transforms are rigid 4x4 matrices in meters.
+Translation-only updates preserve the stored rotation exactly. These placements
+never append a Transform feature to the source Part.
+
+```text
+cad_create_assembly({"name": "Guides"})
+# Substitute the returned Assembly UUID and an existing Part Studio UUID:
+cad_add_assembly_instance({
+  "assembly_id": "assembly-uuid", "part_studio_id": "guide-part-uuid",
+  "name": "Guide Left", "translation_mm": [-50, 0, 0]
+})
+cad_add_assembly_instance({
+  "assembly_id": "assembly-uuid", "part_studio_id": "guide-part-uuid",
+  "name": "Guide Right", "translation_mm": [50, 0, 0], "rotation_deg": [0, 0, 180]
+})
+cad_get_assembly({"assembly_id": "assembly-uuid"})
+```
+
+Add/update returns `ok`, `assembly_id`, `instance_id`, `part_studio_id`, and the
+Assembly payload. Inspection includes each persistent matrix, suppression flag,
+`stale`, and `diagnostic`. A failed source rebuild retains the last valid mesh
+and marks visible instances stale. Invalid mutations leave the Assembly
+unchanged; a carrier-creation failure restores previous data and display.
+Deleting a referenced Part returns `PART_IN_USE` with `part_id` and a list of
+referencing `assembly_id` / `instance_id` pairs in `details`.

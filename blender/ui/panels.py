@@ -91,6 +91,12 @@ class PARAMETRIC_CAD_PT_main(bpy.types.Panel):
             layout.label(text=str(exc))
             return
 
+        from ..environments import scene_role
+        if scene_role(scene) == "ASSEMBLY":
+            from ..operators.assembly import draw_assembly
+            draw_assembly(layout, context, document)
+            return
+        layout.operator("parametric_cad.open_assembly_window")
         studio = layout.box()
         studio.label(text="Part Studio", icon="MESH_CUBE")
         row = studio.row(align=True)

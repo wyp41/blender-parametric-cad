@@ -510,7 +510,7 @@ class StdioMcpServer:
                     },
                     "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
                     "instructions": (
-                        "Use cad_* tools for persistent Part Studios, sketches, "
+                        "Use cad_* tools for persistent Part Studios, linked Assemblies, sketches, "
                         "features, Transform/Mirror history, rebuilds, and per-Part "
                         "exports. Use blender_execute_python for trusted arbitrary "
                         "Python in the same Blender process when direct bpy access "

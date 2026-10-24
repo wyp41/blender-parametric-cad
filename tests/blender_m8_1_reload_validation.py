@@ -52,7 +52,7 @@ def main() -> None:
     candidates = get_edge_candidates(result_objects[0])
     _check(candidates, "Runtime edge candidate cache was not rebuilt after reopening.")
 
-    raw = getattr(bpy.context.scene, "parametric_cad_document", "")
+    raw = bpy.data.texts["CAD_DOCUMENT.json"].as_string()
     json.loads(raw)
     for forbidden in ("mesh_edge_index", "edge_index", "bmesh_edge", "candidate_id"):
         _check(forbidden not in raw, f"Runtime edge field {forbidden!r} was serialized.")

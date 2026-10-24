@@ -85,19 +85,25 @@ def _part_studio_items(_self, context):
 
 
 def _active_part_changed(self, context):
-    if context is None or self.active_part_id == "NONE":
+    if context is None:
+        return
+    from .environments import scene_role, show_active_part
+    scene = self.id_data
+    if scene_role(scene) == "ASSEMBLY":
         return
     from .adapter import load_document_from_scene, save_document_to_scene
 
     try:
-        document = load_document_from_scene(context.scene)
+        document = load_document_from_scene(scene)
     except (AttributeError, TypeError, ValueError):
         return
-    if document.get_part(self.active_part_id) is None:
-        return
-    if document.active_part_id != self.active_part_id:
-        document.set_active_part(self.active_part_id)
-        save_document_to_scene(context.scene, document)
+    if self.active_part_id != "NONE":
+        if document.get_part(self.active_part_id) is None:
+            return
+        if document.active_part_id != self.active_part_id:
+            document.set_active_part(self.active_part_id)
+            save_document_to_scene(scene, document)
+    show_active_part(scene, document.active_part_id)
     self.mode = "IDLE"
     self.active_feature_id = ""
     self.feature_name = ""
@@ -309,7 +315,28 @@ def _mirror_plane_items(_self, context):
     return _sketch_plane_items(_self, context)
 
 
+_ASSEMBLY_ITEMS = []
+
+
+def _assembly_items(_self, _context):
+    global _ASSEMBLY_ITEMS
+    from .adapter import load_document
+    try:
+        _ASSEMBLY_ITEMS = [(item.id, item.name, item.id) for item in load_document().assemblies]
+    except ValueError:
+        _ASSEMBLY_ITEMS = []
+    return _ASSEMBLY_ITEMS or [("NONE", "No Assemblies", "Create an Assembly")]
+
+
+def _active_assembly_changed(self, _context):
+    from .environments import show_assembly
+    self.selected_instance_id = ""
+    show_assembly(self.id_data, self.active_assembly_id)
+
+
 class PARAMETRIC_CAD_PG_ui_state(bpy.types.PropertyGroup):
+    active_assembly_id: EnumProperty(name="Assembly", items=_assembly_items, update=_active_assembly_changed)
+    selected_instance_id: StringProperty(name="Selected Instance", default="")
     mcp_service_port: IntProperty(
         name="MCP Service Port",
         description="Local TCP port used by the CAD MCP service",
@@ -696,6 +723,7 @@ def _ensure_ui_state_registered() -> None:
         registered is cls and _class_has_rna_property(registered, "panel_tab")
         and _class_has_rna_property(registered, "active_sketch_references")
         and _class_has_rna_property(registered, "sketch_dimension_value_mm")
+        and _class_has_rna_property(registered, "active_assembly_id")
     )
     if is_current_and_complete:
         return

@@ -1,10 +1,4 @@
-"""Single Blender persistence and rebuild integration service.
-
-The Blender scene property is only a transport for the persistent CAD JSON.  A
-scene can outlive the add-on that created it, so every access goes through the
-guarded helpers below instead of assuming that the custom properties are
-registered.
-"""
+"""File-level CAD persistence, legacy migration, and source mesh evaluation."""
 
 from __future__ import annotations
 
@@ -30,7 +24,8 @@ from .viewport.provenance import (
 CAD_ADDON_ID = "blender_parametric_cad"
 CAD_DOCUMENT_PROPERTY = "parametric_cad_document"
 CAD_RUNTIME_ERROR_PROPERTY = "parametric_cad_runtime_error"
-CAD_SCHEMA_VERSION = 2
+CAD_SCHEMA_VERSION = 3
+CAD_DOCUMENT_TEXT = "CAD_DOCUMENT.json"
 
 
 class CadDocumentError(ValueError):
@@ -59,13 +54,6 @@ def addon_enabled() -> bool:
         return False
 
 
-def _scene_property_available(scene: bpy.types.Scene) -> bool:
-    try:
-        return hasattr(scene, CAD_DOCUMENT_PROPERTY)
-    except (AttributeError, ReferenceError, RuntimeError):
-        return False
-
-
 def _validate_document(document: CadDocument) -> CadDocument:
     if int(getattr(document, "schema_version", 0)) != CAD_SCHEMA_VERSION:
         raise CadDocumentError(
@@ -86,55 +74,82 @@ def _validate_document(document: CadDocument) -> CadDocument:
         raise CadDocumentError(
             f"Active Part Studio {document.active_part_id!r} is not present in the document."
         )
+    from ..core.assembly import validate_instance_transform
+
+    assembly_ids, instance_ids = set(), set()
+    for assembly in document.assemblies:
+        if not assembly.id or assembly.id in assembly_ids:
+            raise CadDocumentError("Duplicate or missing Assembly UUID.")
+        assembly_ids.add(assembly.id)
+        for instance in assembly.instances:
+            if not instance.id or instance.id in instance_ids:
+                raise CadDocumentError("Duplicate or missing Instance UUID.")
+            instance_ids.add(instance.id)
+            if instance.part_studio_id not in part_ids:
+                raise CadDocumentError(f"Unknown source Part Studio: {instance.part_studio_id}")
+            validate_instance_transform(instance.transform)
     return document
 
 
-def load_document_from_scene(scene: bpy.types.Scene) -> CadDocument:
-    if scene is None:
-        raise CadDocumentError("No Blender scene is available for CAD document loading.")
-    if not _scene_property_available(scene):
-        if not addon_enabled():
-            raise CadDocumentError(
-                "Blender Parametric CAD is not enabled. Enable the extension in "
-                "Edit > Preferences > Extensions, then reopen this file."
-            )
-        raise CadDocumentError(
-            "Blender Parametric CAD scene properties are not registered. "
-            "Disable and re-enable the extension, then reopen this file."
-        )
-    raw = getattr(scene, CAD_DOCUMENT_PROPERTY, "")
-    if raw in (None, ""):
-        return CadDocument()
-    if not isinstance(raw, str):
-        raise CadDocumentError("The CAD document scene property is not valid JSON text.")
+def _parse_document(raw: str) -> CadDocument:
+    """Validate JSON before any migration can replace legacy storage."""
     try:
         payload = json.loads(raw)
-    except (TypeError, ValueError, json.JSONDecodeError) as exc:
-        raise CadDocumentError(f"CAD document JSON is invalid: {exc}") from exc
-    if not isinstance(payload, dict):
-        raise CadDocumentError("CAD document JSON must contain an object at its root.")
-    try:
-        version = int(payload.get("schema_version", 1))
-    except (TypeError, ValueError) as exc:
-        raise CadDocumentError("CAD document schema_version must be an integer.") from exc
-    if version not in {1, CAD_SCHEMA_VERSION}:
-        raise CadDocumentError(
-            f"Unsupported CAD schema version: {version}; supported versions are 1 and {CAD_SCHEMA_VERSION}."
-        )
-    try:
+        if not isinstance(payload, dict):
+            raise ValueError("CAD document JSON must contain an object at its root.")
         return _validate_document(loads(raw))
-    except CadDocumentError:
-        raise
     except (TypeError, ValueError, KeyError, IndexError) as exc:
         raise CadDocumentError(f"CAD document schema is invalid: {exc}") from exc
 
 
+def load_document() -> CadDocument:
+    """Load the single file-level document, migrating all legacy Scenes atomically."""
+    text = bpy.data.texts.get(CAD_DOCUMENT_TEXT)
+    if text is not None:
+        return _parse_document(text.as_string())
+    candidates = []
+    for scene in bpy.data.scenes:
+        raw = getattr(scene, CAD_DOCUMENT_PROPERTY, "") or scene.get(CAD_DOCUMENT_PROPERTY, "")
+        if raw:
+            document = _parse_document(raw)
+            if document.parts or document.assemblies:
+                candidates.append((scene.name, document))
+    if candidates:
+        signatures = {dumps(document) for _, document in candidates}
+        if len(signatures) != 1:
+            raise CadDocumentError("MIGRATION_CONFLICT: conflicting legacy CAD documents in Scenes: "
+                                   + ", ".join(name for name, _ in candidates))
+        document = candidates[0][1]
+        save_document(document)
+        return document
+    return CadDocument()
+
+
+def save_document(document: CadDocument) -> None:
+    """Write one persistent Text datablock and retire writable Scene copies."""
+    raw = dumps(_validate_document(document))
+    text = bpy.data.texts.get(CAD_DOCUMENT_TEXT)
+    if text is None:
+        text = bpy.data.texts.new(CAD_DOCUMENT_TEXT)
+    text.use_fake_user = True
+    if text.as_string() != raw:
+        text.clear()
+        text.write(raw)
+    for scene in bpy.data.scenes:
+        if getattr(scene, CAD_DOCUMENT_PROPERTY, ""):
+            setattr(scene, CAD_DOCUMENT_PROPERTY, "")
+        if CAD_DOCUMENT_PROPERTY in scene:
+            del scene[CAD_DOCUMENT_PROPERTY]
+
+
+def load_document_from_scene(scene: bpy.types.Scene) -> CadDocument:
+    """Compatibility wrapper; Scene selection does not determine document ownership."""
+    return load_document()
+
+
 def save_document_to_scene(scene: bpy.types.Scene, document: CadDocument) -> None:
-    if scene is None or not _scene_property_available(scene):
-        raise CadDocumentError(
-            "Blender Parametric CAD is not enabled; cannot save the CAD document."
-        )
-    scene.parametric_cad_document = dumps(_validate_document(document))
+    """Compatibility wrapper for the canonical file-level store."""
+    save_document(document)
 
 
 def set_runtime_error(scene: bpy.types.Scene, message: str | None) -> None:
@@ -153,7 +168,12 @@ def set_runtime_error(scene: bpy.types.Scene, message: str | None) -> None:
 def sync_active_part_from_object(scene: bpy.types.Scene, obj) -> str | None:
     """Make a selected generated object select its owning Part Studio/Feature."""
 
-    if obj is None:
+    from .environments import scene_role, sync_instance_selection
+
+    if scene_role(scene) == "ASSEMBLY":
+        sync_instance_selection(scene, obj)
+        return None
+    if obj is None or obj.get("cad_instance_id"):
         return None
     try:
         part_id = obj.get("cad_part_id")
@@ -356,20 +376,12 @@ def validate_cad_document(scene: bpy.types.Scene) -> list[str]:
     return diagnostics
 
 
-def _selected_object():
-    try:
-        active = bpy.context.view_layer.objects.active
-        if active is not None:
-            return active
-        selected = bpy.context.selected_objects
-        return selected[0] if selected else None
-    except (AttributeError, ReferenceError, RuntimeError):
-        return None
-
-
 @bpy.app.handlers.persistent
 def _on_depsgraph_update_post(scene, _depsgraph) -> None:
-    obj = _selected_object()
+    # Handlers run for multiple Scenes; use that Scene's ViewLayer, never the
+    # globally active window's selection.
+    layer = scene.view_layers[0] if scene.view_layers else None
+    obj = layer.objects.active if layer else None
     if obj is None:
         return
     try:
@@ -408,7 +420,15 @@ def _on_load_post(_dummy) -> None:
             clear_sketch_selection()
         except (ImportError, ReferenceError, RuntimeError, TypeError):
             pass
-        document = load_document_from_scene(scene)
+        from .environments import part_studio_scene, restore_assemblies, show_active_part
+
+        document = load_document()
+        if bpy.data.texts.get(CAD_DOCUMENT_TEXT) is None:
+            save_document(document)
+        legacy_context = not scene.get("cad_scene_role")
+        scene = part_studio_scene()
+        if legacy_context and getattr(bpy.context, "window", None) is not None:
+            bpy.context.window.scene = scene
         ui = getattr(scene, "parametric_cad_ui", None)
         if ui is not None:
             desired = document.active_part_id or "NONE"
@@ -423,6 +443,8 @@ def _on_load_post(_dummy) -> None:
                 failures.extend(
                     f"{error.feature_name}: {error.message}" for error in result.errors
                 )
+        show_active_part(scene, document.active_part_id)
+        restore_assemblies(load_document())
         set_runtime_error(
             scene,
             "CAD restore completed with errors: " + "; ".join(failures)
@@ -488,9 +510,20 @@ def _reactivate_mcp_service() -> None:
 def remove_part_geometry(part_id: str) -> None:
     """Remove disposable Blender objects owned by one Part Studio."""
 
+    document = load_document()
+    if any(item.part_studio_id == part_id for assembly in document.assemblies for item in assembly.instances):
+        from ..core.assembly import PartInUseError
+        raise PartInUseError(part_id, [
+            {"assembly_id": assembly.id, "instance_id": item.id}
+            for assembly in document.assemblies for item in assembly.instances
+            if item.part_studio_id == part_id
+        ])
     for item in list(bpy.data.objects):
-        if item.get("cad_part_id") == part_id:
+        if item.get("cad_generated") and item.get("cad_part_id") == part_id:
             _remove_result_object(item)
+    for collection in list(bpy.data.collections):
+        if collection.get("cad_source_collection") and collection.get("cad_part_id") == part_id:
+            bpy.data.collections.remove(collection)
 
 
 def rename_part_geometry(part_id: str, part_name: str) -> None:
@@ -529,7 +562,20 @@ def rebuild_part(scene: bpy.types.Scene, part_id: str | None = None) -> Evaluati
 
     register_runtime_evaluation(part.id, result.context)
     save_document_to_scene(scene, document)
-    display = _ensure_collection(scene, "CAD", "DISPLAY")
+    from .environments import ensure_source_collection, mark_source_status, redraw_all, show_active_part
+
+    display = ensure_source_collection(part.id)
+    if result_object is not None:
+        # Move legacy DISPLAY geometry without changing Object identity.
+        if result_object.name not in display.objects:
+            display.objects.link(result_object)
+        for collection in list(result_object.users_collection):
+            if collection != display:
+                collection.objects.unlink(result_object)
+    mark_source_status(part.id, not result.success)
+    from .environments import part_studio_scene
+    show_active_part(part_studio_scene(), document.active_part_id)
+    redraw_all()
 
     # Evaluation is transactional from the viewport's point of view.  The
     # evaluator may expose a partial body for diagnostics, but a failed
@@ -561,6 +607,12 @@ def rebuild_part(scene: bpy.types.Scene, part_id: str | None = None) -> Evaluati
         if old_mesh and old_mesh.users == 0:
             bpy.data.meshes.remove(old_mesh)
 
+    from mathutils import Matrix
+
+    result_object.matrix_world = Matrix.Identity(4)
+    result_object.lock_location = (True, True, True)
+    result_object.lock_rotation = (True, True, True)
+    result_object.lock_scale = (True, True, True)
     result_object["cad_part_id"] = part.id
     result_object["cad_generated"] = True
     evaluated_features = result.context.evaluated_features if result.context else {}
@@ -578,6 +630,7 @@ def rebuild_part(scene: bpy.types.Scene, part_id: str | None = None) -> Evaluati
         set_edge_candidates(result_object, result.context)
     result_object.update_tag()
     bpy.context.view_layer.update()
+    redraw_all()
     return result
 
 
@@ -612,35 +665,37 @@ def export_part(
     if not path.suffix:
         path = path.with_suffix(f".{format_name.lower()}")
 
-    selected_objects = list(bpy.context.selected_objects)
-    active_object = bpy.context.view_layer.objects.active
-    for item in selected_objects:
-        item.select_set(False)
-    result_object.select_set(True)
-    bpy.context.view_layer.objects.active = result_object
+    from .environments import ensure_source_collection, part_studio_scene
+
+    scene = part_studio_scene()
+    source = ensure_source_collection(part_id)
+    temporary_link = source.name not in scene.collection.children
+    if temporary_link:
+        scene.collection.children.link(source)
+    layer = scene.view_layers[0]
     try:
-        operators = {
-            "STL": bpy.ops.wm.stl_export,
-            "OBJ": bpy.ops.wm.obj_export,
-            "PLY": bpy.ops.wm.ply_export,
-        }
-        status = operators[format_name](
-            filepath=str(path),
-            export_selected_objects=True,
-        )
-        if "FINISHED" not in status:
-            raise RuntimeError(f"Blender {format_name} export did not finish.")
-    finally:
-        result_object.select_set(False)
-        for item in selected_objects:
+        with bpy.context.temp_override(scene=scene, view_layer=layer):
+            layer.update()
+            selected_objects = [item for item in layer.objects if item.select_get(view_layer=layer)]
+            for item in selected_objects:
+                item.select_set(False, view_layer=layer)
+            result_object.select_set(True, view_layer=layer)
             try:
-                item.select_set(True)
-            except ReferenceError:
-                pass
-        try:
-            bpy.context.view_layer.objects.active = active_object
-        except ReferenceError:
-            bpy.context.view_layer.objects.active = None
+                operators = {
+                    "STL": bpy.ops.wm.stl_export,
+                    "OBJ": bpy.ops.wm.obj_export,
+                    "PLY": bpy.ops.wm.ply_export,
+                }
+                status = operators[format_name](filepath=str(path), export_selected_objects=True)
+                if "FINISHED" not in status:
+                    raise RuntimeError(f"Blender {format_name} export did not finish.")
+            finally:
+                result_object.select_set(False, view_layer=layer)
+                for item in selected_objects:
+                    item.select_set(True, view_layer=layer)
+    finally:
+        if temporary_link:
+            scene.collection.children.unlink(source)
     return str(path)
 
 

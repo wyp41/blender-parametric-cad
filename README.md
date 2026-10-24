@@ -2,14 +2,16 @@
 
 Parametric CAD extension for Blender 5.1.2.
 
-Create editable Part Studio models with sketches, feature history, semantic
-references, MCP, and Python.
+Create editable Part Studio models and linked Assemblies with sketches, feature
+history, semantic references, MCP, and Python.
 
 ## Features
 
 ### Modeling
 
 - Part Studio with single-body parametric history.
+- Flat Assemblies with linked Part instances and independent numeric placements.
+- Part Studio and Assembly Scenes in separate windows of one Blender process.
 - Sketches on datum planes, Extrude faces, Revolve caps, Transform faces, and
   supported Mirror faces.
 - Semantic rectangles backed by four editable SketchLines, stable rectangle and
@@ -43,7 +45,7 @@ references, MCP, and Python.
 - `Sketch`: support selection and sketch editing.
 - `Measure`: point-to-point 3D measurement with snapping.
 - `Output`: document validation and Part Studio export.
-- CAD tools are separate, always-visible left-toolbar buttons; they are not
+- CAD tools are separate left-toolbar buttons for each window’s editing stage; they are not
   folded into Blender's **Add Cube** group.
 - Hover and click selection for planar faces and straight edges.
 - Shift-click multi-edge selection.
@@ -75,7 +77,7 @@ references, MCP, and Python.
 
 1. Open **Edit → Preferences → Extensions** in Blender.
 2. Open the upper-right menu and choose **Install from Disk**.
-3. Select `blender_parametric_cad-0.17.0.zip`.
+3. Select `blender_parametric_cad-0.18.0.zip`.
 4. Enable **Blender Parametric CAD**.
 
 ## Quick start
@@ -88,6 +90,21 @@ references, MCP, and Python.
 6. Select a feature to edit, Transform, Mirror, Chamfer, or Fillet it.
 7. Save the `.blend` file. CAD history and semantic references are restored on
    reopen.
+
+## Linked Assemblies
+
+Click **Open Assembly Window** in the CAD panel. Create an Assembly, then use
+**Add Part** to place an existing Part Studio multiple times. **Transform** edits
+translation in millimeters and XYZ rotation in degrees. **Edit Source Part**
+activates the original Part in the existing Part Studio window; editing its
+Sketch or features updates all linked instances automatically.
+
+The `.blend` file stores one schema-v3 CAD document in `CAD_DOCUMENT.json`.
+Legacy Scene JSON is migrated without changing UUIDs. Conflicting legacy Scene
+documents produce `MIGRATION_CONFLICT` instead of selecting one silently.
+Referenced Part deletion produces `PART_IN_USE`; remove its instances first.
+
+See [the M11A implementation and validation report](M11A_LINKED_ASSEMBLIES.md).
 
 ## MCP setup
 

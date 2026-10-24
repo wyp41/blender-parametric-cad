@@ -31,6 +31,7 @@ def register() -> None:
         export,
         extrude,
         part,
+        assembly,
         revolve,
         selection,
         sketch,
@@ -49,6 +50,7 @@ def register() -> None:
     properties.register()
     for group in (
         part.CLASSES,
+        assembly.CLASSES,
         selection.CLASSES,
         export.CLASSES,
         sketch.CLASSES,
@@ -81,6 +83,7 @@ def unregister() -> None:
         export,
         extrude,
         part,
+        assembly,
         revolve,
         selection,
         sketch,
@@ -104,6 +107,7 @@ def unregister() -> None:
     sketch_overlay.stop()
     groups = (
         part.CLASSES,
+        assembly.CLASSES,
         selection.CLASSES,
         export.CLASSES,
         sketch.CLASSES,

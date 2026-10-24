@@ -194,15 +194,22 @@ class BlenderCadWorker:
 
     @property
     def scene(self):
-        scene = self._bpy.context.scene
-        if scene is None:
-            raise WorkerError("The Blender worker has no active scene.")
-        return scene
+        from ..blender.environments import part_studio_scene
+
+        return part_studio_scene()
 
     def handle(self, name: str, arguments: dict[str, Any]) -> Any:
         handlers = {
             "blender_execute_python": self._execute_python,
             "cad_status": self._status,
+            "cad_create_assembly": self._create_assembly,
+            "cad_list_assemblies": self._list_assemblies,
+            "cad_get_assembly": self._get_assembly,
+            "cad_update_assembly": self._update_assembly,
+            "cad_delete_assembly": self._delete_assembly,
+            "cad_add_assembly_instance": self._add_assembly_instance,
+            "cad_update_assembly_instance": self._update_assembly_instance,
+            "cad_remove_assembly_instance": self._remove_assembly_instance,
             "cad_create_part": self._create_part,
             "cad_set_active_part": self._set_active_part,
             "cad_delete_part": self._delete_part,
@@ -317,14 +324,21 @@ class BlenderCadWorker:
                     area.tag_redraw()
 
     def _document(self):
-        from ..blender.adapter import load_document_from_scene
+        from ..blender.adapter import load_document
 
-        return load_document_from_scene(self.scene)
+        return load_document()
 
     def _save_document(self, document) -> None:
-        from ..blender.adapter import save_document_to_scene
+        from ..blender.adapter import save_document
+        from ..blender.environments import show_active_part
 
-        save_document_to_scene(self.scene, document)
+        ui = self.scene.parametric_cad_ui
+        previous_part_id = ui.active_part_id
+        save_document(document)
+        desired = document.active_part_id or "NONE"
+        if previous_part_id != desired:
+            ui.active_part_id = desired
+        show_active_part(self.scene, document.active_part_id)
         self._autosave()
 
     def _autosave(self) -> None:
@@ -442,6 +456,142 @@ class BlenderCadWorker:
             "blend_file": self._bpy.data.filepath or None,
             "autosave": self.autosave_path,
         }
+
+    def _assembly(self, document, arguments):
+        assembly = document.get_assembly(str(arguments.get("assembly_id") or ""))
+        if assembly is None:
+            raise WorkerError("Assembly not found.", "REFERENCE_MISSING")
+        return assembly
+
+    def _assembly_payload(self, assembly):
+        from ..core.serialization import assembly_to_dict
+        from ..blender.environments import instance_object
+
+        payload = assembly_to_dict(assembly)
+        for item in payload["instances"]:
+            obj = instance_object(item["id"])
+            item["stale"] = bool(obj.get("cad_stale")) if obj else False
+            item["diagnostic"] = obj.get("cad_diagnostic", "") if obj else ""
+        return payload
+
+    def _create_assembly(self, arguments):
+        from ..core.assembly import Assembly
+        from ..blender.environments import assembly_scene, commit_assembly
+
+        document = self._document()
+        assembly = document.add_assembly(Assembly(
+            name=str(arguments.get("name") or f"Assembly {len(document.assemblies) + 1}"),
+        ))
+        scene = assembly_scene()
+        commit_assembly(document, assembly, scene)
+        scene.parametric_cad_ui.active_assembly_id = assembly.id
+        self._autosave()
+        return {"assembly": self._assembly_payload(assembly)}
+
+    def _list_assemblies(self, _arguments):
+        return {"assemblies": [self._assembly_payload(item) for item in self._document().assemblies]}
+
+    def _get_assembly(self, arguments):
+        return {"assembly": self._assembly_payload(self._assembly(self._document(), arguments))}
+
+    def _update_assembly(self, arguments):
+        document = self._document()
+        assembly = self._assembly(document, arguments)
+        name = str(arguments.get("name") or "").strip()
+        if not name:
+            raise WorkerError("An Assembly name is required.")
+        assembly.name = name
+        self._save_document(document)
+        return {"assembly": self._assembly_payload(assembly)}
+
+    def _delete_assembly(self, arguments):
+        from ..blender.environments import remove_assembly_geometry, assembly_scene
+
+        document = self._document()
+        assembly = self._assembly(document, arguments)
+        scene = assembly_scene()
+        ui = scene.parametric_cad_ui
+        active_id, selected_id = ui.active_assembly_id, ui.selected_instance_id
+        document.remove_assembly(assembly.id)
+        self._save_document(document)
+        remove_assembly_geometry(assembly.id)
+        ui.active_assembly_id = (active_id if document.get_assembly(active_id) else
+                                 document.assemblies[0].id if document.assemblies else "NONE")
+        if ui.active_assembly_id == active_id:
+            ui.selected_instance_id = selected_id
+        self._autosave()
+        return {"deleted_assembly_id": assembly.id}
+
+    def _instance_transform(self, arguments, current=None):
+        from ..core.transform import IDENTITY_MATRIX, Transform
+
+        matrix = current or IDENTITY_MATRIX
+        translation = tuple(matrix[index][3] for index in range(3))
+        if "translation_mm" in arguments:
+            translation = tuple(value / 1000.0 for value in self._vector(arguments, "translation_mm"))
+        if "rotation_deg" in arguments:
+            rotation = tuple(radians(value) for value in self._vector(arguments, "rotation_deg"))
+            return Transform(translation, rotation).matrix
+        # Updating translation alone must preserve the stored rotation exactly.
+        result = [list(row) for row in matrix]
+        for index in range(3):
+            result[index][3] = translation[index]
+        return tuple(tuple(row) for row in result)
+
+    def _commit_assembly(self, document, assembly):
+        from ..blender.environments import assembly_scene, commit_assembly
+
+        scene = assembly_scene()
+        active = scene.parametric_cad_ui.active_assembly_id == assembly.id
+        commit_assembly(document, assembly, scene if active else None)
+        self._autosave()
+
+    def _add_assembly_instance(self, arguments):
+        from ..core.assembly import AssemblyInstance
+
+        document = self._document()
+        assembly = self._assembly(document, arguments)
+        source_id = arguments.get("part_studio_id") or arguments.get("part_id")
+        if not source_id:
+            raise WorkerError("A source Part Studio UUID is required.", "REFERENCE_MISSING")
+        part = self._part(document, {"part_id": source_id})
+        instance = AssemblyInstance(
+            name=str(arguments.get("name") or part.name), part_studio_id=part.id,
+            transform=self._instance_transform(arguments),
+            suppressed=bool(arguments.get("suppressed", False)),
+        )
+        self._rebuild_payload(part.id)
+        document = self._document()
+        assembly = self._assembly(document, arguments)
+        document.add_instance(assembly.id, instance)
+        self._commit_assembly(document, assembly)
+        return {"ok": True, "assembly_id": assembly.id, "instance_id": instance.id,
+                "part_studio_id": instance.part_studio_id, "assembly": self._assembly_payload(assembly)}
+
+    def _update_assembly_instance(self, arguments):
+        document = self._document()
+        assembly = self._assembly(document, arguments)
+        instance = document.get_instance(assembly.id, str(arguments.get("instance_id") or ""))
+        if instance is None:
+            raise WorkerError("Assembly Instance not found.", "REFERENCE_MISSING")
+        if "translation_mm" in arguments or "rotation_deg" in arguments:
+            instance.transform = self._instance_transform(arguments, instance.transform)
+        if "name" in arguments:
+            instance.name = str(arguments["name"])
+        if "suppressed" in arguments:
+            instance.suppressed = bool(arguments["suppressed"])
+        self._commit_assembly(document, assembly)
+        return {"ok": True, "assembly_id": assembly.id, "instance_id": instance.id,
+                "part_studio_id": instance.part_studio_id, "assembly": self._assembly_payload(assembly)}
+
+    def _remove_assembly_instance(self, arguments):
+        document = self._document()
+        assembly = self._assembly(document, arguments)
+        instance = document.remove_instance(assembly.id, str(arguments.get("instance_id") or ""))
+        if instance is None:
+            raise WorkerError("Assembly Instance not found.", "REFERENCE_MISSING")
+        self._commit_assembly(document, assembly)
+        return {"removed_instance_id": instance.id, "assembly": self._assembly_payload(assembly)}
 
     def _create_part(self, arguments: dict[str, Any]) -> dict[str, Any]:
         from ..core.part import Part

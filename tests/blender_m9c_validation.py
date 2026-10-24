@@ -53,25 +53,9 @@ def main() -> None:
             },
         )
         _check(result["ok"] and result["solver_status"] == "SOLVED", "Rectangle constraint failed.")
-    width = call(
-        "cad_sketch_add_dimension",
-        {
-            "sketch_id": sketch_id,
-            "dimension_type": "LENGTH",
-            "entity_refs": [{"entity_id": ids["bottom"]}],
-            "value_mm": 80,
-        },
-    )
-    height = call(
-        "cad_sketch_add_dimension",
-        {
-            "sketch_id": sketch_id,
-            "dimension_type": "LENGTH",
-            "entity_refs": [{"entity_id": ids["left"]}],
-            "value_mm": 50,
-        },
-    )
-    _check(width["solver_status"] == "SOLVED" and height["solver_status"] == "SOLVED", "Rectangle dimensions failed.")
+    # Semantic rectangles already own driving width/height dimensions.
+    width = {"dimension_id": rectangle["width_dimension_id"]}
+    _check(rectangle["width_dimension_id"] and rectangle["height_dimension_id"], "Rectangle dimensions missing.")
     base = call(
         "cad_create_extrude",
         {

@@ -31,6 +31,8 @@ def _window_region(context):
 
 
 def _raycast(context, event):
+    if context.scene.get("cad_scene_role") == "ASSEMBLY":
+        return None
     region = _window_region(context)
     if region is None:
         return None
@@ -69,6 +71,8 @@ def _face_selection_message(obj, polygon_index: int) -> str:
 
 
 def _edge_raycast(context, event):
+    if context.scene.get("cad_scene_role") == "ASSEMBLY":
+        return None
     region = _window_region(context)
     if region is None:
         return None

@@ -6,15 +6,25 @@ Create editable Part Studio models and linked Assemblies with sketches, feature
 history, semantic references, MCP, and Python.
 
 
-## Watch the mechanisms
+## Showcase
 
-14 mechanism examples built with the plugin: gears, planetary trains, linkages,
-and cam followers. Play the 36-second showcase directly below.
+**From sketch to mechanism — narrated workflow (中文 AI 解说 + 字幕)**
+
+A 104-second walkthrough of actual Sketch/Extrude/Through All history rebuilds,
+linked Assemblies, mechanism animation, and millimeter STL export. Turn on sound
+in the player for the Chinese AI narration.
+
+https://github.com/user-attachments/assets/9b05c43b-fee1-4c39-bb27-5221fcf72fdf
+
+[Workflow explanation, narration, captions, and production scripts](examples/promotion/README.md)
+· [14 mechanism examples, models, STL files, and formulas](examples/mechanisms/README.md)
+
+<details>
+<summary>36-second mechanism montage · no narration</summary>
 
 https://github.com/user-attachments/assets/f0776b6b-0ca6-455e-9513-564a8cb349cb
 
-[Models, STL files, formulas, and reproducible scripts](examples/mechanisms/README.md)
-
+</details>
 
 ## Features
 
@@ -90,6 +100,8 @@ https://github.com/user-attachments/assets/f0776b6b-0ca6-455e-9513-564a8cb349cb
 - Blender UI and MCP can edit the same CAD history.
 
 ## Install
+
+Download the [0.18.1 release](https://github.com/wyp41/blender-parametric-cad/releases/tag/v0.18.1).
 
 1. Open **Edit → Preferences → Extensions** in Blender.
 2. Open the upper-right menu and choose **Install from Disk**.

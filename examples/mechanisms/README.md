@@ -2,6 +2,8 @@
 
 从原来的 m2、20/40 齿直齿轮文档扩展出 14 个运动示例，复用 25 个独立 Part。原始两个齿轮的 UUID 保留；`base_spur_gears.blend` 是生成起点，`mechanism_course_gallery.blend` 是最终项目。适用 Blender 5.1、Blender Parametric CAD 0.18.1。
 
+[观看中文 AI 配音建模流程讲解](../promotion/README.md)：草图、拉伸、切孔、改尺寸、装配及导出。
+
 ![机构总览](overview.png)
 
 https://github.com/user-attachments/assets/f0776b6b-0ca6-455e-9513-564a8cb349cb

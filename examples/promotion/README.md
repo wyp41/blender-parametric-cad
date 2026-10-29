@@ -3,7 +3,9 @@
 约 1 分 44 秒，1280×720、24 fps，H.264 视频及 AAC 音轨。包含中文解说和烧录字幕，
 可直接用于 GitHub 展示；[下载视频](blender_cad_promo_zh.mp4)。
 
-![封面](poster.jpg)
+https://github.com/user-attachments/assets/9b05c43b-fee1-4c39-bb27-5221fcf72fdf
+
+[查看封面](poster.jpg)
 
 ## 视频章节
 

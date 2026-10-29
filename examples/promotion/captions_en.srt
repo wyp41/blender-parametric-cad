@@ -1,0 +1,91 @@
+1
+00:00:00,350 --> 00:00:04,545
+Mechanical design in Blender can have an editable feature history.
+
+2
+00:00:04,546 --> 00:00:07,579
+This is Blender Parametric CAD.
+
+3
+00:00:07,580 --> 00:00:14,085
+Starting with a simple gear pair, we connect modeling, assembly, and motion in one reproducible workflow.
+
+4
+00:00:15,017 --> 00:00:18,654
+Start with module, tooth count, and pressure angle.
+
+5
+00:00:18,655 --> 00:00:23,374
+Here we use module two, twenty teeth, and a twenty-degree pressure angle.
+
+6
+00:00:23,375 --> 00:00:28,861
+The involute outline becomes ordinary sketch geometry that can be inspected and extruded.
+
+7
+00:00:29,767 --> 00:00:36,826
+Extrude the profile to create an eight-millimeter face width, then cut a six-point-three-millimeter shaft bore using Through All.
+
+8
+00:00:36,827 --> 00:00:41,803
+The sketch, extrusion, and bore remain separate features in the model's history.
+
+9
+00:00:42,725 --> 00:00:48,352
+To change a dimension, edit the upstream extrusion from eight to twelve millimeters, then rebuild.
+
+10
+00:00:48,353 --> 00:00:51,374
+The through bore follows the updated body.
+
+11
+00:00:51,375 --> 00:00:56,326
+These images come from the same CAD history evaluated at two different widths.
+
+12
+00:00:57,225 --> 00:01:02,342
+Link the source parts into an assembly and place them using their pitch-circle center distance.
+
+13
+00:01:02,343 --> 00:01:08,107
+A twenty-tooth gear driving a forty-tooth gear gives a two-to-one reduction, with opposite rotation.
+
+14
+00:01:08,108 --> 00:01:11,494
+The animation makes that relationship visible.
+
+15
+00:01:12,433 --> 00:01:17,005
+Reuse the same parts for compound reductions and planetary gear trains.
+
+16
+00:01:17,006 --> 00:01:20,439
+Add links and cams to explore other mechanisms.
+
+17
+00:01:20,440 --> 00:01:27,649
+This gallery contains fourteen teaching examples, showing different ways to transmit rotation and produce reciprocating motion.
+
+18
+00:01:28,600 --> 00:01:36,157
+Export each part as a millimeter-scale STL, and keep the dimension, sampled-interference, and save-reopen checks with the project.
+
+19
+00:01:36,158 --> 00:01:39,264
+Motion here is prescribed by formulas.
+
+20
+00:01:39,265 --> 00:01:43,985
+Physical print quality and load capacity still require real-world testing.
+
+21
+00:01:44,933 --> 00:01:51,216
+The repository includes the extension, example models, generation scripts, and animation assets.
+
+22
+00:01:51,217 --> 00:01:55,148
+Start with your first gear pair, then build your own mechanism.
+
+23
+00:01:55,149 --> 00:02:00,974
+Explore Blender Parametric CAD on GitHub, and use the Chinese link to switch languages.

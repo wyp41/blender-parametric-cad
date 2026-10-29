@@ -1,0 +1,117 @@
+{
+  "voice": "en-US-GuyNeural",
+  "rate": "+3%",
+  "language": "en-US",
+  "voice_label": "AI VOICE · ENGLISH",
+  "chapters": [
+    {
+      "title": "From sketches\nto mechanisms",
+      "label": "BLENDER PARAMETRIC CAD",
+      "details": [
+        "Parametric modeling",
+        "Linked assemblies",
+        "Reproducible workflows"
+      ],
+      "media": [
+        "../mechanisms/videos/03.mp4"
+      ],
+      "narration": "Mechanical design in Blender can have an editable feature history. This is Blender Parametric CAD. Starting with a simple gear pair, we connect modeling, assembly, and motion in one reproducible workflow."
+    },
+    {
+      "title": "Start with\nparameters",
+      "label": "01 / SKETCH",
+      "details": [
+        "Module 2 mm · 20 teeth",
+        "Pressure angle: 20 degrees",
+        "Actual involute outline"
+      ],
+      "media": [
+        "workflow/01_sketch.png"
+      ],
+      "narration": "Start with module, tooth count, and pressure angle. Here we use module two, twenty teeth, and a twenty-degree pressure angle. The involute outline becomes ordinary sketch geometry that can be inspected and extruded."
+    },
+    {
+      "title": "Extrude.\nCut the bore.",
+      "label": "02 / FEATURE HISTORY",
+      "details": [
+        "Extrude · face width 8 mm",
+        "Shaft bore: 6.3 mm",
+        "Remove · Through All"
+      ],
+      "media": [
+        "workflow/02_extrude.png",
+        "workflow/03_bore.png"
+      ],
+      "narration": "Extrude the profile to create an eight-millimeter face width, then cut a six-point-three-millimeter shaft bore using Through All. The sketch, extrusion, and bore remain separate features in the model's history."
+    },
+    {
+      "title": "Edit upstream.\nRebuild.",
+      "label": "03 / EDIT & REBUILD",
+      "details": [
+        "Face width: 8 → 12 mm",
+        "Same feature history",
+        "Through bore retained"
+      ],
+      "media": [
+        "workflow/03_bore.png",
+        "workflow/04_width12.png"
+      ],
+      "narration": "To change a dimension, edit the upstream extrusion from eight to twelve millimeters, then rebuild. The through bore follows the updated body. These images come from the same CAD history evaluated at two different widths."
+    },
+    {
+      "title": "Link parts.\nDrive motion.",
+      "label": "04 / ASSEMBLY & MOTION",
+      "details": [
+        "20T → 40T gear pair",
+        "Center distance: 60 mm",
+        "2:1 reduction · reverses"
+      ],
+      "media": [
+        "../mechanisms/videos/01.mp4"
+      ],
+      "narration": "Link the source parts into an assembly and place them using their pitch-circle center distance. A twenty-tooth gear driving a forty-tooth gear gives a two-to-one reduction, with opposite rotation. The animation makes that relationship visible."
+    },
+    {
+      "title": "Reuse parts.\nExplore motion.",
+      "label": "05 / MECHANISM GALLERY",
+      "details": [
+        "Compound & planetary",
+        "Linkages and cam followers",
+        "14 teaching examples"
+      ],
+      "media": [
+        "../mechanisms/videos/03.mp4",
+        "../mechanisms/videos/07.mp4",
+        "../mechanisms/videos/12.mp4",
+        "../mechanisms/videos/13.mp4"
+      ],
+      "narration": "Reuse the same parts for compound reductions and planetary gear trains. Add links and cams to explore other mechanisms. This gallery contains fourteen teaching examples, showing different ways to transmit rotation and produce reciprocating motion."
+    },
+    {
+      "title": "Export parts.\nKeep evidence.",
+      "label": "06 / EXPORT & VERIFY",
+      "details": [
+        "25 individual STL files · mm",
+        "14 scenes × 73 samples",
+        "Scripts, models, and checks"
+      ],
+      "media": [
+        "../mechanisms/overview.png"
+      ],
+      "narration": "Export each part as a millimeter-scale STL, and keep the dimension, sampled-interference, and save-reopen checks with the project. Motion here is prescribed by formulas. Physical print quality and load capacity still require real-world testing."
+    },
+    {
+      "title": "Build your\nfirst gear pair.",
+      "label": "OPEN SOURCE / GET STARTED",
+      "details": [
+        "Download the extension",
+        "Explore models and scripts",
+        "English AI voice + captions"
+      ],
+      "media": [
+        "../mechanisms/videos/14.mp4"
+      ],
+      "narration": "The repository includes the extension, example models, generation scripts, and animation assets. Start with your first gear pair, then build your own mechanism. Explore Blender Parametric CAD on GitHub, and use the Chinese link to switch languages."
+    }
+  ]
+}

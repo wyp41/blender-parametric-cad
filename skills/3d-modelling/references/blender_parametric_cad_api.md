@@ -1,5 +1,7 @@
 # Blender Parametric CAD API
 
+English contract · [中文 API 使用参考](blender_parametric_cad_api.zh-CN.md) · [User guide](../../../docs/guide.md)
+
 ## Gear profiles and prescribed planar motion (0.18.1)
 
 The following public Python helpers use **meters and radians**, just like the
@@ -54,14 +56,14 @@ scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
 
 ## MCP bridge
 
-M6 source development: `PlaneReference` (also exported under the compatible
+Persistent planar supports: `PlaneReference` (also exported under the compatible
 `SketchPlaneReference` name) supports semantic Extrude START/END/SIDE planes,
 partial-Revolve START_CAP/END_CAP planes, surviving Boolean planes, and
 supported Transform/Mirror propagation.
 `FaceReference` uses a producer feature UUID and optional source SketchLine UUID.
 Use `PlaneResolver` for history resolution and `PlanarFaceResolver` for temporary
-polygon-to-plane matching; never persist polygon indices. The full implementation
-and validation scope is documented in `M6_PLANAR_REFERENCES.md` at repository root.
+polygon-to-plane matching; never persist polygon indices. The current implementation and validation scope are consolidated in
+[Architecture and validation](../../../docs/development.md).
 
 Run `mcp/server.py` with Python as an MCP stdio server. The bridge first reads
 the shared CAD service endpoint and connects to an already-open Blender 5.1.2
@@ -316,14 +318,7 @@ rect = cad_sketch_add_rectangle({"sketch_id": sketch.sketch.id,
 cad_sketch_add_constraint({"sketch_id": sketch.sketch.id,
                            "constraint_type": "HORIZONTAL",
                            "entity_refs": [{"entity_id": rect.entity_ids.bottom}]})
-width = cad_sketch_add_dimension({"sketch_id": sketch.sketch.id,
-                                  "dimension_type": "LENGTH",
-                                  "entity_refs": [{"entity_id": rect.entity_ids.bottom}],
-                                  "value_mm": 80})
-height = cad_sketch_add_dimension({"sketch_id": sketch.sketch.id,
-                                   "dimension_type": "LENGTH",
-                                   "entity_refs": [{"entity_id": rect.entity_ids.left}],
-                                   "value_mm": 50})
+# Rectangles already own driving width/height dimensions.
 plate = cad_create_extrude({"sketch_id": sketch.sketch.id,
                             "distance_mm": 20, "operation": "NEW",
                             "depth_mode": "BLIND"})
@@ -335,7 +330,7 @@ cad_create_extrude({"sketch_id": hole_sketch.sketch.id,
                     "distance_mm": 0, "operation": "REMOVE",
                     "depth_mode": "THROUGH_ALL"})
 cad_sketch_update_dimension({"sketch_id": sketch.sketch.id,
-                             "dimension_id": width.dimension_id, "value_mm": 100})
+                             "dimension_id": rect.width_dimension_id, "value_mm": 100})
 cad_get_sketch({"sketch_id": sketch.sketch.id})
 cad_get_history({"part_id": part.part.id})
 ```
@@ -450,7 +445,7 @@ from blender_parametric_cad.blender.adapter import (
 - `addon_enabled() -> bool`
 - `load_document_from_scene(scene) -> CadDocument`; raises `CadDocumentError`
   with an actionable enable/re-enable message when the extension is missing,
-  scene JSON is invalid, or schema/UUID validation fails.
+  document JSON is invalid, or schema/UUID validation fails.
 - `save_document_to_scene(scene, document) -> None`
 - `rebuild_part(scene, part_id=None) -> EvaluationResult`
 - `sync_active_part_from_object(scene, object) -> str | None`; uses a generated
@@ -493,7 +488,7 @@ cannot be silently lost.
 ```python
 from blender_parametric_cad.core.document import CadDocument
 
-CadDocument(parts=[], active_part_id=None, schema_version=2)
+CadDocument(parts=[], active_part_id=None, schema_version=3, assemblies=[])
 ```
 
 Methods and property:
@@ -909,12 +904,12 @@ from blender_parametric_cad.core.serialization import (
 )
 ```
 
-`dumps(document)` and `loads(value)` use compact schema-v2 JSON. The top-level
-shape is:
+`dumps(document)` and `loads(value)` use schema-v3 JSON. `dumps` is compact;
+the Blender Text bridge stores indented lines. The top-level shape is:
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "active_part_id": "part-uuid",
   "parts": [
     {
@@ -923,7 +918,8 @@ shape is:
       "rollback_index": null,
       "features": []
     }
-  ]
+  ],
+  "assemblies": []
 }
 ```
 
@@ -934,8 +930,8 @@ Extrude records contain `sketch_id`, `distance`, `direction`, `operation`, and
 `depth_mode`. Revolve records contain `sketch_id`, `axis_reference`, `angle`,
 and `operation`. Transform records contain `translation` (meters) and `rotation`
 (radians). Mirror records contain `source_feature_id` and a serialized
-`mirror_plane` reference. Schema-v1 documents migrate to v2 with
-`migrate_document_data`.
+`mirror_plane` reference. Schema-v1/v2 documents migrate to v3 with
+`migrate_document_data`, preserving UUIDs and adding Assemblies.
 
 ## Blender operator façade
 

@@ -5,6 +5,17 @@ Parametric CAD extension for Blender 5.1.2.
 Create editable Part Studio models and linked Assemblies with sketches, feature
 history, semantic references, MCP, and Python.
 
+
+## Watch the mechanisms
+
+14 mechanism examples built with the plugin: gears, planetary trains, linkages,
+and cam followers. Play the 36-second showcase directly below.
+
+https://github.com/user-attachments/assets/f0776b6b-0ca6-455e-9513-564a8cb349cb
+
+[Models, STL files, formulas, and reproducible scripts](examples/mechanisms/README.md)
+
+
 ## Features
 
 ### Modeling

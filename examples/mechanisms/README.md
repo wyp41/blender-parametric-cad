@@ -4,7 +4,9 @@
 
 ![机构总览](overview.png)
 
-[观看约 35.6 秒合集](mechanism_showcase.mp4)。`videos/` 中每个示例有单独 MP4，`previews/` 中有静态预览。视频把原本 240 帧的运动每隔 4 帧采样，以 24 fps 播放，因此相对 Blender 时间线加速约 4 倍。各段不一定首尾循环。
+https://github.com/user-attachments/assets/f0776b6b-0ca6-455e-9513-564a8cb349cb
+
+[下载约 35.6 秒合集](mechanism_showcase.mp4)。`videos/` 中每个示例有单独 MP4，`previews/` 中有静态预览。视频把原本 240 帧的运动每隔 4 帧采样，以 24 fps 播放，因此相对 Blender 时间线加速约 4 倍。各段不一定首尾循环。
 
 ## 示例和课程关系
 

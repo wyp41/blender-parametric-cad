@@ -1,0 +1,36 @@
+{
+  "source_part": "cff13979-fa1e-488f-ab8b-384a0a5de45a",
+  "actual_history_rebuilt": true,
+  "stages": [
+    {
+      "image": "02_extrude.png",
+      "rollback_index": 2,
+      "extrude_mm": 8.0,
+      "dimensions_mm": [
+        43.99999976158142,
+        43.99999976158142,
+        8.00000037997961
+      ]
+    },
+    {
+      "image": "03_bore.png",
+      "rollback_index": null,
+      "extrude_mm": 8.0,
+      "dimensions_mm": [
+        43.99999976158142,
+        43.99999976158142,
+        8.00000037997961
+      ]
+    },
+    {
+      "image": "04_width12.png",
+      "rollback_index": null,
+      "extrude_mm": 12.0,
+      "dimensions_mm": [
+        43.99999976158142,
+        43.99999976158142,
+        12.000000104308128
+      ]
+    }
+  ]
+}

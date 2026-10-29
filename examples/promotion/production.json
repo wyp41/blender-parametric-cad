@@ -1,0 +1,72 @@
+{
+  "ai_generated_voice": true,
+  "voice": "zh-CN-XiaoxiaoNeural",
+  "rate": "+3%",
+  "fps": 24,
+  "resolution": [
+    1280,
+    720
+  ],
+  "duration_seconds": 103.52000000000001,
+  "size_bytes": 2944450,
+  "chapters": [
+    {
+      "chapter": 1,
+      "title": "从草图 到机械机构",
+      "start_seconds": 0.0,
+      "duration_seconds": 12.333333333333334
+    },
+    {
+      "chapter": 2,
+      "title": "先定义参数 再生成草图",
+      "start_seconds": 12.333333333333334,
+      "duration_seconds": 11.791666666666666
+    },
+    {
+      "chapter": 3,
+      "title": "拉伸齿宽 切除轴孔",
+      "start_seconds": 24.125,
+      "duration_seconds": 12.75
+    },
+    {
+      "chapter": 4,
+      "title": "修改上游参数 重新计算模型",
+      "start_seconds": 36.875,
+      "duration_seconds": 13.0
+    },
+    {
+      "chapter": 5,
+      "title": "链接零件 组成传动机构",
+      "start_seconds": 49.875,
+      "duration_seconds": 13.333333333333334
+    },
+    {
+      "chapter": 6,
+      "title": "复用零件 探索更多机构",
+      "start_seconds": 63.208333333333336,
+      "duration_seconds": 12.166666666666666
+    },
+    {
+      "chapter": 7,
+      "title": "面向打印 保留验证记录",
+      "start_seconds": 75.375,
+      "duration_seconds": 14.708333333333334
+    },
+    {
+      "chapter": 8,
+      "title": "从第一对齿轮 开始你的设计",
+      "start_seconds": 90.08333333333333,
+      "duration_seconds": 13.416666666666666
+    }
+  ],
+  "captions": "speech sentence timestamps",
+  "source": "actual CAD history rebuild renders and prescribed-motion mechanism clips",
+  "media_validation": {
+    "fully_decoded": true,
+    "video_codec": "H.264",
+    "audio_codec": "AAC",
+    "audio_peak_db": -6.4,
+    "non_overlapping_caption_cues": 18
+  },
+  "github_asset_url": "https://github.com/user-attachments/assets/9b05c43b-fee1-4c39-bb27-5221fcf72fdf"
+}

@@ -180,7 +180,7 @@ Important invariants:
   report the message and enable/re-enable the extension as directed.
 - Core sketch lengths and feature distances are meters; core angles are radians.
   N-panel properties use millimeters and degrees.
-- The persistent JSON in `scene.parametric_cad_document` is authoritative;
+- The canonical Text datablock `CAD_DOCUMENT.json` is authoritative;
   generated meshes and Blender polygon indices are disposable.
 - A profile must be a valid closed circle, line/arc loop, or composite set of
   bounded loops. Validate with `ProfileDetector.detect` before creating a

@@ -1,0 +1,74 @@
+{
+  "language": "en-US",
+  "ai_generated_voice": true,
+  "voice": "en-US-GuyNeural",
+  "rate": "+3%",
+  "fps": 24,
+  "resolution": [
+    1280,
+    720
+  ],
+  "duration_seconds": 121.56,
+  "size_bytes": 3286106,
+  "chapters": [
+    {
+      "chapter": 1,
+      "title": "From sketches to mechanisms",
+      "start_seconds": 0.0,
+      "duration_seconds": 14.666666666666666
+    },
+    {
+      "chapter": 2,
+      "title": "Start with parameters",
+      "start_seconds": 14.666666666666666,
+      "duration_seconds": 14.75
+    },
+    {
+      "chapter": 3,
+      "title": "Extrude. Cut the bore.",
+      "start_seconds": 29.416666666666664,
+      "duration_seconds": 12.958333333333334
+    },
+    {
+      "chapter": 4,
+      "title": "Edit upstream. Rebuild.",
+      "start_seconds": 42.375,
+      "duration_seconds": 14.5
+    },
+    {
+      "chapter": 5,
+      "title": "Link parts. Drive motion.",
+      "start_seconds": 56.875,
+      "duration_seconds": 15.208333333333334
+    },
+    {
+      "chapter": 6,
+      "title": "Reuse parts. Explore motion.",
+      "start_seconds": 72.08333333333333,
+      "duration_seconds": 16.166666666666668
+    },
+    {
+      "chapter": 7,
+      "title": "Export parts. Keep evidence.",
+      "start_seconds": 88.25,
+      "duration_seconds": 16.333333333333332
+    },
+    {
+      "chapter": 8,
+      "title": "Build your first gear pair.",
+      "start_seconds": 104.58333333333333,
+      "duration_seconds": 16.958333333333332
+    }
+  ],
+  "captions": "speech sentence timestamps",
+  "source": "actual CAD history rebuild renders and prescribed-motion mechanism clips",
+  "media_validation": {
+    "fully_decoded": true,
+    "video_codec": "H.264",
+    "audio_codec": "AAC",
+    "text_layout_fits": true,
+    "non_overlapping_caption_cues": 23,
+    "audio_peak_db": -4.8
+  },
+  "github_asset_url": "https://github.com/user-attachments/assets/34792266-2585-4eb0-b195-aaa571f0a271"
+}

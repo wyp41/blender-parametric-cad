@@ -4,6 +4,7 @@ Install edge-tts, pillow and imageio-ffmpeg. Set PROMO_FONT to a Chinese-capable
 font when building on a system without macOS Heiti. Temporary segments are
 removed automatically; final media, captions and production metadata remain.
 """
+import argparse
 import asyncio
 import json
 import math
@@ -47,7 +48,7 @@ def timestamp(seconds,ass=False):
     return f'{hours}:{minutes:02}:{whole:02}.{milliseconds//10:02}' if ass else f'{hours:02}:{minutes:02}:{whole:02},{milliseconds:03}'
 
 
-def overlay(chapter,index,path):
+def overlay(chapter,index,path,voice_label):
     """Draw editorial titles with a transparent window for the actual CAD media."""
     image=Image.new('RGBA',(1280,720),(16,25,40,255));draw=ImageDraw.Draw(image)
     draw.rounded_rectangle((462,72,1234,652),radius=14,fill=(37,51,68,255))
@@ -55,7 +56,7 @@ def overlay(chapter,index,path):
     white=(240,245,250);muted=(160,180,199);cyan=(87,213,226)
     def text(position,body,size,color=white):draw.text(position,body,font=ImageFont.truetype(str(FONT),size),fill=color,spacing=12)
     text((54,26),'BLENDER / PARAMETRIC CAD',23)
-    text((972,28),'AI VOICE · 中文解说',19,muted)
+    text((972,28),voice_label,19,muted)
     text((54,108),chapter['label'],17,cyan)
     text((52,159),chapter['title'],42)
     draw.rounded_rectangle((52,342,418,529),radius=14,fill=(26,40,58))
@@ -84,7 +85,10 @@ async def synthesize(chapters,config,work):
 
 def main():
     """Encode eight chapters, then concatenate them into one H.264/AAC MP4."""
-    config=json.loads((OUT/'storyboard.json').read_text())
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--language',choices=('en','zh'),default='en')
+    language=parser.parse_args().language
+    config=json.loads((OUT/f'storyboard_{language}.json').read_text())
     all_cues=[];timeline=[];cursor=0.0
     font_name=ImageFont.truetype(str(FONT),24).getname()[0]
     with tempfile.TemporaryDirectory(prefix='blender-promo-') as temporary:
@@ -93,7 +97,7 @@ def main():
         for index,chapter in enumerate(config['chapters']):
             audio=work/f'{index}.mp3'
             length=math.ceil((duration(audio)+.75)*FPS)/FPS
-            artwork=work/f'{index}.png';overlay(chapter,index,artwork)
+            artwork=work/f'{index}.png';overlay(chapter,index,artwork,config['voice_label'])
             events=[json.loads(line) for line in (work/f'{index}.jsonl').read_text().splitlines()]
             header=f'''[Script Info]\nScriptType: v4.00+\nPlayResX: 1280\nPlayResY: 720\nWrapStyle: 0\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,{font_name},26,&H00F5F7FB,&H00F5F7FB,&H00101928,&H00101928,0,0,0,0,100,100,0,0,1,1,0,2,50,50,17,1\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'''
             lines=[]
@@ -128,13 +132,13 @@ def main():
             cursor+=length
             print('ENCODED',index+1,length,'seconds',flush=True)
         playlist=work/'chapters.txt';playlist.write_text(''.join(f"file '{work/f'{i}.mp4'}'\n" for i in range(8)))
-        output=OUT/'blender_cad_promo_zh.mp4'
+        output=OUT/f'blender_cad_promo_{language}.mp4'
         run(['-f','concat','-safe','0','-i',str(playlist),'-c','copy','-movflags','+faststart',str(output)])
-        run(['-i',str(output),'-vn','-ac','1','-b:a','128k',str(OUT/'voiceover_zh.mp3')])
-        run(['-ss','1.0','-i',str(output),'-frames:v','1','-q:v','2',str(OUT/'poster.jpg')])
+        run(['-i',str(output),'-vn','-ac','1','-b:a','128k',str(OUT/f'voiceover_{language}.mp3')])
+        run(['-ss','1.0','-i',str(output),'-frames:v','1','-q:v','2',str(OUT/f'poster_{language}.jpg')])
     assert output.stat().st_size<10_000_000,'Keep the GitHub attachment below 10 MB.'
-    (OUT/'captions_zh.srt').write_text('\n\n'.join(f'{i+1}\n{timestamp(start)} --> {timestamp(end)}\n{body}' for i,(start,end,body) in enumerate(all_cues))+'\n')
-    (OUT/'production.json').write_text(json.dumps({'ai_generated_voice':True,'voice':config['voice'],
+    (OUT/f'captions_{language}.srt').write_text('\n\n'.join(f'{i+1}\n{timestamp(start)} --> {timestamp(end)}\n{body}' for i,(start,end,body) in enumerate(all_cues))+'\n')
+    (OUT/f'production_{language}.json').write_text(json.dumps({'language':config['language'],'ai_generated_voice':True,'voice':config['voice'],
         'rate':config['rate'],'fps':FPS,'resolution':[1280,720],'duration_seconds':duration(output),
         'size_bytes':output.stat().st_size,'chapters':timeline,'captions':'speech sentence timestamps',
         'source':'actual CAD history rebuild renders and prescribed-motion mechanism clips'},ensure_ascii=False,indent=2))

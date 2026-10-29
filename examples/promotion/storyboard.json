@@ -1,0 +1,63 @@
+{
+  "voice": "zh-CN-XiaoxiaoNeural",
+  "rate": "+3%",
+  "language": "zh-CN",
+  "chapters": [
+    {
+      "title": "从草图\n到机械机构",
+      "label": "BLENDER PARAMETRIC CAD",
+      "details": ["参数化建模", "链接装配", "可复现的生成流程"],
+      "media": ["../mechanisms/videos/03.mp4"],
+      "narration": "在 Blender 里，机械设计也能拥有可编辑的特征历史。这是 Blender 参数化 CAD，从一对齿轮开始，把设计、装配和演示连起来。"
+    },
+    {
+      "title": "先定义参数\n再生成草图",
+      "label": "01 / SKETCH",
+      "details": ["模数 2 mm · 齿数 20", "压力角 20°", "真实渐开线轮廓"],
+      "media": ["workflow/01_sketch.png"],
+      "narration": "第一步，确定模数、齿数和压力角。插件把渐开线轮廓生成到普通草图中，让齿轮设计拥有清楚的参数起点。"
+    },
+    {
+      "title": "拉伸齿宽\n切除轴孔",
+      "label": "02 / FEATURE HISTORY",
+      "details": ["Extrude · 齿宽 8 mm", "轴孔直径 6.3 mm", "Remove · Through All"],
+      "media": ["workflow/02_extrude.png", "workflow/03_bore.png"],
+      "narration": "第二步，将草图拉伸成八毫米齿宽，再通过贯穿切除生成轴孔。草图、拉伸和切孔，作为独立特征保存在模型历史里。"
+    },
+    {
+      "title": "修改上游参数\n重新计算模型",
+      "label": "03 / EDIT & REBUILD",
+      "details": ["齿宽 8 → 12 mm", "使用同一份特征历史", "下游轴孔随重建保留"],
+      "media": ["workflow/03_bore.png", "workflow/04_width12.png"],
+      "narration": "需要调整尺寸时，回到拉伸特征，把齿宽从八毫米改成十二毫米，再重新计算。这里展示的，是同一份 CAD 历史的真实重建结果。"
+    },
+    {
+      "title": "链接零件\n组成传动机构",
+      "label": "04 / ASSEMBLY & MOTION",
+      "details": ["20 齿 → 40 齿", "中心距 60 mm", "减速 2:1 · 反向旋转"],
+      "media": ["../mechanisms/videos/01.mp4"],
+      "narration": "接着，把零件链接到装配中，按节圆计算中心距。二十齿带动四十齿，输出速度减半。动画让传动比例和旋转方向一眼可见。"
+    },
+    {
+      "title": "复用零件\n探索更多机构",
+      "label": "05 / MECHANISM GALLERY",
+      "details": ["复合轮系 · 行星轮系", "四杆机构 · 凸轮从动件", "首批 14 个运动示例"],
+      "media": ["../mechanisms/videos/03.mp4", "../mechanisms/videos/07.mp4", "../mechanisms/videos/12.mp4", "../mechanisms/videos/13.mp4"],
+      "narration": "同样的零件还能组合成复合减速和行星轮系。再加入连杆与凸轮，扩展成十四个教学示例，比较不同机构怎样传递运动。"
+    },
+    {
+      "title": "面向打印\n保留验证记录",
+      "label": "06 / EXPORT & VERIFY",
+      "details": ["25 份独立 STL · 毫米", "14 场景 × 73 个采样", "脚本、模型、结果可追溯"],
+      "media": ["../mechanisms/overview.png"],
+      "narration": "最后，按独立零件导出毫米单位的 STL，并保留尺寸、采样干涉和保存重开检查。当前动画由公式驱动，实物打印和承载性能仍需要验证。"
+    },
+    {
+      "title": "从第一对齿轮\n开始你的设计",
+      "label": "OPEN SOURCE / GET STARTED",
+      "details": ["下载插件与示例模型", "查看公式和生成脚本", "中文 AI 配音 · 可开启声音"],
+      "media": ["../mechanisms/videos/14.mp4"],
+      "narration": "开源仓库已经提供插件、模型、脚本和动画。从第一对齿轮开始，搭建你自己的机械结构。欢迎在 GitHub 查看 Blender 参数化 CAD。"
+    }
+  ]
+}

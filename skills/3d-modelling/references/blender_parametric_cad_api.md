@@ -1,7 +1,55 @@
 # Blender Parametric CAD API
 
+## Gear profiles and prescribed planar motion (0.18.1)
+
+The following public Python helpers use **meters and radians**, just like the
+core Sketch API. They append ordinary editable SketchLine geometry; gear module
+and tooth count are generator inputs, not additional Sketch dimension types.
+
+```python
+from blender_parametric_cad.sketch.gears import (
+    spur_outline, internal_outline, rack_outline, add_outline,
+)
+from blender_parametric_cad.sketch.sketch import SketchFeature
+
+sketch = SketchFeature.on_plane("m2 z20", "XY")
+add_outline(sketch, spur_outline(0.002, 20, backlash=0.00015))
+# Extrude this outline, then cut a bore using the existing Feature API.
+# CUT internal_outline(0.002, 60, backlash=0.00015) from a ring blank.
+# rack_outline(0.002, 24, backlash=0.00015) uses Y=0 as its pitch line.
+```
+
+`backlash` is each gear's tooth-thickness reduction at its reference circle.
+Two gears with 0.15-mm reductions therefore give 0.30-mm total tangential
+clearance at nominal center distance. Defaults are 20-degree pressure angle,
+zero profile shift, and circular root transitions. External gears require at
+least 18 teeth; internal gears require at least 40 teeth and their tip circle
+outside the base circle. These guards are not a general interference or
+strength calculation; validate each assembled combination.
+
+```python
+from blender_parametric_cad.blender.motion import set_planar_motion
+
+set_planar_motion(instance_id, angle="2*pi*(frame-1)/240")
+set_planar_motion(other_id, angle="-pi*(frame-1)/240")
+set_planar_motion(rack_id, x="0.04*sin(2*pi*(frame-1)/240)")
+```
+
+Expressions are trusted native Blender driver expressions. Angle is delta
+rotation about local Z; X/Y are delta translations in parent axes. Rotation
+uses quaternion channels, and the helper removes default F-curve mapping keys
+to preserve small positive translations. Native drivers persist on save/reopen.
+Prescribed motion does not implement joints, contact forces, or DOF solving.
+
+STL export scales core meter coordinates to **millimeters**, independently of
+Scene display-unit settings. OBJ/PLY retain core meter coordinates. Do not apply
+an additional 1000x correction after `export_part` in version 0.18.1 onward.
+
+Dense document JSON is stored as short, indented lines to avoid Blender Text
+insertion costs on a megabyte-long single line. The schema remains version 3.
+
 This reference describes the public API in the Blender Parametric CAD
-extension (current extension release 0.18.0). It covers both direct Python
+extension (current extension release 0.18.1). It covers both direct Python
 scripts and the dependency-free MCP bridge for AI-generated, non-UI modeling.
 
 ## MCP bridge

@@ -127,7 +127,10 @@ def load_document() -> CadDocument:
 
 def save_document(document: CadDocument) -> None:
     """Write one persistent Text datablock and retire writable Scene copies."""
-    raw = dumps(_validate_document(document))
+    # Blender inserts Text contents character by character. A megabyte-long
+    # JSON line makes that insertion quadratic; short JSON lines keep large
+    # generated sketches practical while preserving exactly the same schema.
+    raw = json.dumps(_validate_document(document).to_dict(), sort_keys=True, indent=2)
     text = bpy.data.texts.get(CAD_DOCUMENT_TEXT)
     if text is None:
         text = bpy.data.texts.new(CAD_DOCUMENT_TEXT)
@@ -602,6 +605,10 @@ def rebuild_part(scene: bpy.types.Scene, part_id: str | None = None) -> Evaluati
         display.objects.link(result_object)
     else:
         old_mesh = result_object.data
+        if old_mesh:
+            result.body.materials.clear()
+            for material in old_mesh.materials:
+                result.body.materials.append(material)
         result_object.data = result.body
         result_object.name = f"{part.name}_Result"
         if old_mesh and old_mesh.users == 0:
@@ -686,7 +693,10 @@ def export_part(
                     "OBJ": bpy.ops.wm.obj_export,
                     "PLY": bpy.ops.wm.ply_export,
                 }
-                status = operators[format_name](filepath=str(path), export_selected_objects=True)
+                # CAD geometry is stored in meters; slicers interpret STL
+                # coordinates as millimeters because STL carries no units.
+                options = {"global_scale": 1000.0, "use_scene_unit": False} if format_name == "STL" else {}
+                status = operators[format_name](filepath=str(path), export_selected_objects=True, **options)
                 if "FINISHED" not in status:
                     raise RuntimeError(f"Blender {format_name} export did not finish.")
             finally:

@@ -11,6 +11,10 @@ history, semantic references, MCP, and Python.
 
 - Part Studio with single-body parametric history.
 - Flat Assemblies with linked Part instances and independent numeric placements.
+- Involute spur, internal-cutout, and straight-rack profile helpers for printed
+  teaching mechanisms (`sketch.gears`; lengths in meters).
+- Prescribed planar Assembly animation with native persistent Blender drivers
+  (`blender.motion`); this is not an assembly joint or contact solver.
 - Part Studio and Assembly Scenes in separate windows of one Blender process.
 - Sketches on datum planes, Extrude faces, Revolve caps, Transform faces, and
   supported Mirror faces.
@@ -59,6 +63,7 @@ history, semantic references, MCP, and Python.
 - Signed `ΔX`, `ΔY`, and `ΔZ` components.
 - Vertex, Sketch endpoint, intersection, and curve snapping.
 - Independent Part Studio export to `STL`, `OBJ`, and `PLY`.
+- STL coordinates are exported in millimeters for slicers; OBJ/PLY retain meters.
 
 ### MCP and Python
 
@@ -77,7 +82,7 @@ history, semantic references, MCP, and Python.
 
 1. Open **Edit → Preferences → Extensions** in Blender.
 2. Open the upper-right menu and choose **Install from Disk**.
-3. Select `blender_parametric_cad-0.18.0.zip`.
+3. Select `blender_parametric_cad-0.18.1.zip`.
 4. Enable **Blender Parametric CAD**.
 
 ## Quick start
@@ -105,6 +110,14 @@ documents produce `MIGRATION_CONFLICT` instead of selecting one silently.
 Referenced Part deletion produces `PART_IN_USE`; remove its instances first.
 
 See [the M11A implementation and validation report](M11A_LINKED_ASSEMBLIES.md).
+
+## Mechanical course examples
+
+The [mechanism gallery](examples/mechanisms/README.md) extends the original
+20/40-tooth gear document into 14 prescribed-motion examples, with 25 shared
+printable Parts, validated STL dimensions, previews, and a video showcase.
+The gallery also records the limits of the checks; these are low-load teaching
+prototypes rather than load-rated, print-tested machines.
 
 ## MCP setup
 

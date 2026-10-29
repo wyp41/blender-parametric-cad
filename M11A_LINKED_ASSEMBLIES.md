@@ -114,8 +114,8 @@ A 的 Mesh 数据、B Object/集合身份、实例 UUID/载体身份与位姿均
 保存/重开测试验证一个 canonical 文档、两个 Part 历史、一个 Assembly、三个实例的
 UUID/引用/位姿；重开后再改 width 35→40 mm，链接仍更新。使用现有
 `zipstring_cad_mcp_3part.blend` 验证 v2 自动迁移，只将迁移结果另存临时文件；
-原文件 SHA-256 保持不变。干净 checkout 缺少该仓库外样本时，脚本会生成临时 v2
-Scene-storage fixture；本次实际使用的是已有原文件。额外验证冲突的旧 Scene 文档不被覆盖，空的活动 Scene
+原文件 SHA-256 保持不变。该历史项目现已清理，当前脚本统一生成临时 v2
+Scene-storage fixture，不再依赖仓库外样本。额外验证冲突的旧 Scene 文档不被覆盖，空的活动 Scene
 不替换已有非空模型。
 
 双窗口测试实际调用 `wm.window_new_main()`，在 Blender GUI 事件循环中用普通

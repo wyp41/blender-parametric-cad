@@ -9,7 +9,8 @@ identified by the stable UUIDs of the entities that bound it.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import ceil, hypot, isclose, pi
+from bisect import bisect_left, bisect_right
+from math import ceil, floor, hypot, isclose, pi
 from typing import Iterable
 
 from .entities import SketchArc, SketchCircle, SketchEntity, SketchLine
@@ -74,6 +75,7 @@ class ProfileDetector:
         # we temporarily replace it with tolerance-aware clustering so solver
         # noise cannot put two coincident endpoints on opposite grid cells.
         self._point_representatives: list[Point2D] | None = None
+        self._point_cells: dict[tuple[int, int], list[int]] = {}
 
     def detect(self, sketch: SketchFeature) -> ProfileResult:
         entities = [item for item in sketch.entities if not item.construction]
@@ -216,6 +218,7 @@ class ProfileDetector:
         curves = self._split_line_t_junctions(curves)
 
         self._point_representatives = []
+        self._point_cells.clear()
         try:
             adjacency: dict[tuple[int, int], list[int]] = {}
             for index, curve in enumerate(curves):
@@ -261,6 +264,7 @@ class ProfileDetector:
             return tuple(all_loops)
         finally:
             self._point_representatives = None
+            self._point_cells.clear()
 
     def _split_line_t_junctions(self, curves: list[_Curve]) -> list[_Curve]:
         """Split a boundary line when another line ends on its interior.
@@ -276,14 +280,18 @@ class ProfileDetector:
             for index, curve in enumerate(curves)
             if isinstance(curve.entity, SketchLine)
         ]
-        for source_index, source in lines:
-            for endpoint in (source.start, source.end):
-                for target_index, target in lines:
-                    if source_index == target_index:
-                        continue
-                    parameter = self._line_parameter(endpoint, target)
-                    if parameter is None:
-                        continue
+        endpoints = sorted((point[0], index, point) for index, curve in lines
+                           for point in (curve.start, curve.end))
+        x_values = [entry[0] for entry in endpoints]
+        for target_index, target in lines:
+            low = bisect_left(x_values, min(target.start[0], target.end[0])-self.tolerance)
+            high = bisect_right(x_values, max(target.start[0], target.end[0])+self.tolerance)
+            y_low, y_high = sorted((target.start[1], target.end[1]))
+            for _, source_index, endpoint in endpoints[low:high]:
+                if source_index == target_index or not y_low-self.tolerance <= endpoint[1] <= y_high+self.tolerance:
+                    continue
+                parameter = self._line_parameter(endpoint, target)
+                if parameter is not None:
                     splits.setdefault(target_index, []).append((parameter, endpoint))
         result: list[_Curve] = []
         for index, curve in enumerate(curves):
@@ -353,8 +361,11 @@ class ProfileDetector:
         cycles: dict[tuple[int, ...], list[tuple[int, tuple[int, int], tuple[int, int]]]] = {}
         max_length = len(edges)
         endpoint_keys: dict[int, tuple[tuple[int, int], tuple[int, int]]] = {}
-        for edge in edges:
-            incident = [node for node in nodes if edge in adjacency.get(node, ())]
+        incidents: dict[int, list[tuple[int, int]]] = {edge: [] for edge in edges}
+        for node in nodes:
+            for edge in adjacency[node]:
+                incidents[edge].append(node)
+        for edge, incident in incidents.items():
             if len(incident) != 2:
                 return []
             endpoint_keys[edge] = (incident[0], incident[1])
@@ -362,6 +373,20 @@ class ProfileDetector:
         def node_other(edge: int, node: tuple[int, int]) -> tuple[int, int]:
             start, end = endpoint_keys[edge]
             return end if node == start else start
+
+        # An unbranched boundary has exactly one cycle. Walking it once avoids
+        # recursive enumeration from every vertex on dense generated profiles.
+        if all(len(adjacency[node]) == 2 for node in nodes):
+            start = current = min(nodes)
+            previous = None
+            cycle = []
+            while True:
+                edge = next(edge for edge in adjacency[current] if edge != previous)
+                other = node_other(edge, current)
+                cycle.append((edge, current, other))
+                if other == start:
+                    return [cycle] if len(cycle) == len(edges) else []
+                previous, current = edge, other
 
         def visit(
             start: tuple[int, int],
@@ -461,17 +486,25 @@ class ProfileDetector:
         )
 
     def _same_point(self, left: Point2D, right: Point2D) -> bool:
-        return isclose(left[0], right[0], abs_tol=self.tolerance) and isclose(
-            left[1], right[1], abs_tol=self.tolerance
+        return isclose(left[0], right[0], rel_tol=0.0, abs_tol=self.tolerance) and isclose(
+            left[1], right[1], rel_tol=0.0, abs_tol=self.tolerance
         )
 
     def _point_key(self, point: Point2D) -> tuple[int, int]:
         if self._point_representatives is not None:
-            for index, representative in enumerate(self._point_representatives):
-                if self._same_point(point, representative):
-                    return (index, 0)
+            cell = floor(point[0]/self.tolerance), floor(point[1]/self.tolerance)
+            matches = []
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    for index in self._point_cells.get((cell[0]+dx, cell[1]+dy), ()):
+                        if self._same_point(point, self._point_representatives[index]):
+                            matches.append(index)
+            if matches:
+                return (min(matches), 0)
             self._point_representatives.append(point)
-            return (len(self._point_representatives) - 1, 0)
+            index = len(self._point_representatives)-1
+            self._point_cells.setdefault(cell, []).append(index)
+            return (index, 0)
         return (round(point[0] / self.tolerance), round(point[1] / self.tolerance))
 
     def _is_rectangle(self, points: list[Point2D]) -> bool:
@@ -545,6 +578,9 @@ class ProfileDetector:
                 if right in {left, (left + 1) % count} or (right + 1) % count == left:
                     continue
                 c, d = points[right], points[(right + 1) % count]
+                if (max(a[0], b[0]) < min(c[0], d[0]) or max(c[0], d[0]) < min(a[0], b[0])
+                        or max(a[1], b[1]) < min(c[1], d[1]) or max(c[1], d[1]) < min(a[1], b[1])):
+                    continue
                 if self._segments_intersect(a, b, c, d):
                     return True
         return False

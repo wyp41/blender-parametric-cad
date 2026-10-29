@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from math import pi
+from math import cos, pi, sin
 
 from blender_parametric_cad.core.document import CadDocument
 from blender_parametric_cad.core.part import Part
@@ -50,6 +50,17 @@ class SketchTests(unittest.TestCase):
 
 
 class ProfileDetectionTests(unittest.TestCase):
+    def test_dense_closed_profile_does_not_depend_on_python_recursion_limit(self) -> None:
+        sketch = SketchFeature.on_plane("Dense gear-like boundary", "XY")
+        points = [((0.04 + 0.002*cos(20*i*2*pi/1100))*cos(i*2*pi/1100),
+                   (0.04 + 0.002*cos(20*i*2*pi/1100))*sin(i*2*pi/1100))
+                  for i in range(1100)]
+        sketch.entities = [SketchLine(x1=a[0], y1=a[1], x2=b[0], y2=b[1])
+                           for a, b in zip(points, points[1:]+points[:1])]
+        result = ProfileDetector().detect(sketch)
+        self.assertTrue(result.success, result.message)
+        self.assertEqual(len(result.profile.points), 1100)
+
     def test_rectangle_is_valid(self) -> None:
         result = ProfileDetector().detect(rectangle_sketch())
         self.assertTrue(result.success)

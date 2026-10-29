@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "blender_parametric_cad"
-version = "0.18.0"
+version = "0.18.1"
 name = "Blender Parametric CAD"
 tagline = "Linked Part Studios, Assemblies, and MCP modeling"
 maintainer = "Blender Parametric CAD contributors"

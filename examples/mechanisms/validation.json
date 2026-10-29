@@ -1,0 +1,423 @@
+{
+  "parts": [
+    {
+      "part": "gear20",
+      "manifold": true,
+      "volume_mm3": 9476.58220641153,
+      "stl_dimensions_mm": [
+        44.0,
+        44.0,
+        8.0
+      ]
+    },
+    {
+      "part": "gear40",
+      "manifold": true,
+      "volume_mm3": 39435.620332683306,
+      "stl_dimensions_mm": [
+        84.0,
+        84.0,
+        8.0
+      ]
+    },
+    {
+      "part": "compound",
+      "manifold": true,
+      "volume_mm3": 48911.04099002108,
+      "stl_dimensions_mm": [
+        84.0,
+        84.0,
+        16.0
+      ]
+    },
+    {
+      "part": "rack",
+      "manifold": true,
+      "volume_mm3": 8773.829493245516,
+      "stl_dimensions_mm": [
+        150.79644775390625,
+        9.5,
+        8.0
+      ]
+    },
+    {
+      "part": "ring",
+      "manifold": true,
+      "volume_mm3": 43787.968167975,
+      "stl_dimensions_mm": [
+        181.0,
+        181.0,
+        8.0
+      ]
+    },
+    {
+      "part": "carrier",
+      "manifold": true,
+      "volume_mm3": 62143.215020740245,
+      "stl_dimensions_mm": [
+        140.0,
+        140.0,
+        14.0
+      ]
+    },
+    {
+      "part": "pin",
+      "manifold": true,
+      "volume_mm3": 416.9100422910207,
+      "stl_dimensions_mm": [
+        8.0,
+        8.0,
+        14.0
+      ]
+    },
+    {
+      "part": "spacer1",
+      "manifold": true,
+      "volume_mm3": 81.79334588037234,
+      "stl_dimensions_mm": [
+        12.0,
+        12.0,
+        1.0
+      ]
+    },
+    {
+      "part": "spacer0p6",
+      "manifold": true,
+      "volume_mm3": 49.076007528223414,
+      "stl_dimensions_mm": [
+        12.0,
+        12.0,
+        0.6000000238418579
+      ]
+    },
+    {
+      "part": "spacer9p6",
+      "manifold": true,
+      "volume_mm3": 785.2161204515746,
+      "stl_dimensions_mm": [
+        12.0,
+        12.0,
+        9.600000381469727
+      ]
+    },
+    {
+      "part": "link20",
+      "manifold": true,
+      "volume_mm3": 1158.26014996636,
+      "stl_dimensions_mm": [
+        32.0,
+        12.0,
+        4.0
+      ]
+    },
+    {
+      "part": "link40",
+      "manifold": true,
+      "volume_mm3": 2118.260220793181,
+      "stl_dimensions_mm": [
+        52.0,
+        12.0,
+        4.0
+      ]
+    },
+    {
+      "part": "link60",
+      "manifold": true,
+      "volume_mm3": 3078.260203157242,
+      "stl_dimensions_mm": [
+        72.0,
+        12.0,
+        4.0
+      ]
+    },
+    {
+      "part": "slider",
+      "manifold": true,
+      "volume_mm3": 2131.8917277762916,
+      "stl_dimensions_mm": [
+        20.0,
+        20.0,
+        10.0
+      ]
+    },
+    {
+      "part": "cam",
+      "manifold": true,
+      "volume_mm3": 22334.170984255106,
+      "stl_dimensions_mm": [
+        60.0,
+        60.0,
+        8.0
+      ]
+    },
+    {
+      "part": "follower",
+      "manifold": true,
+      "volume_mm3": 5120.0004017353085,
+      "stl_dimensions_mm": [
+        80.0,
+        44.0,
+        8.0
+      ]
+    },
+    {
+      "part": "yoke",
+      "manifold": true,
+      "volume_mm3": 4671.999999642365,
+      "stl_dimensions_mm": [
+        69.0,
+        60.0,
+        4.0
+      ]
+    },
+    {
+      "part": "Board_idler",
+      "manifold": true,
+      "volume_mm3": 17254.487917516548,
+      "stl_dimensions_mm": [
+        128.0,
+        32.0,
+        15.0
+      ]
+    },
+    {
+      "part": "Board_compound",
+      "manifold": true,
+      "volume_mm3": 20289.299518076485,
+      "stl_dimensions_mm": [
+        148.0,
+        32.0,
+        24.0
+      ]
+    },
+    {
+      "part": "Board_reverted",
+      "manifold": true,
+      "volume_mm3": 12319.136222115038,
+      "stl_dimensions_mm": [
+        88.0,
+        32.0,
+        24.0
+      ]
+    },
+    {
+      "part": "Board_rack",
+      "manifold": true,
+      "volume_mm3": 54875.16548194298,
+      "stl_dimensions_mm": [
+        180.0,
+        62.0,
+        15.0
+      ]
+    },
+    {
+      "part": "Board_links",
+      "manifold": true,
+      "volume_mm3": 19385.16763381296,
+      "stl_dimensions_mm": [
+        112.0,
+        36.0,
+        9.199999809265137
+      ]
+    },
+    {
+      "part": "Board_fourbar",
+      "manifold": true,
+      "volume_mm3": 11538.336341321712,
+      "stl_dimensions_mm": [
+        88.0,
+        32.0,
+        9.199999809265137
+      ]
+    },
+    {
+      "part": "Board_cam",
+      "manifold": true,
+      "volume_mm3": 52358.16462933935,
+      "stl_dimensions_mm": [
+        96.0,
+        127.0,
+        15.0
+      ]
+    },
+    {
+      "part": "Board_yoke",
+      "manifold": true,
+      "volume_mm3": 34889.16796919333,
+      "stl_dimensions_mm": [
+        116.0,
+        72.0,
+        16.0
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "number": 1,
+      "title": "Spur gear pair",
+      "samples": 73,
+      "world_motion_checked": true,
+      "gear_pairs_checked": 1,
+      "collisions": [],
+      "fixture_pairs_checked": 0,
+      "fixture_collisions": [],
+      "max_planar_closure_error_mm": 0.0
+    },
+    {
+      "number": 2,
+      "title": "Idler gear train",
+      "samples": 73,
+      "world_motion_checked": true,
+      "gear_pairs_checked": 2,
+      "collisions": [],
+      "fixture_pairs_checked": 16,
+      "fixture_collisions": [],
+      "max_planar_closure_error_mm": 0.0
+    },
+    {
+      "number": 3,
+      "title": "Compound reducer",
+      "samples": 73,
+      "world_motion_checked": true,
+      "gear_pairs_checked": 2,
+      "collisions": [],
+      "fixture_pairs_checked": 16,
+      "fixture_collisions": [],
+      "max_planar_closure_error_mm": 0.0
+    },
+    {
+      "number": 4,
+      "title": "Reverted gear train",
+      "samples": 73,
+      "world_motion_checked": true,
+      "gear_pairs_checked": 2,
+      "collisions": [],
+      "fixture_pairs_checked": 15,
+      "fixture_collisions": [],
+      "max_planar_closure_error_mm": 0.0
+    },
+    {
+      "number": 5,
+      "title": "Rack and pinion",
+      "samples": 73,
+      "world_motion_checked": true,
+      "gear_pairs_checked": 1,
+      "collisions": [],
+      "fixture_pairs_checked": 4,
+      "fixture_collisions": [],
+      "max_planar_closure_error_mm": 0.0
+    },
+    {
+      "number": 6,
+      "title": "Internal gear pair",
+      "samples": 73,
+      "world_motion_checked": true,
+      "gear_pairs_checked": 1,
+      "collisions": [],
+      "fixture_pairs_checked": 0,
+      "fixture_collisions": [],
+      "max_planar_closure_error_mm": 0.0
+    },
+    {
+      "number": 7,
+      "title": "Planetary - ring fixed",
+      "samples": 73,
+      "world_motion_checked": true,
+      "gear_pairs_checked": 6,
+      "collisions": [],
+      "fixture_pairs_checked": 9,
+      "fixture_collisions": [],
+      "max_planar_closure_error_mm": 0.0
+    },
+    {
+      "number": 8,
+      "title": "Planetary - sun fixed",
+      "samples": 73,
+      "world_motion_checked": true,
+      "gear_pairs_checked": 6,
+      "collisions": [],
+      "fixture_pairs_checked": 9,
+      "fixture_collisions": [],
+      "max_planar_closure_error_mm": 0.0
+    },
+    {
+      "number": 9,
+      "title": "Planetary - carrier fixed",
+      "samples": 73,
+      "world_motion_checked": true,
+      "gear_pairs_checked": 6,
+      "collisions": [],
+      "fixture_pairs_checked": 9,
+      "fixture_collisions": [],
+      "max_planar_closure_error_mm": 0.0
+    },
+    {
+      "number": 10,
+      "title": "Planetary differential",
+      "samples": 73,
+      "world_motion_checked": true,
+      "gear_pairs_checked": 6,
+      "collisions": [],
+      "fixture_pairs_checked": 9,
+      "fixture_collisions": [],
+      "max_planar_closure_error_mm": 0.0
+    },
+    {
+      "number": 11,
+      "title": "Slider crank",
+      "samples": 73,
+      "world_motion_checked": true,
+      "gear_pairs_checked": 0,
+      "collisions": [],
+      "fixture_pairs_checked": 23,
+      "fixture_collisions": [],
+      "max_planar_closure_error_mm": 8.33000234328132e-06
+    },
+    {
+      "number": 12,
+      "title": "Four bar linkage",
+      "samples": 73,
+      "world_motion_checked": true,
+      "gear_pairs_checked": 0,
+      "collisions": [],
+      "fixture_pairs_checked": 39,
+      "fixture_collisions": [],
+      "max_planar_closure_error_mm": 2.2660056241967602e-05
+    },
+    {
+      "number": 13,
+      "title": "Eccentric cam follower",
+      "samples": 73,
+      "world_motion_checked": true,
+      "gear_pairs_checked": 0,
+      "collisions": [],
+      "fixture_pairs_checked": 4,
+      "fixture_collisions": [],
+      "max_planar_closure_error_mm": 1.978775719668757e-06
+    },
+    {
+      "number": 14,
+      "title": "Scotch yoke",
+      "samples": 73,
+      "world_motion_checked": true,
+      "gear_pairs_checked": 0,
+      "collisions": [],
+      "fixture_pairs_checked": 9,
+      "fixture_collisions": [],
+      "max_planar_closure_error_mm": 0.0
+    }
+  ],
+  "original_part_ids_preserved": true,
+  "motion_type": "prescribed native drivers; no joint/contact solver",
+  "load_or_print_testing": false,
+  "cad_validation_errors": [],
+  "gallery_save_reopen": {
+    "passed": true,
+    "max_transform_component_difference": 0.0,
+    "sample_frames": [
+      1.25,
+      31,
+      121
+    ]
+  }
+}

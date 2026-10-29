@@ -1,0 +1,64 @@
+﻿case,mechanism,STL Part,quantity,size_x_mm,size_y_mm,size_z_mm,assembly_note
+1,Spur gear pair,gear20.stl,1,44.0,44.0,8.0,"External frame, shafts/bearings and axial retainers required"
+1,Spur gear pair,gear40.stl,1,84.0,84.0,8.0,"External frame, shafts/bearings and axial retainers required"
+2,Idler gear train,Board_idler.stl,1,128.0,32.0,15.0,Printed fixture included; add suitable removable axial retainers
+2,Idler gear train,gear20.stl,2,44.0,44.0,8.0,Printed fixture included; add suitable removable axial retainers
+2,Idler gear train,gear40.stl,1,84.0,84.0,8.0,Printed fixture included; add suitable removable axial retainers
+2,Idler gear train,spacer1.stl,3,12.0,12.0,1.0,Printed fixture included; add suitable removable axial retainers
+3,Compound reducer,Board_compound.stl,1,148.0,32.0,24.0,Printed fixture included; add suitable removable axial retainers
+3,Compound reducer,gear20.stl,1,44.0,44.0,8.0,Printed fixture included; add suitable removable axial retainers
+3,Compound reducer,compound.stl,1,84.0,84.0,16.0,Printed fixture included; add suitable removable axial retainers
+3,Compound reducer,gear40.stl,1,84.0,84.0,8.0,Printed fixture included; add suitable removable axial retainers
+3,Compound reducer,spacer1.stl,2,12.0,12.0,1.0,Printed fixture included; add suitable removable axial retainers
+3,Compound reducer,spacer9p6.stl,1,12.0,12.0,9.6,Printed fixture included; add suitable removable axial retainers
+4,Reverted gear train,Board_reverted.stl,1,88.0,32.0,24.0,Printed fixture included; add suitable removable axial retainers
+4,Reverted gear train,gear20.stl,1,44.0,44.0,8.0,Printed fixture included; add suitable removable axial retainers
+4,Reverted gear train,compound.stl,1,84.0,84.0,16.0,Printed fixture included; add suitable removable axial retainers
+4,Reverted gear train,gear40.stl,1,84.0,84.0,8.0,Printed fixture included; add suitable removable axial retainers
+4,Reverted gear train,spacer1.stl,2,12.0,12.0,1.0,Printed fixture included; add suitable removable axial retainers
+4,Reverted gear train,spacer0p6.stl,1,12.0,12.0,0.6,Printed fixture included; add suitable removable axial retainers
+5,Rack and pinion,Board_rack.stl,1,180.0,62.0,15.0,Printed fixture included; add suitable removable axial retainers
+5,Rack and pinion,gear20.stl,1,44.0,44.0,8.0,Printed fixture included; add suitable removable axial retainers
+5,Rack and pinion,rack.stl,1,150.796,9.5,8.0,Printed fixture included; add suitable removable axial retainers
+5,Rack and pinion,spacer1.stl,1,12.0,12.0,1.0,Printed fixture included; add suitable removable axial retainers
+6,Internal gear pair,gear20.stl,1,44.0,44.0,8.0,"External frame, shafts/bearings and axial retainers required"
+6,Internal gear pair,ring.stl,1,181.0,181.0,8.0,"External frame, shafts/bearings and axial retainers required"
+7,Planetary - ring fixed,gear40.stl,1,84.0,84.0,8.0,"External frame, shafts/bearings and axial retainers required"
+7,Planetary - ring fixed,ring.stl,1,181.0,181.0,8.0,"External frame, shafts/bearings and axial retainers required"
+7,Planetary - ring fixed,carrier.stl,1,140.0,140.0,14.0,"External frame, shafts/bearings and axial retainers required"
+7,Planetary - ring fixed,gear20.stl,3,44.0,44.0,8.0,"External frame, shafts/bearings and axial retainers required"
+8,Planetary - sun fixed,gear40.stl,1,84.0,84.0,8.0,"External frame, shafts/bearings and axial retainers required"
+8,Planetary - sun fixed,ring.stl,1,181.0,181.0,8.0,"External frame, shafts/bearings and axial retainers required"
+8,Planetary - sun fixed,carrier.stl,1,140.0,140.0,14.0,"External frame, shafts/bearings and axial retainers required"
+8,Planetary - sun fixed,gear20.stl,3,44.0,44.0,8.0,"External frame, shafts/bearings and axial retainers required"
+9,Planetary - carrier fixed,gear40.stl,1,84.0,84.0,8.0,"External frame, shafts/bearings and axial retainers required"
+9,Planetary - carrier fixed,ring.stl,1,181.0,181.0,8.0,"External frame, shafts/bearings and axial retainers required"
+9,Planetary - carrier fixed,carrier.stl,1,140.0,140.0,14.0,"External frame, shafts/bearings and axial retainers required"
+9,Planetary - carrier fixed,gear20.stl,3,44.0,44.0,8.0,"External frame, shafts/bearings and axial retainers required"
+10,Planetary differential,gear40.stl,1,84.0,84.0,8.0,"External frame, shafts/bearings and axial retainers required"
+10,Planetary differential,ring.stl,1,181.0,181.0,8.0,"External frame, shafts/bearings and axial retainers required"
+10,Planetary differential,carrier.stl,1,140.0,140.0,14.0,"External frame, shafts/bearings and axial retainers required"
+10,Planetary differential,gear20.stl,3,44.0,44.0,8.0,"External frame, shafts/bearings and axial retainers required"
+11,Slider crank,Board_links.stl,1,112.0,36.0,9.2,Printed fixture included; add suitable removable axial retainers
+11,Slider crank,link20.stl,1,32.0,12.0,4.0,Printed fixture included; add suitable removable axial retainers
+11,Slider crank,link60.stl,1,72.0,12.0,4.0,Printed fixture included; add suitable removable axial retainers
+11,Slider crank,slider.stl,1,20.0,20.0,10.0,Printed fixture included; add suitable removable axial retainers
+11,Slider crank,pin.stl,1,8.0,8.0,14.0,Printed fixture included; add suitable removable axial retainers
+11,Slider crank,spacer1.stl,1,12.0,12.0,1.0,Printed fixture included; add suitable removable axial retainers
+11,Slider crank,spacer0p6.stl,2,12.0,12.0,0.6,Printed fixture included; add suitable removable axial retainers
+12,Four bar linkage,Board_fourbar.stl,1,88.0,32.0,9.2,Printed fixture included; add suitable removable axial retainers
+12,Four bar linkage,link20.stl,1,32.0,12.0,4.0,Printed fixture included; add suitable removable axial retainers
+12,Four bar linkage,link60.stl,1,72.0,12.0,4.0,Printed fixture included; add suitable removable axial retainers
+12,Four bar linkage,link40.stl,1,52.0,12.0,4.0,Printed fixture included; add suitable removable axial retainers
+12,Four bar linkage,pin.stl,2,8.0,8.0,14.0,Printed fixture included; add suitable removable axial retainers
+12,Four bar linkage,spacer1.stl,2,12.0,12.0,1.0,Printed fixture included; add suitable removable axial retainers
+12,Four bar linkage,spacer0p6.stl,2,12.0,12.0,0.6,Printed fixture included; add suitable removable axial retainers
+13,Eccentric cam follower,Board_cam.stl,1,96.0,127.0,15.0,Printed fixture included; add suitable removable axial retainers; mount vertically for gravity return
+13,Eccentric cam follower,cam.stl,1,60.0,60.0,8.0,Printed fixture included; add suitable removable axial retainers; mount vertically for gravity return
+13,Eccentric cam follower,follower.stl,1,80.0,44.0,8.0,Printed fixture included; add suitable removable axial retainers; mount vertically for gravity return
+13,Eccentric cam follower,spacer1.stl,1,12.0,12.0,1.0,Printed fixture included; add suitable removable axial retainers; mount vertically for gravity return
+14,Scotch yoke,Board_yoke.stl,1,116.0,72.0,16.0,Printed fixture included; add suitable removable axial retainers
+14,Scotch yoke,link20.stl,1,32.0,12.0,4.0,Printed fixture included; add suitable removable axial retainers
+14,Scotch yoke,pin.stl,1,8.0,8.0,14.0,Printed fixture included; add suitable removable axial retainers
+14,Scotch yoke,yoke.stl,1,69.0,60.0,4.0,Printed fixture included; add suitable removable axial retainers
+14,Scotch yoke,spacer1.stl,1,12.0,12.0,1.0,Printed fixture included; add suitable removable axial retainers

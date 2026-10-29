@@ -122,8 +122,12 @@ def sync_assembly(assembly, scene=None) -> None:
         # when Blender reevaluates a carrier after a source mesh update.
         obj.rotation_mode = 'QUATERNION'
         matrix = Matrix(instance.transform)
-        if obj.matrix_world != matrix:
-            obj.matrix_world = matrix
+        # Assign the stored base placement directly. Setting matrix_world while
+        # delta drivers are active would bake their current offset into the
+        # base transform and make an animated instance jump after a rebuild.
+        obj.location = matrix.to_translation()
+        obj.rotation_quaternion = matrix.to_quaternion()
+        obj.scale = (1.0, 1.0, 1.0)
         obj.lock_location = (True, True, True)
         obj.lock_rotation = (True, True, True)
         obj.lock_scale = (True, True, True)

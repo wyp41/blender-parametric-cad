@@ -1,0 +1,13 @@
+{
+  "stl_dimensions_mm": [
+    20.0,
+    10.0,
+    8.0
+  ],
+  "animation_world_transform": true,
+  "assembly_sync": true,
+  "source_rebuild": true,
+  "save_reopen": true,
+  "material_preserved": true,
+  "static_motion_noop": true
+}

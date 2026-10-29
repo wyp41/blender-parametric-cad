@@ -1,0 +1,789 @@
+{
+  "base_file": "base_spur_gears.blend",
+  "original_part_ids": [
+    "cff13979-fa1e-488f-ab8b-384a0a5de45a",
+    "dffe88ad-52d5-4575-8610-daaebd36f4b8"
+  ],
+  "parts": {
+    "gear20": "cff13979-fa1e-488f-ab8b-384a0a5de45a",
+    "gear40": "dffe88ad-52d5-4575-8610-daaebd36f4b8",
+    "compound": "bff4363b-fd3f-468a-ba15-76a34f6eaf3d",
+    "rack": "501dcc7d-2fe7-4cd0-b7db-cec6394c4e3d",
+    "ring": "bea698bf-f117-45ce-afc0-0734e2978a3b",
+    "carrier": "84ad81e8-1206-4f5c-bd8c-baac21743a1e",
+    "pin": "6391e40d-cccc-433e-8044-c54e60e37dcf",
+    "spacer1": "40cff807-8546-4e42-b78f-d1d667dbd128",
+    "spacer0p6": "4d9ec858-7ac4-475c-b981-63a7a6019835",
+    "spacer9p6": "cbcfdade-eafb-4f6d-8bb0-d897bf91475b",
+    "link20": "14b5bcfe-7168-4cc3-8019-f018809cffac",
+    "link40": "87eab308-ae8b-41f3-9d9b-193c6c0dba09",
+    "link60": "3a176125-c483-4783-b186-82674004935d",
+    "slider": "e17fa67c-dc17-415a-bdfc-e6c2a0af51aa",
+    "cam": "6f55661e-621b-417f-bd14-8ebe65a5119d",
+    "follower": "bb62c72c-c61c-4324-af82-641e2638e039",
+    "yoke": "6395ba7b-5c3c-4e57-aa76-2829500096c3",
+    "Board_idler": "2d8ea24a-b037-464b-a6fd-b77329188398",
+    "Board_compound": "bd8e316e-c266-403f-9ef1-122da63bf341",
+    "Board_reverted": "4f125fbf-bfae-4fa3-a6f8-b0bb469c6e15",
+    "Board_rack": "40b7e410-07dc-4046-a4db-205f77b90745",
+    "Board_links": "2ce43e79-f4e2-4f5d-a107-5d08089ffb8c",
+    "Board_fourbar": "23dd1889-01c7-4c76-aecf-a26cd8d83660",
+    "Board_cam": "dc83a62e-7a61-435a-9739-a45c84fef6fe",
+    "Board_yoke": "d6c495e6-34ca-4f8f-95d5-c7081595e266"
+  },
+  "cases": [
+    {
+      "number": 1,
+      "title": "Spur gear pair",
+      "subtitle": "20 : 40 | reduction 2:1",
+      "scene": "CAD \u2014 Assembly",
+      "assembly_id": "fb23b3bb-9573-4a4b-83d8-d497aa4b01fa",
+      "instances": {
+        "input": {
+          "id": "016282a2-7cc0-4971-91c2-44a0f945c91a",
+          "part": "gear20",
+          "phase": 0
+        },
+        "output": {
+          "id": "0ae37af1-f406-4368-a255-71afac8159ad",
+          "part": "gear40",
+          "phase": 0.07853981633974483
+        }
+      },
+      "checks": [],
+      "surface_contacts": [],
+      "view_center": [
+        0.04,
+        0
+      ],
+      "view_span": 0.15
+    },
+    {
+      "number": 2,
+      "title": "Idler gear train",
+      "subtitle": "20 - 20 - 40 | ratio 2:1 | same direction",
+      "scene": "02 Idler gear train",
+      "assembly_id": "d6957246-4fb5-4709-84bf-f2687ab23f10",
+      "instances": {
+        "base": {
+          "id": "e5c5b50c-477a-4587-9e5c-1f2639e6d239",
+          "part": "Board_idler",
+          "phase": 0
+        },
+        "input": {
+          "id": "62fb5d0b-6c41-44e9-b188-bffee7f42b55",
+          "part": "gear20",
+          "phase": 0
+        },
+        "idler": {
+          "id": "87b409b5-bab4-43f1-b08d-da5531d37955",
+          "part": "gear20",
+          "phase": 0.15707963267948966
+        },
+        "output": {
+          "id": "96127ce7-b7d0-4d1e-80c5-40036e2ba36f",
+          "part": "gear40",
+          "phase": 0
+        },
+        "input_spacer": {
+          "id": "66228c8d-7c13-47a6-94aa-053e0ded9881",
+          "part": "spacer1",
+          "phase": 0
+        },
+        "idler_spacer": {
+          "id": "3dd21494-f364-4774-9a09-89a9ea283855",
+          "part": "spacer1",
+          "phase": 0
+        },
+        "output_spacer": {
+          "id": "139e27db-2aa1-4d8c-b887-6d30d4281c15",
+          "part": "spacer1",
+          "phase": 0
+        }
+      },
+      "checks": [],
+      "surface_contacts": [
+        [
+          "input",
+          "input_spacer"
+        ],
+        [
+          "idler",
+          "idler_spacer"
+        ],
+        [
+          "output",
+          "output_spacer"
+        ]
+      ],
+      "view_center": [
+        0.05,
+        0
+      ],
+      "view_span": 0.19
+    },
+    {
+      "number": 3,
+      "title": "Compound reducer",
+      "subtitle": "20/40 x 20/40 | reduction 4:1",
+      "scene": "03 Compound reducer",
+      "assembly_id": "f4b42587-e98a-4eb4-92ef-c364bbd52107",
+      "instances": {
+        "base": {
+          "id": "2bfbec7d-4168-4d18-ae80-dbc781464fa5",
+          "part": "Board_compound",
+          "phase": 0
+        },
+        "input": {
+          "id": "ae569b9c-0da9-422f-b4a1-7dd7fd71d217",
+          "part": "gear20",
+          "phase": 0
+        },
+        "compound": {
+          "id": "4f19a868-c790-45c6-9552-cc24abcbdd91",
+          "part": "compound",
+          "phase": 0.07853981633974483
+        },
+        "output": {
+          "id": "fd289962-0193-4235-a861-ba0f399a25b5",
+          "part": "gear40",
+          "phase": 0.039269908169872414
+        },
+        "input_spacer": {
+          "id": "287ef6de-0895-4b1f-ab72-56c6e37f0c54",
+          "part": "spacer1",
+          "phase": 0
+        },
+        "compound_spacer": {
+          "id": "5673cda4-c93d-4ddc-9f30-13f94a683965",
+          "part": "spacer1",
+          "phase": 0
+        },
+        "output_spacer": {
+          "id": "3ac83b04-15db-4137-abee-99ed442bb1da",
+          "part": "spacer9p6",
+          "phase": 0
+        }
+      },
+      "checks": [],
+      "surface_contacts": [
+        [
+          "input",
+          "input_spacer"
+        ],
+        [
+          "compound",
+          "compound_spacer"
+        ],
+        [
+          "output",
+          "output_spacer"
+        ]
+      ],
+      "view_center": [
+        0.06,
+        0
+      ],
+      "view_span": 0.24
+    },
+    {
+      "number": 4,
+      "title": "Reverted gear train",
+      "subtitle": "Coaxial input/output | reduction 4:1",
+      "scene": "04 Reverted gear train",
+      "assembly_id": "208d6ec9-f7b0-4f5a-a4be-7a3d7268e8f2",
+      "instances": {
+        "base": {
+          "id": "18848427-9442-4761-9637-f390d4aadb09",
+          "part": "Board_reverted",
+          "phase": 0
+        },
+        "input": {
+          "id": "b7c1e8b2-a875-4553-8d8c-92e96fa64786",
+          "part": "gear20",
+          "phase": 0
+        },
+        "compound": {
+          "id": "07ca963f-b2cc-4ed0-a173-2816ff261e09",
+          "part": "compound",
+          "phase": 0.07853981633974483
+        },
+        "output": {
+          "id": "a6c345f9-ce08-4412-ad8a-960b63e0c9cd",
+          "part": "gear40",
+          "phase": 0.039269908169872414
+        },
+        "input_spacer": {
+          "id": "ed4f788d-2a09-4e03-a3f7-4893cb1595f2",
+          "part": "spacer1",
+          "phase": 0
+        },
+        "compound_spacer": {
+          "id": "e148419e-a86c-4f7d-8779-053c600fe3b3",
+          "part": "spacer1",
+          "phase": 0
+        },
+        "output_spacer": {
+          "id": "9ef93ddc-0839-46a4-8249-4ac89d3b95f8",
+          "part": "spacer0p6",
+          "phase": 0
+        }
+      },
+      "checks": [],
+      "surface_contacts": [
+        [
+          "input",
+          "input_spacer"
+        ],
+        [
+          "compound",
+          "compound_spacer"
+        ],
+        [
+          "output",
+          "output_spacer"
+        ],
+        [
+          "input",
+          "output_spacer"
+        ]
+      ],
+      "view_center": [
+        0.03,
+        0
+      ],
+      "view_span": 0.16
+    },
+    {
+      "number": 5,
+      "title": "Rack and pinion",
+      "subtitle": "m2 z20 | travel per turn = 125.664 mm",
+      "scene": "05 Rack and pinion",
+      "assembly_id": "81ecf0c2-e6f4-41ef-bbc3-d6493325df11",
+      "instances": {
+        "base": {
+          "id": "9504d2a4-ea47-4e30-aead-3a73f794964e",
+          "part": "Board_rack",
+          "phase": 0
+        },
+        "input": {
+          "id": "866f42d5-e227-41ad-8234-c716c13da5ad",
+          "part": "gear20",
+          "phase": 0
+        },
+        "rack": {
+          "id": "68035e27-25f4-4902-ba48-3d9a122864fe",
+          "part": "rack",
+          "phase": 0
+        },
+        "input_spacer": {
+          "id": "0e1a44ca-dd5f-460c-98b6-779a6bcd4426",
+          "part": "spacer1",
+          "phase": 0
+        }
+      },
+      "checks": [],
+      "surface_contacts": [
+        [
+          "input",
+          "input_spacer"
+        ]
+      ],
+      "view_center": [
+        0,
+        -0.005
+      ],
+      "view_span": 0.21
+    },
+    {
+      "number": 6,
+      "title": "Internal gear pair",
+      "subtitle": "20 inside 80 | reduction 4:1 | same direction",
+      "scene": "06 Internal gear pair",
+      "assembly_id": "eb559617-3f53-452b-a4a7-172da93e134e",
+      "instances": {
+        "input": {
+          "id": "f8fbbe7f-cf12-4adf-9cab-3391e25262e5",
+          "part": "gear20",
+          "phase": 0
+        },
+        "ring": {
+          "id": "52e19e7b-ef06-4504-be60-87799954b861",
+          "part": "ring",
+          "phase": 0
+        }
+      },
+      "checks": [],
+      "surface_contacts": [],
+      "view_center": [
+        0,
+        0
+      ],
+      "view_span": 0.3
+    },
+    {
+      "number": 7,
+      "title": "Planetary - ring fixed",
+      "subtitle": "zS40 + 3 x zP20 + zR80 | wC=(wS+2wR)/3",
+      "scene": "07 Planetary - ring fixed",
+      "assembly_id": "5935d985-4d04-4df4-a35e-eb0b4ad40c7c",
+      "instances": {
+        "sun": {
+          "id": "2aba5024-5fcb-49a6-a70f-f6fc471873f8",
+          "part": "gear40",
+          "phase": 0.07853981633974483
+        },
+        "ring": {
+          "id": "a4812dd2-fa78-4a75-be0a-07b22c186142",
+          "part": "ring",
+          "phase": 0
+        },
+        "carrier": {
+          "id": "bbe65099-8da1-40b8-8ac8-bb40fb68d4ba",
+          "part": "carrier",
+          "phase": 0
+        },
+        "planet0": {
+          "id": "d73a1075-a230-4525-bfe4-7409aacdb197",
+          "part": "gear20",
+          "phase": 0.0
+        },
+        "planet1": {
+          "id": "a5f6f34b-79a7-45ea-b9b1-54703149df77",
+          "part": "gear20",
+          "phase": 6.283185307179586
+        },
+        "planet2": {
+          "id": "27ee000f-e568-4b8c-beea-56141ccf23e5",
+          "part": "gear20",
+          "phase": 12.566370614359172
+        }
+      },
+      "checks": [],
+      "speeds": {
+        "sun": 1,
+        "ring": 0,
+        "carrier": 0.3333333333333333,
+        "planet": -1.0
+      },
+      "surface_contacts": [],
+      "view_center": [
+        0,
+        0
+      ],
+      "view_span": 0.3
+    },
+    {
+      "number": 8,
+      "title": "Planetary - sun fixed",
+      "subtitle": "zS40 + 3 x zP20 + zR80 | wC=(wS+2wR)/3",
+      "scene": "08 Planetary - sun fixed",
+      "assembly_id": "05acf65c-f955-4587-bc48-782852fd0d0c",
+      "instances": {
+        "sun": {
+          "id": "3796d41f-dc46-4a61-9397-b71afe678a79",
+          "part": "gear40",
+          "phase": 0.07853981633974483
+        },
+        "ring": {
+          "id": "c037301a-4336-4141-b1e2-e40c5eddc30e",
+          "part": "ring",
+          "phase": 0
+        },
+        "carrier": {
+          "id": "b024b929-45e1-4d95-a35a-0b0c5cd42d03",
+          "part": "carrier",
+          "phase": 0
+        },
+        "planet0": {
+          "id": "cef5e630-c849-43d0-b0b1-0dca9fdfbfe2",
+          "part": "gear20",
+          "phase": 0.0
+        },
+        "planet1": {
+          "id": "d92bc902-9040-4f2c-9b74-5e6728337c76",
+          "part": "gear20",
+          "phase": 6.283185307179586
+        },
+        "planet2": {
+          "id": "da96248e-d259-488f-87c5-3e370f823080",
+          "part": "gear20",
+          "phase": 12.566370614359172
+        }
+      },
+      "checks": [],
+      "speeds": {
+        "sun": 0,
+        "ring": 1,
+        "carrier": 0.6666666666666666,
+        "planet": 2.0
+      },
+      "surface_contacts": [],
+      "view_center": [
+        0,
+        0
+      ],
+      "view_span": 0.3
+    },
+    {
+      "number": 9,
+      "title": "Planetary - carrier fixed",
+      "subtitle": "zS40 + 3 x zP20 + zR80 | wC=(wS+2wR)/3",
+      "scene": "09 Planetary - carrier fixed",
+      "assembly_id": "fcf1099a-83a2-4257-9eb3-9e6f9ce7781d",
+      "instances": {
+        "sun": {
+          "id": "37a6fbca-a983-4f0f-b4eb-3f91dc6f6b9d",
+          "part": "gear40",
+          "phase": 0.07853981633974483
+        },
+        "ring": {
+          "id": "f13df51c-087e-4fc4-ae0a-b409bdbc8265",
+          "part": "ring",
+          "phase": 0
+        },
+        "carrier": {
+          "id": "9de70938-d507-4ffa-81c4-489c402ff511",
+          "part": "carrier",
+          "phase": 0
+        },
+        "planet0": {
+          "id": "78f6322a-f796-4eaa-b192-2538322d9a2d",
+          "part": "gear20",
+          "phase": 0.0
+        },
+        "planet1": {
+          "id": "1cac2de4-9690-4e40-8bdd-ff7b26d85ae4",
+          "part": "gear20",
+          "phase": 6.283185307179586
+        },
+        "planet2": {
+          "id": "c1f9a0fc-f4f3-4099-8762-3eb49ae87a36",
+          "part": "gear20",
+          "phase": 12.566370614359172
+        }
+      },
+      "checks": [],
+      "speeds": {
+        "sun": 1,
+        "ring": -0.5,
+        "carrier": 0.0,
+        "planet": -2.0
+      },
+      "surface_contacts": [],
+      "view_center": [
+        0,
+        0
+      ],
+      "view_span": 0.3
+    },
+    {
+      "number": 10,
+      "title": "Planetary differential",
+      "subtitle": "zS40 + 3 x zP20 + zR80 | wC=(wS+2wR)/3",
+      "scene": "10 Planetary differential",
+      "assembly_id": "91ce3ef5-01e0-4db2-a44e-959e17e6526e",
+      "instances": {
+        "sun": {
+          "id": "05864940-144d-4038-b001-6ce7e8fb41df",
+          "part": "gear40",
+          "phase": 0.07853981633974483
+        },
+        "ring": {
+          "id": "df1090c5-579f-4a63-a65e-98db6711e070",
+          "part": "ring",
+          "phase": 0
+        },
+        "carrier": {
+          "id": "d6a125b8-cf06-4e48-be2f-800f261840d1",
+          "part": "carrier",
+          "phase": 0
+        },
+        "planet0": {
+          "id": "205e2133-78b3-4713-9c7d-ecd16ef57353",
+          "part": "gear20",
+          "phase": 0.0
+        },
+        "planet1": {
+          "id": "d32915f3-7bba-4691-a88b-1f493de9f5b1",
+          "part": "gear20",
+          "phase": 6.283185307179586
+        },
+        "planet2": {
+          "id": "a5bf6572-895d-4455-96ed-1afb30ec6e01",
+          "part": "gear20",
+          "phase": 12.566370614359172
+        }
+      },
+      "checks": [],
+      "speeds": {
+        "sun": 1,
+        "ring": 0.5,
+        "carrier": 0.6666666666666666,
+        "planet": 0.0
+      },
+      "surface_contacts": [],
+      "view_center": [
+        0,
+        0
+      ],
+      "view_span": 0.3
+    },
+    {
+      "number": 11,
+      "title": "Slider crank",
+      "subtitle": "Crank 20 mm | rod 60 mm | stroke 40 mm",
+      "scene": "11 Slider crank",
+      "assembly_id": "bc13d4fb-7b16-456b-b55a-12e74e37815a",
+      "instances": {
+        "base": {
+          "id": "3d6d7a69-3c2b-46ab-bc44-9e6169f7a7a9",
+          "part": "Board_links",
+          "phase": 0
+        },
+        "crank": {
+          "id": "cf903506-7101-442c-8df0-f08970cea263",
+          "part": "link20",
+          "phase": 0
+        },
+        "rod": {
+          "id": "822dc457-cb36-41cb-96bb-ac8a4f48f5c2",
+          "part": "link60",
+          "phase": 0
+        },
+        "slider": {
+          "id": "e4e56a72-beea-4d8a-8cb9-7597996a5748",
+          "part": "slider",
+          "phase": 0
+        },
+        "crank_pin": {
+          "id": "42ee42bc-c97c-42db-8125-4199fd8d9c06",
+          "part": "pin",
+          "phase": 0
+        },
+        "crank_spacer": {
+          "id": "a2d88c93-af9a-4a5b-a42a-0b284b3ba4d1",
+          "part": "spacer1",
+          "phase": 0
+        },
+        "A_spacer": {
+          "id": "e81a36cb-55f2-443a-b25f-6b90ab4ade7d",
+          "part": "spacer0p6",
+          "phase": 0
+        },
+        "B_spacer": {
+          "id": "bccf899f-a70d-4a55-b9f9-1ad1734ac52d",
+          "part": "spacer0p6",
+          "phase": 0
+        }
+      },
+      "checks": [],
+      "surface_contacts": [
+        [
+          "crank",
+          "crank_spacer"
+        ],
+        [
+          "A_spacer",
+          "crank"
+        ],
+        [
+          "A_spacer",
+          "rod"
+        ],
+        [
+          "B_spacer",
+          "slider"
+        ],
+        [
+          "B_spacer",
+          "rod"
+        ]
+      ],
+      "view_center": [
+        0.04,
+        0
+      ],
+      "view_span": 0.15
+    },
+    {
+      "number": 12,
+      "title": "Four bar linkage",
+      "subtitle": "Ground60 | crank20 | coupler60 | rocker40",
+      "scene": "12 Four bar linkage",
+      "assembly_id": "3552893d-0fda-416c-903a-3b949608034b",
+      "instances": {
+        "base": {
+          "id": "a3547674-f100-426e-93ed-0a86482f4046",
+          "part": "Board_fourbar",
+          "phase": 0
+        },
+        "crank": {
+          "id": "c15d7d5f-e448-403e-a750-1c9c93b40226",
+          "part": "link20",
+          "phase": 0
+        },
+        "coupler": {
+          "id": "a570b98c-91d0-43c1-ad6e-5d2377cda3f7",
+          "part": "link60",
+          "phase": 0
+        },
+        "rocker": {
+          "id": "f344408d-dd86-41fe-9615-65f8c2b189cc",
+          "part": "link40",
+          "phase": 0
+        },
+        "joint_A": {
+          "id": "bba545cd-0ed1-4f87-a6ab-6eac9f4d0f63",
+          "part": "pin",
+          "phase": 0
+        },
+        "joint_C": {
+          "id": "7e55d410-f568-462f-80b3-e7338d893ba4",
+          "part": "pin",
+          "phase": 0
+        },
+        "crank_spacer": {
+          "id": "975d7e6b-da26-4ee4-9474-1e640dbf535a",
+          "part": "spacer1",
+          "phase": 0
+        },
+        "rocker_spacer": {
+          "id": "14cbe35d-6b2e-4c4f-8264-e40584057668",
+          "part": "spacer1",
+          "phase": 0
+        },
+        "A_spacer": {
+          "id": "40b9c628-8627-4bd4-aa72-83309aeae380",
+          "part": "spacer0p6",
+          "phase": 0
+        },
+        "C_spacer": {
+          "id": "82d26697-c4ff-45ac-b452-125daeb94690",
+          "part": "spacer0p6",
+          "phase": 0
+        }
+      },
+      "checks": [],
+      "control": "Fourbar analytic coordinates",
+      "surface_contacts": [
+        [
+          "crank",
+          "crank_spacer"
+        ],
+        [
+          "rocker",
+          "rocker_spacer"
+        ],
+        [
+          "A_spacer",
+          "crank"
+        ],
+        [
+          "A_spacer",
+          "coupler"
+        ],
+        [
+          "C_spacer",
+          "rocker"
+        ],
+        [
+          "C_spacer",
+          "coupler"
+        ]
+      ],
+      "view_center": [
+        0.03,
+        0.02
+      ],
+      "view_span": 0.15
+    },
+    {
+      "number": 13,
+      "title": "Eccentric cam follower",
+      "subtitle": "R30 | eccentricity10 | stroke20 | gravity return",
+      "scene": "13 Eccentric cam follower",
+      "assembly_id": "277c2e90-b20c-467e-91b9-5e90ea32cc36",
+      "instances": {
+        "base": {
+          "id": "c6af41e7-499b-4442-bb18-b08b11be2f39",
+          "part": "Board_cam",
+          "phase": 0
+        },
+        "cam": {
+          "id": "b278b59d-bb89-44ed-bd15-812235ff0bf7",
+          "part": "cam",
+          "phase": 0
+        },
+        "follower": {
+          "id": "44dab3d9-d430-42b8-a8d3-cd12e9eba405",
+          "part": "follower",
+          "phase": 0
+        },
+        "cam_spacer": {
+          "id": "8079e561-6913-418d-8ec6-d4cb742c3ebc",
+          "part": "spacer1",
+          "phase": 0
+        }
+      },
+      "checks": [],
+      "surface_contacts": [
+        [
+          "cam",
+          "cam_spacer"
+        ]
+      ],
+      "view_center": [
+        0,
+        0.025
+      ],
+      "view_span": 0.22
+    },
+    {
+      "number": 14,
+      "title": "Scotch yoke",
+      "subtitle": "Crank20 | slot width6.4 | sinusoidal stroke40",
+      "scene": "14 Scotch yoke",
+      "assembly_id": "638e63b9-97cb-4b7e-87af-53bf290197f3",
+      "instances": {
+        "base": {
+          "id": "a8a48ce0-635a-4833-b1a1-c321a26e69c1",
+          "part": "Board_yoke",
+          "phase": 0
+        },
+        "crank": {
+          "id": "d218ac1a-27ca-48a0-a632-b39306b7175b",
+          "part": "link20",
+          "phase": 0
+        },
+        "pin": {
+          "id": "13b33f14-7ae8-4330-ae7e-fe6bd8b32666",
+          "part": "pin",
+          "phase": 0
+        },
+        "yoke": {
+          "id": "fc9dde78-e7de-415c-b13d-a6216dffb6fd",
+          "part": "yoke",
+          "phase": 0
+        },
+        "crank_spacer": {
+          "id": "b428f5e2-a566-42a2-aadd-f0b67f62b18b",
+          "part": "spacer1",
+          "phase": 0
+        }
+      },
+      "checks": [],
+      "surface_contacts": [
+        [
+          "crank",
+          "crank_spacer"
+        ]
+      ],
+      "view_center": [
+        0.025,
+        0
+      ],
+      "view_span": 0.15
+    }
+  ]
+}

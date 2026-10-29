@@ -1,0 +1,130 @@
+{
+  "fps": 24,
+  "frames": 854,
+  "duration_seconds": 35.583333333333336,
+  "clips": 14,
+  "output": "mechanism_showcase.mp4",
+  "verified_media": [
+    {
+      "file": "videos/01.mp4",
+      "frames": 61,
+      "size": [
+        960,
+        720
+      ]
+    },
+    {
+      "file": "videos/02.mp4",
+      "frames": 61,
+      "size": [
+        960,
+        720
+      ]
+    },
+    {
+      "file": "videos/03.mp4",
+      "frames": 61,
+      "size": [
+        960,
+        720
+      ]
+    },
+    {
+      "file": "videos/04.mp4",
+      "frames": 61,
+      "size": [
+        960,
+        720
+      ]
+    },
+    {
+      "file": "videos/05.mp4",
+      "frames": 61,
+      "size": [
+        960,
+        720
+      ]
+    },
+    {
+      "file": "videos/06.mp4",
+      "frames": 61,
+      "size": [
+        960,
+        720
+      ]
+    },
+    {
+      "file": "videos/07.mp4",
+      "frames": 61,
+      "size": [
+        960,
+        720
+      ]
+    },
+    {
+      "file": "videos/08.mp4",
+      "frames": 61,
+      "size": [
+        960,
+        720
+      ]
+    },
+    {
+      "file": "videos/09.mp4",
+      "frames": 61,
+      "size": [
+        960,
+        720
+      ]
+    },
+    {
+      "file": "videos/10.mp4",
+      "frames": 61,
+      "size": [
+        960,
+        720
+      ]
+    },
+    {
+      "file": "videos/11.mp4",
+      "frames": 61,
+      "size": [
+        960,
+        720
+      ]
+    },
+    {
+      "file": "videos/12.mp4",
+      "frames": 61,
+      "size": [
+        960,
+        720
+      ]
+    },
+    {
+      "file": "videos/13.mp4",
+      "frames": 61,
+      "size": [
+        960,
+        720
+      ]
+    },
+    {
+      "file": "videos/14.mp4",
+      "frames": 61,
+      "size": [
+        960,
+        720
+      ]
+    },
+    {
+      "file": "mechanism_showcase.mp4",
+      "frames": 854,
+      "size": [
+        960,
+        720
+      ]
+    }
+  ],
+  "decoded_frames_1_17_mean_difference": 0.01673327200114727
+}

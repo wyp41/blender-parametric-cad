@@ -223,18 +223,14 @@ def main():
     call("cad_delete_part", part_id=b)
     assert adapter._find_result_object(b) is None
     assert not any(item.get("cad_source_collection") and item.get("cad_part_id") == b for item in bpy.data.collections)
-    # Migrate a copy of an actual existing v2 validation document, never the original.
-    original = Path(__file__).parents[2] / "zipstring_cad_mcp_3part.blend"
-    if not original.exists():
-        # A clean checkout has no external user validation file. Create a v2
-        # Scene-storage fixture so this test remains independently runnable.
-        legacy_data = adapter.load_document().to_dict()
-        legacy_data.pop("assemblies")
-        legacy_data["schema_version"] = 2
-        bpy.data.texts.remove(bpy.data.texts[adapter.CAD_DOCUMENT_TEXT])
-        part_studio_scene().parametric_cad_document = json.dumps(legacy_data)
-        original = Path(tempfile.gettempdir()) / "cad_m11a_generated_v2.blend"
-        bpy.ops.wm.save_as_mainfile(filepath=str(original))
+    # Create a v2 Scene-storage fixture without depending on user projects.
+    legacy_data = adapter.load_document().to_dict()
+    legacy_data.pop("assemblies")
+    legacy_data["schema_version"] = 2
+    bpy.data.texts.remove(bpy.data.texts[adapter.CAD_DOCUMENT_TEXT])
+    part_studio_scene().parametric_cad_document = json.dumps(legacy_data)
+    original = Path(tempfile.gettempdir()) / "cad_m11a_generated_v2.blend"
+    bpy.ops.wm.save_as_mainfile(filepath=str(original))
     digest = hashlib.sha256(original.read_bytes()).hexdigest()
     bpy.ops.wm.open_mainfile(filepath=str(original))
     migrated = adapter.load_document()
